@@ -703,12 +703,59 @@ button {
 
 .fita .cabeca .ref-fita { font-size: 12px; color: var(--tinta-fraca); }
 
+/* selo à direita: comunica de relance a relação com a versão principal */
+.selo-cmp {
+  margin-left: auto;
+  font-family: var(--fonte-sigla);
+  font-size: 13px;
+  font-weight: 700;
+  padding: 1px 8px;
+  border-radius: 999px;
+  flex: none;
+}
+
+.selo-cmp.principal {
+  font-size: 10px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--tinta-fraca);
+  background: color-mix(in srgb, var(--tinta) 8%, transparent);
+}
+
+.selo-cmp.igual {
+  color: var(--tinta-fraca);
+  background: color-mix(in srgb, var(--tinta) 8%, transparent);
+}
+
+.selo-cmp.difere {
+  color: var(--papel);
+  background: var(--rubrica);
+}
+
 .fita p {
   margin: 0;
   font-family: var(--fonte-texto);
   font-size: calc(var(--corpo) * .92);
   line-height: 1.56;
 }
+
+/* a principal é a régua; ela fica em peso normal */
+.fita.principal p { color: var(--tinta); }
+
+/* igual ao principal: recua para segundo plano, o olho passa batido */
+.fita.igual p { color: var(--tinta-fraca); opacity: .78; }
+
+/* difere do principal: ganha peso e cor cheia, para o olho parar aqui */
+.fita.difere p { color: var(--tinta); font-weight: 600; }
+.fita.difere {
+  background: color-mix(in srgb, var(--rubrica) 5%, transparent);
+  border-radius: var(--raio);
+  padding-left: 10px;
+  padding-right: 10px;
+  border-bottom: 1px solid color-mix(in srgb, var(--tinta) 9%, transparent);
+}
+
+.fita-erro { color: var(--tinta-fraca); font-style: italic; }
 
 .fita .nota-numeracao {
   margin-top: 6px;
@@ -1112,19 +1159,26 @@ body.selecionando .rodape { transform: translateY(110%); }
 
 [data-modo-versiculo='linha'] .folha .cap-corpo { text-align: left; }
 
+/* Um versículo por linha, mas o número acompanha o texto na mesma linha —
+   como uma Bíblia impressa em coluna: o número à esquerda, o texto ao lado,
+   e as linhas seguintes recuadas para o número ficar destacado na margem. */
 [data-modo-versiculo='linha'] .v {
   display: block;
-  margin: 0 0 1.05em;
+  margin: 0 0 .85em;
   text-indent: 0;
+  padding-left: 2.4em;
 }
 
-/* o número deixa de ser sobrescrito e vira cabeçalho da linha */
 [data-modo-versiculo='linha'] .v .n {
-  display: block;
+  display: inline;
+  float: left;
+  margin-left: -2.4em;
+  width: 2em;
+  text-align: right;
+  padding-right: .4em;
   font-size: .72em;
+  line-height: 1.7;
   vertical-align: baseline;
-  margin: 0 0 .18em;
-  letter-spacing: .06em;
   color: var(--tinta-numero);
 }
 
@@ -1234,36 +1288,6 @@ body.selecionando .rodape { transform: translateY(110%); }
   border-style: solid;
 }
 
-/* ================================= histórico em sanfona ============== */
-
-.dobra.sessao {
-  align-items: flex-start;
-  padding: 13px 10px;
-  border-bottom: 1px solid color-mix(in srgb, var(--tinta) 10%, transparent);
-  border-radius: 0;
-}
-
-.dobra.sessao .seta { margin-top: 4px; }
-
-.nome-sessao { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
-.nome-sessao strong { font-size: 14.5px; font-weight: 600; }
-
-/* a data e a hora ficam sempre à vista, mesmo com nome próprio */
-.nome-sessao .quando {
-  font-size: 11px;
-  color: var(--tinta-fraca);
-  font-family: var(--fonte-sigla);
-}
-
-.dobra.sessao .soma { margin-left: 0; align-self: center; }
-
-.acoes-sessao {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-  margin: 4px 0 10px;
-}
-
 /* =============================== funil da busca ====================== */
 
 .escopo-atual {
@@ -1311,3 +1335,145 @@ body.selecionando .rodape { transform: translateY(110%); }
 }
 
 .dobra.funil + .dentro { padding: 2px 0 6px 8px; }
+
+/* ================================= histórico ======================== */
+
+.fixado-linha, .hist-linha { display: flex; align-items: stretch; gap: 4px; }
+
+.hist-linha .item-hist { flex: 1; min-width: 0; }
+
+.xis {
+  flex: none;
+  width: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--raio);
+  color: var(--tinta-fraca);
+}
+
+.xis:hover { background: color-mix(in srgb, var(--tinta) 8%, transparent); color: var(--tinta); }
+.xis .icone { width: 16px; height: 16px; }
+.xis.fixar-item:hover { color: var(--rubrica); }
+
+.item-hist {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px 8px;
+  padding: 10px 12px;
+  border-radius: var(--raio);
+  text-align: left;
+}
+
+.item-hist:hover { background: color-mix(in srgb, var(--tinta) 7%, transparent); }
+.item-hist .ref-hist { font-weight: 600; font-size: 14px; }
+.item-hist .trecho-hist {
+  grid-column: 1 / -1;
+  font-family: var(--fonte-texto);
+  font-size: 13px;
+  color: var(--tinta-fraca);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ================================= estudos ========================== */
+
+.cartao-estudo {
+  border: 1px solid color-mix(in srgb, var(--tinta) 12%, transparent);
+  border-radius: var(--raio);
+  padding: 4px;
+  margin-bottom: 10px;
+}
+
+.estudo-abrir {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 100%;
+  text-align: left;
+  padding: 10px;
+  border-radius: var(--raio);
+}
+
+.estudo-abrir:hover { background: color-mix(in srgb, var(--tinta) 6%, transparent); }
+.estudo-abrir strong { font-size: 15px; }
+.estudo-abrir .estudo-ref {
+  font-size: 12.5px;
+  color: var(--rubrica);
+  font-family: var(--fonte-sigla);
+}
+.estudo-abrir .quando { font-size: 11px; color: var(--tinta-fraca); }
+
+.acoes-sessao { display: flex; gap: 6px; flex-wrap: wrap; padding: 4px 6px 6px; }
+.pilula.perigo { color: var(--rubrica); }
+
+/* mais uma ação na barra de seleção: as ações passam a quebrar em duas linhas */
+.sel-acoes { flex-wrap: wrap; }
+.sel-acoes .botao { flex: 1 1 40%; }
+
+/* ====================== item do marcador com remoção =============== */
+
+.marcado-linha { display: flex; align-items: stretch; gap: 4px; }
+.marcado-linha .item-marcado { flex: 1; min-width: 0; }
+.marcado-linha .remover-marca { flex: none; }
+
+/* ================== escolha de estudo na barra de seleção =========== */
+
+#sel-cores[data-modo='estudo'] { grid-template-columns: 1fr; }
+
+.opcao-estudo {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  text-align: left;
+  padding: 10px 12px;
+  border-radius: var(--raio);
+  color: var(--cromo-texto);
+  border: 1px solid color-mix(in srgb, var(--cromo-texto) 20%, transparent);
+  margin-bottom: 6px;
+}
+
+.opcao-estudo:hover { background: color-mix(in srgb, var(--cromo-texto) 12%, transparent); }
+.opcao-estudo strong { font-size: 14px; }
+.opcao-estudo .est-ref { font-size: 11.5px; color: var(--cromo-fraco); font-family: var(--fonte-sigla); }
+
+.opcao-estudo.novo {
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  border-style: dashed;
+  font-weight: 600;
+}
+
+.opcao-estudo.novo .mais { font-size: 20px; line-height: 1; }
+
+.sep-estudos {
+  font-size: 10px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--cromo-fraco);
+  margin: 8px 0 6px;
+}
+
+/* ================== trechos dentro de um estudo ==================== */
+
+.estudo-cabeca { padding: 10px 10px 6px; display: flex; flex-direction: column; gap: 2px; }
+.estudo-cabeca strong { font-size: 15px; }
+.estudo-cabeca .quando { font-size: 11px; color: var(--tinta-fraca); }
+
+.trechos-lista { padding: 0 6px; }
+
+.trecho-estudo { display: flex; align-items: stretch; gap: 4px; margin-bottom: 3px; }
+.trecho-estudo .ir-trecho {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: var(--raio);
+  text-align: left;
+}
+.trecho-estudo .ir-trecho:hover { background: color-mix(in srgb, var(--tinta) 6%, transparent); }
+.trecho-estudo .est-ref { font-weight: 600; font-size: 13.5px; }

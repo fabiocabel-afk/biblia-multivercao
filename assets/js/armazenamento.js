@@ -72,112 +72,211 @@ const Prefs = {
 
 /* ---------------------------------------------------------------- sessoes */
 
-const Sessoes = {
-  todas() {
-    return Guarda.ler('sessoes', []);
+/* ================================================================ histórico
+ *
+ * O historico e so uma trilha de migalhas: os ultimos lugares onde a pessoa
+ * esteve, para voltar num toque. Guarda no maximo os 120 mais recentes; abrir
+ * um lugar que ja esta na lista apenas o traz para o topo, sem duplicar.
+ *
+ * Separado disto ha o livro fixado: um alfinete no livro que a pessoa esta
+ * pregando ou estudando a fundo. Ele nao envelhece com os 120 — fica ali,
+ * mostrando sempre o ponto mais avancado alcancado naquele livro, ate a pessoa
+ * mover o alfinete ou tira-lo.
+ */
+
+const Historico = {
+  LIMITE: 120,
+
+  lista() {
+    return Guarda.ler('historico', []);
   },
 
-  atual() {
-    const lista = this.todas();
-    let s = lista.find(x => x.aberta);
-    if (!s) {
-      s = this._nova();
-      lista.push(s);
-      Guarda.gravar('sessoes', lista);
+  /** Registra uma visita. `vers` vem da selecao ou da passagem aberta. */
+  registrar({ versao, code, cap, vers, trecho }) {
+    let lista = this.lista();
+    // tira qualquer visita anterior ao mesmo versiculo/capitulo, para reinserir no topo
+    lista = lista.filter(it => !(it.code === code && it.cap === cap && it.vers === vers));
+    lista.unshift({ versao, code, cap, vers: vers || null,
+      trecho: (trecho || '').slice(0, 90), hora: new Date().toISOString() });
+    if (lista.length > this.LIMITE) lista = lista.slice(0, this.LIMITE);
+    Guarda.gravar('historico', lista);
+    this.avancarFixado({ code, cap, vers });
+  },
+
+  remover(indice) {
+    const lista = this.lista();
+    lista.splice(indice, 1);
+    Guarda.gravar('historico', lista);
+  },
+
+  limpar() {
+    Guarda.gravar('historico', []);
+  },
+
+  /* ------------------------------------------------------ livro fixado */
+
+  fixado() {
+    return Guarda.ler('fixado', null);
+  },
+
+  fixar(versao, code, cap, vers) {
+    Guarda.gravar('fixado', { versao, code, cap: cap || 1, vers: vers || null });
+  },
+
+  desfixar() {
+    Guarda.gravar('fixado', null);
+  },
+
+  /* O alfinete acompanha o avanco no livro: ao progredir, guarda o ponto mais
+     adiantado ja alcancado. Nunca recua sozinho — se a pessoa volta atras para
+     reler, o alfinete continua marcando onde ela tinha chegado. O avanco se
+     baseia no versiculo selecionado, nao apenas no capitulo aberto. */
+  avancarFixado({ code, cap, vers }) {
+    const f = this.fixado();
+    if (!f || f.code !== code) return;
+    const capAtual = f.cap || 0;
+    const versAtual = f.vers || 0;
+    if (cap > capAtual || (cap === capAtual && (vers || 0) > versAtual)) {
+      f.cap = cap;
+      f.vers = vers || f.vers;
+      Guarda.gravar('fixado', f);
     }
-    return s;
+  },
+};
+
+/* ================================================================= estudos
+ *
+ * O estudo e deliberado, ao contrario do historico. A pessoa segura um
+ * versiculo, escolhe "Salvar estudo", da um nome e diz ate onde vai o trecho —
+ * inclusive avancando para o proximo capitulo, desde que no mesmo livro. Dai em
+ * diante o estudo pode ser renomeado, copiado e compartilhado.
+ */
+
+const Estudos = {
+  todos() {
+    return Guarda.ler('estudos', []);
   },
 
-  _nova() {
-    const agora = new Date();
-    return {
-      id: 's' + agora.getTime(),
-      nome: '',
-      inicio: agora.toISOString(),
-      fim: null,
-      aberta: true,
-      itens: [],
+  /* Um estudo reune um ou mais trechos. Cada trecho e um intervalo de um livro:
+   * {code, capInicio, versInicio, capFim, versFim}. Guardar uma lista permite
+   * juntar passagens de lugares diferentes sob o mesmo estudo — por exemplo,
+   * reunir todos os versiculos sobre um tema.
+   *
+   * O formato antigo tinha os campos do intervalo direto no estudo. `trechosDe`
+   * le os dois: se houver a lista nova, usa; senao, monta uma a partir dos
+   * campos soltos. Ninguem perde o que ja tinha. */
+  trechosDe(e) {
+    if (Array.isArray(e.trechos)) return e.trechos;
+    return [{
+      code: e.code, versao: e.versao,
+      capInicio: e.capInicio, versInicio: e.versInicio,
+      capFim: e.capFim, versFim: e.versFim,
+    }];
+  },
+
+  criar({ nome, trecho }) {
+    const lista = this.todos();
+    const estudo = {
+      id: 'e' + Date.now(),
+      nome: nome || '',
+      trechos: [trecho],
+      criado: new Date().toISOString(),
     };
+    lista.unshift(estudo);
+    Guarda.gravar('estudos', lista);
+    return estudo;
   },
 
-  /** Nome automatico quando o usuario nao deu um: "Terça-feira — 23/07/2026" */
-  nomeDe(sessao) {
-    if (sessao.nome) return sessao.nome;
-    const d = new Date(sessao.inicio);
-    const dia = d.toLocaleDateString('pt-BR', { weekday: 'long' });
-    return dia.charAt(0).toUpperCase() + dia.slice(1) + ' — ' + d.toLocaleDateString('pt-BR');
+  /** Acrescenta um trecho a um estudo que ja existe. */
+  acrescentar(id, trecho) {
+    const lista = this.todos();
+    const e = lista.find(x => x.id === id);
+    if (!e) return;
+    const trechos = this.trechosDe(e);
+    trechos.push(trecho);
+    e.trechos = trechos;
+    delete e.code; delete e.versao;       // some com o formato antigo
+    delete e.capInicio; delete e.versInicio;
+    delete e.capFim; delete e.versFim;
+    Guarda.gravar('estudos', lista);
   },
 
-  /* A data e a hora nunca somem, mesmo quando a leitura ganha nome proprio.
-     Meses depois, "Estudo sobre a graca" sozinho nao diz quando foi. */
-  quandoDe(sessao) {
-    const d = new Date(sessao.inicio);
-    const data = d.toLocaleDateString('pt-BR');
-    const hora = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-    let saida = `${data} às ${hora}`;
-    if (sessao.fim) {
-      const f = new Date(sessao.fim);
-      const mesmoDia = f.toLocaleDateString('pt-BR') === data;
-      const fimHora = f.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-      saida += mesmoDia ? ` — ${fimHora}` : ` — ${f.toLocaleDateString('pt-BR')} ${fimHora}`;
+  removerTrecho(id, indice) {
+    const lista = this.todos();
+    const e = lista.find(x => x.id === id);
+    if (!e) return;
+    const trechos = this.trechosDe(e);
+    trechos.splice(indice, 1);
+    if (!trechos.length) {               // estudo vazio se apaga
+      this.remover(id);
+      return;
     }
-    return saida;
+    e.trechos = trechos;
+    Guarda.gravar('estudos', lista);
   },
 
-  /** A leitura inteira em texto, pronta para compartilhar. */
-  comoTexto(sessao) {
-    const linhas = [this.nomeDe(sessao), this.quandoDe(sessao), ''];
-    if (!sessao.itens.length) {
-      linhas.push('(nenhuma passagem)');
-    } else {
-      sessao.itens.forEach(it => {
-        const hora = new Date(it.hora).toLocaleTimeString('pt-BR',
-          { hour: '2-digit', minute: '2-digit' });
-        const ref = `${Dados.nomeCurto(it.versao, it.code)} ${it.cap}` +
-          (it.vers ? ':' + it.vers : '');
-        linhas.push(`${hora}  ${ref} (${it.versao})`);
-        if (it.trecho) linhas.push(`   ${it.trecho}`);
-      });
-    }
-    const n = sessao.itens.length;
-    linhas.push('', `${n} ${n === 1 ? 'passagem' : 'passagens'}`);
-    return linhas.join('\n');
-  },
-
-  /** Rascunho automatico: chamado a cada passagem aberta. Nunca apaga. */
-  registrar(item) {
-    const lista = this.todas();
-    let s = lista.find(x => x.aberta);
-    if (!s) {
-      s = this._nova();
-      lista.push(s);
-    }
-    const ultimo = s.itens[s.itens.length - 1];
-    if (ultimo && ultimo.versao === item.versao && ultimo.code === item.code
-        && ultimo.cap === item.cap && ultimo.vers === item.vers) {
-      return; // mesma passagem seguida, nao duplica
-    }
-    s.itens.push({ ...item, hora: new Date().toISOString() });
-    Guarda.gravar('sessoes', lista);
-  },
-
-  /** Salvar = fechar a pregacao e abrir folha limpa. Nada e descartado. */
-  salvar(nome) {
-    const lista = this.todas();
-    const s = lista.find(x => x.aberta);
-    if (s) {
-      if (nome) s.nome = nome;
-      s.fim = new Date().toISOString();
-      s.aberta = false;
-    }
-    lista.push(this._nova());
-    Guarda.gravar('sessoes', lista);
+  remover(id) {
+    Guarda.gravar('estudos', this.todos().filter(e => e.id !== id));
   },
 
   renomear(id, nome) {
-    const lista = this.todas();
-    const s = lista.find(x => x.id === id);
-    if (s) { s.nome = nome; Guarda.gravar('sessoes', lista); }
+    const lista = this.todos();
+    const e = lista.find(x => x.id === id);
+    if (e) { e.nome = nome; Guarda.gravar('estudos', lista); }
+  },
+
+  /** Referencia de um trecho isolado. */
+  refDoTrecho(t) {
+    const nome = Dados.nomeCurto(t.versao, t.code);
+    const inicio = `${t.capInicio}:${t.versInicio}`;
+    if (t.capInicio === t.capFim) {
+      return t.versInicio === t.versFim
+        ? `${nome} ${inicio}`
+        : `${nome} ${inicio}-${t.versFim}`;
+    }
+    return `${nome} ${inicio} — ${t.capFim}:${t.versFim}`;
+  },
+
+  /** Referencia do estudo: o primeiro trecho, com "e mais N" se houver outros. */
+  refDe(e) {
+    const trechos = this.trechosDe(e);
+    const primeiro = this.refDoTrecho(trechos[0]);
+    return trechos.length > 1 ? `${primeiro} e mais ${trechos.length - 1}` : primeiro;
+  },
+
+  nomeDe(e) {
+    return e.nome || this.refDe(e);
+  },
+
+  quandoDe(e) {
+    const d = new Date(e.criado);
+    return d.toLocaleDateString('pt-BR') + ' às '
+      + d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  },
+
+  /** Junta o texto de todos os trechos do estudo, para copiar/partilhar. */
+  async comoTexto(e) {
+    const linhas = [this.nomeDe(e), this.quandoDe(e), ''];
+    const trechos = this.trechosDe(e);
+    try {
+      for (const t of trechos) {
+        if (trechos.length > 1) linhas.push(`— ${this.refDoTrecho(t)} (${t.versao}) —`);
+        else linhas.push(`${this.refDoTrecho(t)} (${t.versao})`, '');
+        for (let cap = t.capInicio; cap <= t.capFim; cap++) {
+          const r = await Dados.capitulo(t.versao, t.code, cap);
+          if (!r) continue;
+          for (const v of r.capitulo.verses) {
+            if (cap === t.capInicio && v.number < t.versInicio) continue;
+            if (cap === t.capFim && v.number > t.versFim) continue;
+            if (v.text) linhas.push(`${cap}:${v.number}  ${v.text}`);
+          }
+        }
+        if (trechos.length > 1) linhas.push('');
+      }
+    } catch {
+      linhas.push('(não foi possível carregar o texto)');
+    }
+    return linhas.join('\n');
   },
 };
 

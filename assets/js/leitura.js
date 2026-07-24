@@ -200,44 +200,79 @@ const Leitura = {
     const ref = Dados.referencia(versaoAtual, bookCode, capitulo, versiculo);
     document.getElementById('tirinha-ref').textContent = ref;
 
-    const habilitadas = Prefs.get('versoesTirinha');
-    const lista = [...new Set([versaoAtual, ...habilitadas])]
-      .filter(c => Dados.versao(c))
-      .sort();
+    // a versão principal ativa vem SEMPRE primeiro; as demais em seguida, em
+    // ordem, sem repetir a principal
+    const habilitadas = Prefs.get('versoesTirinha').filter(c => c !== versaoAtual);
+    const lista = [versaoAtual, ...[...new Set(habilitadas)].filter(c => Dados.versao(c)).sort()];
 
     alvo.innerHTML = '<div class="estado">Reunindo as versões…</div>';
 
-    const fitas = await Promise.all(lista.map(async code => {
+    // primeiro busca todos os textos, depois compara cada um com o principal
+    const dados = await Promise.all(lista.map(async code => {
       if (!Dados.temLivro(code, bookCode)) {
-        return this.fita(code, null, `${Dados.nomeCurto(versaoAtual, bookCode)} não existe nesta versão.`, null);
+        return { code, texto: null, erro: `${Dados.nomeCurto(versaoAtual, bookCode)} não existe nesta versão.` };
       }
       const conv = Dados.referenciaEm(bookCode, capitulo, versaoAtual, code);
       try {
         const r = await Dados.capitulo(code, bookCode, conv.capitulo);
-        if (!r) return this.fita(code, null, 'Capítulo não encontrado.', null);
+        if (!r) return { code, texto: null, erro: 'Capítulo não encontrado.', conv };
         const v = r.capitulo.verses.find(x => x.number === versiculo);
         const refLocal = Dados.referencia(code, bookCode, conv.capitulo, versiculo);
-        if (!v) return this.fita(code, refLocal, 'Versículo não encontrado.', conv);
-        return this.fita(code, refLocal, v.text || '(sem texto na origem)', conv);
+        if (!v) return { code, texto: null, erro: 'Versículo não encontrado.', conv, ref: refLocal };
+        return { code, texto: v.text || '', conv, ref: refLocal };
       } catch {
-        return this.fita(code, null, 'Não foi possível abrir.', null);
+        return { code, texto: null, erro: 'Não foi possível abrir.' };
       }
     }));
 
-    alvo.innerHTML = fitas.join('');
+    const principal = dados[0].texto || '';
+    const chave = s => normalizar((s || '').replace(/\s+/g, ' ').trim());
+    const chavePrincipal = chave(principal);
+
+    alvo.innerHTML = dados.map((d, i) => {
+      const ehPrincipal = i === 0;
+      // igual ao principal? só faz sentido comparar quando há texto dos dois
+      const igual = !ehPrincipal && d.texto != null && chave(d.texto) === chavePrincipal;
+      return this.fita(d, ehPrincipal, igual);
+    }).join('');
   },
 
-  fita(versaoCode, ref, texto, conv) {
+  fita(dado, ehPrincipal, igual) {
+    const { code, texto, erro, conv, ref } = dado;
+
     const nota = conv && !conv.exato
       ? `<div class="nota-numeracao">Numeração diferente: esta versão traz a
            passagem em ${ref}. ${this.escapar(conv.nota || '')}</div>`
       : '';
-    return `<div class="fita">
+
+    // o selo à direita: a principal não compara consigo mesma; as outras
+    // mostram = quando o texto é idêntico e ≠ quando difere
+    let selo = '';
+    if (ehPrincipal) {
+      selo = '<span class="selo-cmp principal">principal</span>';
+    } else if (texto != null) {
+      selo = igual
+        ? '<span class="selo-cmp igual">=</span>'
+        : '<span class="selo-cmp difere">≠</span>';
+    }
+
+    // classe da fita governa o destaque do texto: o que é igual ao principal
+    // recua para segundo plano; o que difere ganha peso, para o olho pegar na hora
+    const classe = ehPrincipal ? 'fita principal'
+      : texto == null ? 'fita'
+      : igual ? 'fita igual' : 'fita difere';
+
+    const corpo = texto != null
+      ? `<p>${this.escapar(texto)}</p>`
+      : `<p class="fita-erro">${this.escapar(erro || '')}</p>`;
+
+    return `<div class="${classe}">
       <div class="cabeca">
-        <span class="sigla">${versaoCode}</span>
+        <span class="sigla">${code}</span>
         ${ref ? `<span class="ref-fita">${ref}</span>` : ''}
+        ${selo}
       </div>
-      <p>${this.escapar(texto)}</p>
+      ${corpo}
       ${nota}
     </div>`;
   },

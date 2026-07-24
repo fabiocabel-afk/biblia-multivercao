@@ -29,18 +29,23 @@ const App = {
     Leitura.aplicarFonte(p.fonte);
     Leitura.aplicarModoVersiculo(p.versiculoPorLinha);
 
-    // retoma de onde parou
-    const s = Sessoes.atual();
-    const ultimo = s.itens[s.itens.length - 1];
-    if (ultimo && Dados.versao(ultimo.versao)) {
+    // retoma de onde parou: o livro fixado tem prioridade; senão, o último
+    // lugar visitado no histórico
+    const fix = Historico.fixado();
+    const ultimo = Historico.lista()[0];
+    if (fix && Dados.versao(fix.versao) && Dados.temLivro(fix.versao, fix.code)) {
+      this.versao = fix.versao;
+      this.code = fix.code;
+      this.cap = fix.cap || 1;
+    } else if (ultimo && Dados.versao(ultimo.versao)) {
       this.versao = ultimo.versao;
       this.code = ultimo.code;
       this.cap = ultimo.cap;
     }
 
     this.ligarEventos();
-    // registra tambem a abertura: o historico nao pode ter buracos. Reabrir no
-    // mesmo capitulo nao duplica, porque Sessoes.registrar ignora repetido.
+    // registra também a abertura: reabrir no mesmo lugar não duplica, porque o
+    // Histórico traz a visita repetida para o topo em vez de acrescentar outra.
     await this.ir(this.code, this.cap, null);
     this.registrarServico();
   },
@@ -146,7 +151,7 @@ const App = {
 
     if (registrar) {
       const primeiro = r.capitulo.verses.find(v => v.text);
-      Sessoes.registrar({
+      Historico.registrar({
         versao: this.versao,
         code, cap, vers: vers || null,
         trecho: (primeiro ? primeiro.text : '').slice(0, 90),
@@ -544,99 +549,187 @@ const App = {
   },
 
   /* ============================================================ histórico */
-
-  /* Sanfona no histórico: cada leitura abre uma por vez. Com muitas sessões,
-   * a lista corrida virava um paredão sem fim. */
-  dobraH: undefined,
+  /* ============================================================ histórico
+   *
+   * Trilha de migalhas: os últimos lugares visitados, o mais recente no topo.
+   * Cada item leva de volta num toque e traz um xis para tirar da lista. No
+   * alto fica o livro fixado, quando há um — o alfinete que acompanha o avanço.
+   */
 
   desenharHistorico() {
     const corpo = document.getElementById('corpo-historico');
-    const sessoes = Sessoes.todas().slice().reverse().filter(s => s.itens.length || s.aberta);
+    const lista = Historico.lista();
+    const fix = Historico.fixado();
 
-    if (this.dobraH === undefined) {
-      const aberta = sessoes.find(s => s.aberta);
-      this.dobraH = aberta ? aberta.id : (sessoes[0] ? sessoes[0].id : null);
+    const partes = [];
+
+    // ---- o livro fixado
+    if (fix) {
+      const ref = `${Dados.nomeCurto(fix.versao, fix.code)} ${fix.cap || 1}` +
+        (fix.vers ? ':' + fix.vers : '');
+      partes.push(`<div class="grupo">
+        <h3>Livro fixado</h3>
+        <div class="fixado-linha">
+          <button class="linha ativa" id="ir-fixado" style="flex:1">
+            <svg class="icone" style="width:16px;height:16px;stroke:var(--rubrica)"><use href="#i-fixar"/></svg>
+            <span>${ref}</span>
+            <span class="sub">${fix.versao}</span>
+          </button>
+          <button class="xis" id="desfixar" aria-label="Desafixar" title="Desafixar">
+            <svg class="icone"><use href="#i-fechar"/></svg></button>
+        </div>
+        <p class="contagem">O ponto avança conforme você lê — sempre o versículo
+        mais adiantado que você alcançou neste livro.</p>
+      </div>`);
     }
 
-    const cabecalho = `
-      <button class="botao" id="btn-salvar-sessao" style="width:100%">
-        Salvar esta leitura e iniciar outra</button>
-      <p class="contagem" style="margin-top:8px">O histórico grava sozinho e
-      nunca apaga nada. Salvar apenas fecha a leitura atual e abre uma folha limpa.</p>`;
-
-    const blocos = sessoes.map(s => {
-      const aberto = this.dobraH === s.id;
-
-      const itens = s.itens.slice().reverse().map((it, i) => {
-        const hora = new Date(it.hora).toLocaleTimeString('pt-BR',
-          { hour: '2-digit', minute: '2-digit' });
-        const ref = `${Dados.nomeCurto(it.versao, it.code)} ${it.cap}${it.vers ? ':' + it.vers : ''}`;
-        return `<button class="item-hist" data-s="${s.id}" data-i="${s.itens.length - 1 - i}">
-          <span class="hora">${hora}</span>
-          <span class="ref-hist">${ref}</span>
-          <span class="sigla" style="font-size:10px;padding:1px 4px">${it.versao}</span>
-          <span class="trecho-hist">${Leitura.escapar(it.trecho || '')}</span>
-        </button>`;
-      }).join('');
-
-      return `<button class="dobra sessao" data-h="${s.id}" aria-expanded="${aberto}">
-          <span class="seta">▶</span>
-          <span class="nome-sessao">
-            <strong>${Leitura.escapar(Sessoes.nomeDe(s))}</strong>
-            <span class="quando">${Sessoes.quandoDe(s)}</span>
-          </span>
-          ${s.aberta ? '<span class="marca-aberta">Em andamento</span>' : ''}
-          <span class="soma">${s.itens.length}</span>
-        </button>
-        <div class="dentro ${aberto ? '' : 'fechada'}">
-          <div class="acoes-sessao">
-            <button class="pilula" data-renomear="${s.id}">Renomear</button>
-            <button class="pilula" data-partilhar="${s.id}">Compartilhar</button>
-            <button class="pilula" data-copiar-sessao="${s.id}">Copiar</button>
-          </div>
-          ${itens || '<p class="contagem">Nenhuma passagem ainda.</p>'}
+    // ---- os últimos acessos
+    partes.push('<div class="grupo"><h3>Últimos acessos</h3>');
+    if (!lista.length) {
+      partes.push('<p class="contagem">Nada ainda. Os lugares por onde você passar aparecem aqui.</p>');
+    } else {
+      partes.push(lista.map((it, i) => {
+        const ref = `${Dados.nomeCurto(it.versao, it.code)} ${it.cap}` +
+          (it.vers ? ':' + it.vers : '');
+        const fixavel = !fix || fix.code !== it.code;
+        return `<div class="hist-linha">
+          <button class="item-hist" data-i="${i}">
+            <span class="ref-hist">${ref}</span>
+            <span class="sigla" style="font-size:10px;padding:1px 4px">${it.versao}</span>
+            <span class="trecho-hist">${Leitura.escapar(it.trecho || '')}</span>
+          </button>
+          ${fixavel ? `<button class="xis fixar-item" data-fixar="${i}"
+            aria-label="Fixar este livro" title="Fixar este livro">
+            <svg class="icone"><use href="#i-fixar"/></svg></button>` : ''}
+          <button class="xis remover-item" data-rem="${i}"
+            aria-label="Remover" title="Remover">
+            <svg class="icone"><use href="#i-fechar"/></svg></button>
         </div>`;
-    }).join('');
+      }).join(''));
+    }
+    partes.push('</div>');
 
-    corpo.innerHTML = cabecalho + (blocos || '<div class="estado">Nada no histórico ainda.</div>');
+    corpo.innerHTML = partes.join('');
 
-    document.getElementById('btn-salvar-sessao').onclick = () => {
-      const nome = prompt('Nome desta leitura (opcional):', '');
-      if (nome === null) return;
-      Sessoes.salvar(nome.trim());
-      this.dobraH = undefined;
-      this.desenharHistorico();
+    const irFix = document.getElementById('ir-fixado');
+    if (irFix) irFix.onclick = () => {
+      this.fecharPaineis();
+      if (fix.versao !== this.versao) { this.versao = fix.versao; Prefs.set('versao', fix.versao); }
+      this.ir(fix.code, fix.cap || 1, fix.vers);
     };
 
-    corpo.querySelectorAll('[data-h]').forEach(el => {
+    const desf = document.getElementById('desfixar');
+    if (desf) desf.onclick = () => { Historico.desfixar(); this.desenharHistorico(); };
+
+    corpo.querySelectorAll('[data-i]').forEach(el => {
       el.onclick = () => {
-        this.dobraH = this.dobraH === el.dataset.h ? null : el.dataset.h;
+        const it = Historico.lista()[+el.dataset.i];
+        this.fecharPaineis();
+        if (it.versao !== this.versao) { this.versao = it.versao; Prefs.set('versao', it.versao); }
+        this.ir(it.code, it.cap, it.vers);
+      };
+    });
+
+    corpo.querySelectorAll('[data-rem]').forEach(el => {
+      el.onclick = e => {
+        e.stopPropagation();
+        Historico.remover(+el.dataset.rem);
         this.desenharHistorico();
       };
     });
 
-    const achar = id => Sessoes.todas().find(x => x.id === id);
-
-    corpo.querySelectorAll('[data-renomear]').forEach(el => {
+    corpo.querySelectorAll('[data-fixar]').forEach(el => {
       el.onclick = e => {
         e.stopPropagation();
-        const s = achar(el.dataset.renomear);
-        const nome = prompt('Nome desta leitura:', s ? s.nome : '');
-        if (nome === null) return;
-        Sessoes.renomear(el.dataset.renomear, nome.trim());
+        const it = Historico.lista()[+el.dataset.fixar];
+        Historico.fixar(it.versao, it.code, it.cap, it.vers);
         this.desenharHistorico();
+      };
+    });
+  },
+
+  /* ============================================================= estudos
+   *
+   * Trechos guardados de propósito, com nome. Nascem ao segurar um versículo e
+   * escolher "Salvar estudo". Podem ser renomeados, copiados e compartilhados.
+   */
+
+  desenharEstudos() {
+    const corpo = document.getElementById('corpo-estudos');
+    const estudos = Estudos.todos();
+
+    if (!estudos.length) {
+      corpo.innerHTML = `<div class="estado">Nenhum estudo ainda.<br>
+        Selecione um ou mais versículos e toque em <strong>Salvar estudo</strong>
+        para guardar um trecho com nome.</div>`;
+      return;
+    }
+
+    corpo.innerHTML = estudos.map(e => {
+      const trechos = Estudos.trechosDe(e);
+      const listaTrechos = trechos.map((t, i) => `<div class="trecho-estudo">
+          <button class="ir-trecho" data-est="${e.id}" data-tr="${i}">
+            <span class="est-ref">${Estudos.refDoTrecho(t)}</span>
+            <span class="sigla" style="font-size:10px;padding:1px 4px">${t.versao}</span>
+          </button>
+          <button class="xis remover-trecho" data-est-rem="${e.id}" data-tr-rem="${i}"
+            aria-label="Remover trecho" title="Remover trecho">
+            <svg class="icone"><use href="#i-fechar"/></svg></button>
+        </div>`).join('');
+
+      return `<div class="cartao-estudo">
+        <div class="estudo-cabeca">
+          <strong>${Leitura.escapar(Estudos.nomeDe(e))}</strong>
+          <span class="quando">${Estudos.quandoDe(e)}</span>
+        </div>
+        <div class="trechos-lista">${listaTrechos}</div>
+        <div class="acoes-sessao">
+          <button class="pilula" data-renomear="${e.id}">Renomear</button>
+          <button class="pilula" data-partilhar="${e.id}">Compartilhar</button>
+          <button class="pilula" data-copiar="${e.id}">Copiar</button>
+          <button class="pilula perigo" data-remover="${e.id}">Excluir</button>
+        </div>
+      </div>`;
+    }).join('');
+
+    const achar = id => Estudos.todos().find(e => e.id === id);
+
+    corpo.querySelectorAll('[data-est]').forEach(el => {
+      el.onclick = () => {
+        const e = achar(el.dataset.est);
+        const t = Estudos.trechosDe(e)[+el.dataset.tr];
+        this.fecharPaineis();
+        if (t.versao !== this.versao) { this.versao = t.versao; Prefs.set('versao', t.versao); }
+        this.ir(t.code, t.capInicio, t.versInicio);
+      };
+    });
+
+    corpo.querySelectorAll('[data-est-rem]').forEach(el => {
+      el.onclick = e => {
+        e.stopPropagation();
+        Estudos.removerTrecho(el.dataset.estRem, +el.dataset.trRem);
+        this.desenharEstudos();
+      };
+    });
+
+    corpo.querySelectorAll('[data-renomear]').forEach(el => {
+      el.onclick = () => {
+        const e = achar(el.dataset.renomear);
+        const nome = prompt('Nome do estudo:', e ? Estudos.nomeDe(e) : '');
+        if (nome === null) return;
+        Estudos.renomear(el.dataset.renomear, nome.trim());
+        this.desenharEstudos();
       };
     });
 
     corpo.querySelectorAll('[data-partilhar]').forEach(el => {
-      el.onclick = async e => {
-        e.stopPropagation();
-        const s = achar(el.dataset.partilhar);
-        if (!s) return;
-        const texto = Sessoes.comoTexto(s);
+      el.onclick = async () => {
+        const e = achar(el.dataset.partilhar);
+        if (!e) return;
+        const texto = await Estudos.comoTexto(e);
         if (navigator.share) {
-          try { await navigator.share({ title: Sessoes.nomeDe(s), text: texto }); }
-          catch { /* desistiu: não é erro */ }
+          try { await navigator.share({ title: Estudos.nomeDe(e), text: texto }); }
+          catch { /* desistiu */ }
         } else {
           await this.paraAreaDeTransferencia(texto);
           this.avisoRapido('Copiado — cole onde quiser');
@@ -644,27 +737,98 @@ const App = {
       };
     });
 
-    corpo.querySelectorAll('[data-copiar-sessao]').forEach(el => {
-      el.onclick = async e => {
-        e.stopPropagation();
-        const s = achar(el.dataset.copiarSessao);
-        if (!s) return;
-        await this.paraAreaDeTransferencia(Sessoes.comoTexto(s));
-        this.avisoRapido('Leitura copiada');
+    corpo.querySelectorAll('[data-copiar]').forEach(el => {
+      el.onclick = async () => {
+        const e = achar(el.dataset.copiar);
+        if (!e) return;
+        await this.paraAreaDeTransferencia(await Estudos.comoTexto(e));
+        this.avisoRapido('Estudo copiado');
       };
     });
 
-    corpo.querySelectorAll('.item-hist').forEach(el => {
-      el.onclick = e => {
-        e.stopPropagation();
-        const s = achar(el.dataset.s);
-        const it = s.itens[+el.dataset.i];
-        this.fecharPaineis();
-        if (it.versao !== this.versao) {
-          this.versao = it.versao;
-          Prefs.set('versao', it.versao);
-        }
-        this.ir(it.code, it.cap, it.vers);
+    corpo.querySelectorAll('[data-remover]').forEach(el => {
+      el.onclick = () => {
+        const e = achar(el.dataset.remover);
+        if (!confirm(`Excluir o estudo "${Estudos.nomeDe(e)}"?`)) return;
+        Estudos.remover(el.dataset.remover);
+        this.desenharEstudos();
+      };
+    });
+  },
+
+  /* Monta o trecho a partir da seleção, perguntando até onde vai. Devolve o
+   * trecho pronto, ou null se a pessoa cancelou ou errou o formato. */
+  montarTrechoDaSelecao() {
+    const pedacos = this.selecao.pedacos;
+    const capInicio = this.cap;
+    const versInicio = pedacos[0].vers;
+
+    const sugestao = `${this.cap}:${pedacos[pedacos.length - 1].vers}`;
+    const ate = prompt(
+      'Até onde vai o estudo? Use capítulo:versículo.\n' +
+      'Pode avançar para o próximo capítulo, desde que no mesmo livro.',
+      sugestao);
+    if (ate === null) return null;
+
+    const m = /^\s*(\d+)\s*:\s*(\d+)\s*$/.exec(ate);
+    if (!m) { this.avisoRapido('Formato inválido — use capítulo:versículo'); return null; }
+    const capFim = +m[1], versFim = +m[2];
+
+    const info = Dados.infoLivro(this.versao, this.code);
+    const totalCaps = info ? info.chapters : capInicio;
+    if (capFim < capInicio || capFim > totalCaps ||
+        (capFim === capInicio && versFim < versInicio)) {
+      this.avisoRapido('O fim precisa vir depois do início, no mesmo livro');
+      return null;
+    }
+
+    return { versao: this.versao, code: this.code,
+      capInicio, versInicio, capFim, versFim };
+  },
+
+  /* Ao tocar em "Salvar estudo", abre a escolha: um estudo novo, ou juntar a um
+   * que já existe. Mostra a lista dos estudos anteriores logo ali na barra. */
+  abrirSalvarEstudo() {
+    if (!this.selecao) return;
+    const caixa = document.getElementById('sel-cores');
+
+    // se já estava aberto mostrando isto, recolhe
+    if (!caixa.classList.contains('fechada') && caixa.dataset.modo === 'estudo') {
+      caixa.classList.add('fechada');
+      return;
+    }
+
+    const anteriores = Estudos.todos();
+    caixa.dataset.modo = 'estudo';
+    caixa.innerHTML = `
+      <button class="opcao-estudo novo" data-novo="1">
+        <span class="mais">+</span><span>Novo estudo</span>
+      </button>
+      ${anteriores.length ? '<div class="sep-estudos">ou juntar a um estudo</div>' : ''}
+      ${anteriores.map(e => `<button class="opcao-estudo" data-juntar="${e.id}">
+        <strong>${Leitura.escapar(Estudos.nomeDe(e))}</strong>
+        <span class="est-ref">${Estudos.refDe(e)}</span>
+      </button>`).join('')}`;
+
+    caixa.classList.remove('fechada');
+
+    caixa.querySelector('[data-novo]').onclick = () => {
+      const trecho = this.montarTrechoDaSelecao();
+      if (!trecho) return;
+      const nome = prompt('Nome do novo estudo (opcional):', '');
+      if (nome === null) return;
+      Estudos.criar({ nome: nome.trim(), trecho });
+      this.fecharSelecao();
+      this.avisoRapido('Estudo criado');
+    };
+
+    caixa.querySelectorAll('[data-juntar]').forEach(el => {
+      el.onclick = () => {
+        const trecho = this.montarTrechoDaSelecao();
+        if (!trecho) return;
+        Estudos.acrescentar(el.dataset.juntar, trecho);
+        this.fecharSelecao();
+        this.avisoRapido('Adicionado ao estudo');
       };
     });
   },
@@ -966,6 +1130,11 @@ const App = {
       `${this.referenciaDaSelecao(sel.pedacos)}
        <span class="sel-conta">${n} versículo${n > 1 ? 's' : ''}</span>`;
 
+    // o ponto onde a pessoa está de fato lendo é o versículo que ela seleciona;
+    // é ele que atualiza o histórico e faz o alfinete avançar no livro fixado
+    const ultimoVers = sel.pedacos[sel.pedacos.length - 1].vers;
+    Historico.avancarFixado({ code: this.code, cap: this.cap, vers: ultimoVers });
+
     barra.classList.add('aberta');
     barra.setAttribute('aria-hidden', 'false');
     document.body.classList.add('selecionando');
@@ -1031,10 +1200,13 @@ const App = {
 
   abrirCoresDaSelecao() {
     const caixa = document.getElementById('sel-cores');
-    if (!caixa.classList.contains('fechada')) {
+    // se já estava mostrando as cores, recolhe; se estava no modo estudo,
+    // troca para as cores
+    if (!caixa.classList.contains('fechada') && caixa.dataset.modo === 'marcar') {
       caixa.classList.add('fechada');
       return;
     }
+    caixa.dataset.modo = 'marcar';
 
     // qual marcador já está posto no trecho selecionado (se houver um só)
     const versificacao = Dados.versificacaoDe(this.versao);
@@ -1159,18 +1331,45 @@ const App = {
     this.sincronizarRolagem(a, b);
   },
 
+  /* A rolagem das duas metades anda junto. A versao antiga casava por
+   * proporcao de altura — mas quando as versoes tem tamanhos de texto
+   * diferentes (e mais ainda ao trocar uma delas), o mesmo versiculo caia em
+   * alturas diferentes e o sincronismo se perdia. Agora o alinhamento e por
+   * versiculo: ao rolar uma metade, a outra vai para o mesmo versiculo. */
   sincronizarRolagem(a, b) {
     let travado = false;
+
+    // o versículo "de referência" é aquele cujo topo está mais perto da marca
+    // (um pouco abaixo do topo do painel). Pegar o primeiro que cruza a marca
+    // erra por até um versículo; medir a distância e escolher o menor não erra.
+    const marcaDe = painel => painel.getBoundingClientRect().top + 8;
+
+    const versAncora = painel => {
+      const marca = marcaDe(painel);
+      let melhor = null, menor = Infinity;
+      for (const v of painel.querySelectorAll('.v')) {
+        const r = v.getBoundingClientRect();
+        if (r.bottom < marca - 40) continue;        // já passou bem acima
+        if (r.top > marca + painel.clientHeight) break; // ainda muito abaixo
+        const dist = Math.abs(r.top - marca);
+        if (dist < menor) { menor = dist; melhor = v; }
+      }
+      return melhor ? melhor.dataset.vers : null;
+    };
+
     const liga = (de, para) => {
       de.onscroll = () => {
         if (travado) return;
         travado = true;
-        const max = de.scrollHeight - de.clientHeight;
-        const prop = max > 0 ? de.scrollTop / max : 0;
-        para.scrollTop = prop * (para.scrollHeight - para.clientHeight);
+        const vers = versAncora(de);
+        const alvo = vers && para.querySelector(`.v[data-vers="${vers}"]`);
+        if (alvo) {
+          para.scrollTop += alvo.getBoundingClientRect().top - marcaDe(para);
+        }
         requestAnimationFrame(() => { travado = false; });
       };
     };
+
     liga(a, b);
     liga(b, a);
   },
@@ -1185,6 +1384,7 @@ const App = {
     q('btn-versao').onclick = () => { this.desenharVersoes(); this.abrir('painel-versao'); };
     q('btn-marcadores').onclick = () => { this.desenharMarcadores(); this.abrir('painel-marcadores'); };
     q('btn-historico').onclick = () => { this.desenharHistorico(); this.abrir('painel-historico'); };
+    q('btn-estudos').onclick = () => { this.desenharEstudos(); this.abrir('painel-estudos'); };
     q('btn-ajustes').onclick = () => { this.desenharAjustes(); this.abrir('painel-ajustes'); };
     q('btn-comparar').onclick = () => this.alternarComparacao();
     q('btn-antes').onclick = () => this.passo(-1);
@@ -1202,6 +1402,7 @@ const App = {
     q('sel-copiar').onclick = () => this.copiarSelecao();
     q('sel-compartilhar').onclick = () => this.compartilharSelecao();
     q('sel-marcar').onclick = () => this.abrirCoresDaSelecao();
+    q('sel-estudo').onclick = () => this.abrirSalvarEstudo();
     q('sel-limpar').onclick = () => this.fecharSelecao();
 
     /* Arrastar para os lados vira a pagina, como num livro de verdade.
@@ -1443,7 +1644,6 @@ const App = {
         const r = await Dados.capitulo(this.versao, it.code, conv.capitulo);
         const v = r && r.capitulo.verses.find(x => x.number === it.vers);
         const inteiro = v && v.text ? v.text : '';
-        // mostra o pedaço que foi marcado, não o versículo todo
         const fim = it.f == null ? inteiro.length : it.f;
         texto = inteiro.slice(it.i || 0, fim).trim();
         parcial = (it.i || 0) > 0 || fim < inteiro.length;
@@ -1451,34 +1651,82 @@ const App = {
       return { ...it, capLocal: conv.capitulo, exato: conv.exato, texto, parcial };
     }));
 
-    // ordem de leitura da Bíblia, não a ordem em que foram marcados
     lidos.sort((a, b) => {
       const d = ordem.indexOf(a.code) - ordem.indexOf(b.code);
       return d !== 0 ? d : (a.capLocal - b.capLocal || a.vers - b.vers);
     });
 
+    /* Agrupa versículos em sequência: em vez de três linhas para Gênesis 1:1,
+     * 1:2 e 1:3, uma só, "Gênesis 1:1-3". Só junta o que é seguido, do mesmo
+     * livro e capítulo, e apenas versículos inteiros — um trecho parcial
+     * (meio-versículo marcado) fica sozinho, porque a faixa é dele. */
+    const grupos = [];
+    for (const it of lidos) {
+      const ult = grupos[grupos.length - 1];
+      const inteiro = !it.parcial;
+      if (ult && inteiro && ult.inteiro && ult.code === it.code
+          && ult.capLocal === it.capLocal && it.vers === ult.versFim + 1) {
+        ult.versFim = it.vers;
+        ult.itens.push(it);
+      } else {
+        grupos.push({ code: it.code, capLocal: it.capLocal, versIni: it.vers,
+          versFim: it.vers, inteiro, exato: it.exato, itens: [it] });
+      }
+    }
+
+    const rotulo = g => {
+      const nome = Dados.nomeCurto(this.versao, g.code);
+      return g.versIni === g.versFim
+        ? `${nome} ${g.capLocal}:${g.versIni}`
+        : `${nome} ${g.capLocal}:${g.versIni}-${g.versFim}`;
+    };
+
+    const trecho = g => {
+      if (g.itens.length > 1) {
+        // agrupado: junta os textos dos versículos, cortando se ficar longo
+        const junto = g.itens.map(x => x.texto).filter(Boolean).join(' ');
+        return Leitura.escapar(junto.slice(0, 130)) + (junto.length > 130 ? '…' : '');
+      }
+      const it = g.itens[0];
+      if (!it.texto) return '(texto não disponível nesta versão)';
+      return (it.parcial ? '…' : '') + Leitura.escapar(it.texto.slice(0, 120))
+        + (it.texto.length > 120 || it.parcial ? '…' : '');
+    };
+
     corpo.innerHTML = voltar
       + `<p class="contagem" style="margin-bottom:10px">${lidos.length}
          versículo${lidos.length > 1 ? 's' : ''} neste marcador.</p>`
-      + lidos.map((it, i) => `<button class="item-marcado" data-i="${i}"
-          style="--marca-cor:${m.cor}">
-          <span class="ref-marcado">${Leitura.escapar(Dados.nomeCurto(this.versao, it.code))}
-            ${it.capLocal}:${it.vers}</span>
-          ${it.exato ? '' : '<span class="sub">numeração diferente</span>'}
-          <span class="trecho-marcado">${it.texto
-            ? (it.parcial ? '…' : '')
-              + Leitura.escapar(it.texto.slice(0, 120))
-              + (it.texto.length > 120 || it.parcial ? '…' : '')
-            : '(texto não disponível nesta versão)'}</span>
-        </button>`).join('');
+      + grupos.map((g, i) => `<div class="marcado-linha" style="--marca-cor:${m.cor}">
+          <button class="item-marcado" data-g="${i}">
+            <span class="ref-marcado">${rotulo(g)}</span>
+            ${g.exato ? '' : '<span class="sub">numeração diferente</span>'}
+            <span class="trecho-marcado">${trecho(g)}</span>
+          </button>
+          <button class="xis remover-marca" data-remg="${i}"
+            aria-label="Remover marca" title="Remover marca">
+            <svg class="icone"><use href="#i-fechar"/></svg></button>
+        </div>`).join('');
 
     document.getElementById('voltar-marcadores').onclick = () => this.desenharMarcadores();
 
-    corpo.querySelectorAll('.item-marcado').forEach(el => {
+    corpo.querySelectorAll('[data-g]').forEach(el => {
       el.onclick = () => {
-        const it = lidos[+el.dataset.i];
+        const g = grupos[+el.dataset.g];
         this.fecharPaineis();
-        this.ir(it.code, it.capLocal, it.vers);
+        this.ir(g.code, g.capLocal, g.versIni);
+      };
+    });
+
+    corpo.querySelectorAll('[data-remg]').forEach(el => {
+      el.onclick = e => {
+        e.stopPropagation();
+        const g = grupos[+el.dataset.remg];
+        // tira a marca de todos os versículos do grupo
+        for (const it of g.itens) {
+          Marcadores.limparTrecho(it.versificacao, it.code, it.cap,
+            it.vers, it.i, it.f);
+        }
+        this.desenharGrupo(id);
       };
     });
   },
