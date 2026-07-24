@@ -8,7 +8,7 @@
 /* A casca sobe de versao a cada mudanca no app, para o navegador nao servir a
  * versao antiga. Os textos biblicos ficam numa versao propria e estavel: eles
  * nunca mudam, e nao ha por que rebaixar tudo por causa de um ajuste de tela. */
-const CASCA = 'casca-biblia-v2';
+const CASCA = 'casca-biblia-v3';
 const TEXTOS = 'textos-biblia-v1';
 
 const ESSENCIAIS = [
@@ -18,6 +18,7 @@ const ESSENCIAIS = [
   './assets/css/estilo.css',
   './assets/js/dados.js',
   './assets/js/armazenamento.js',
+  './assets/js/cores.js',
   './assets/js/leitura.js',
   './assets/js/busca.js',
   './assets/js/app.js',

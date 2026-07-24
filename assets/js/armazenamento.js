@@ -228,37 +228,108 @@ const Marcadores = {
     return Guarda.ler('marcados', {});
   },
 
-  /** Devolve o id do marcador daquele versiculo, ou null. */
-  do(versificacao, code, cap, vers) {
+  /* Marcar deixou de ser "o versiculo inteiro ou nada". A marca cobre
+   * exatamente o trecho que foi selecionado, e um mesmo versiculo pode ter
+   * pedacos de cores diferentes.
+   *
+   * O que fica gravado e uma lista de faixas: {m: marcador, i: onde comeca,
+   * f: onde termina} contando as letras do versiculo. Um versiculo inteiro e
+   * so uma faixa de 0 ate o fim (f nulo).
+   *
+   * O formato antigo — um numero solto — continua valendo e e lido como uma
+   * faixa que cobre tudo. Ninguem perde o que ja tinha marcado. */
+  normalizar(valor) {
+    if (valor == null) return [];
+    if (typeof valor === 'number') return [{ m: valor, i: 0, f: null }];
+    return Array.isArray(valor) ? valor : [];
+  },
+
+  /** As faixas daquele versiculo, ja considerando a outra numeracao. */
+  faixas(versificacao, code, cap, vers) {
     const todos = this.marcados();
     const direto = todos[this.chave(versificacao, code, cap, vers)];
-    if (direto) return direto;
+    if (direto != null) return this.normalizar(direto);
 
-    // marcado noutra numeracao? converte o capitulo e tenta de novo
     const outra = versificacao === 'vulgata' ? 'hebraica' : 'vulgata';
     const conv = Dados.converter(code, cap, versificacao, outra);
-    return todos[this.chave(outra, code, conv.capitulo, vers)] || null;
+    return this.normalizar(todos[this.chave(outra, code, conv.capitulo, vers)]);
   },
 
-  /** Um marcador por versiculo — marcar de novo com o mesmo id desmarca. */
-  alternar(versificacao, code, cap, vers, marcadorId) {
+  /** Compatibilidade: o marcador do versiculo, se ele estiver todo de uma cor. */
+  do(versificacao, code, cap, vers) {
+    const fx = this.faixas(versificacao, code, cap, vers);
+    return fx.length ? fx[0].m : null;
+  },
+
+  gravarFaixas(versificacao, code, cap, vers, faixas) {
     const todos = this.marcados();
     const k = this.chave(versificacao, code, cap, vers);
-    if (todos[k] === marcadorId) delete todos[k];
-    else todos[k] = marcadorId;
+    if (!faixas || !faixas.length) delete todos[k];
+    else todos[k] = faixas;
     Guarda.gravar('marcados', todos);
-    return todos[k] || null;
   },
 
-  /** Todos os versiculos de um marcador, para a tela de marcadores. */
+  /** Marca de `i` a `f`. O trecho novo manda: apaga a cor antiga onde encostar. */
+  marcarTrecho(versificacao, code, cap, vers, i, f, marcadorId) {
+    const antigas = this.faixas(versificacao, code, cap, vers);
+    const fim = x => (x == null ? Infinity : x);
+    const novas = [];
+
+    for (const fx of antigas) {
+      const a = fx.i, b = fim(fx.f);
+      if (b <= i || a >= fim(f)) { novas.push(fx); continue; } // nao encosta
+      if (a < i) novas.push({ m: fx.m, i: a, f: i });          // sobra a esquerda
+      if (b > fim(f)) novas.push({ m: fx.m, i: f, f: fx.f });  // sobra a direita
+    }
+
+    novas.push({ m: marcadorId, i, f });
+    novas.sort((a, b) => a.i - b.i);
+    this.gravarFaixas(versificacao, code, cap, vers, novas);
+    return novas;
+  },
+
+  /** Tira a cor de um trecho. Sem i/f, limpa o versiculo inteiro. */
+  limparTrecho(versificacao, code, cap, vers, i = null, f = null) {
+    if (i == null) {
+      this.gravarFaixas(versificacao, code, cap, vers, []);
+      return [];
+    }
+    const fim = x => (x == null ? Infinity : x);
+    const novas = [];
+    for (const fx of this.faixas(versificacao, code, cap, vers)) {
+      const a = fx.i, b = fim(fx.f);
+      if (b <= i || a >= fim(f)) { novas.push(fx); continue; }
+      if (a < i) novas.push({ m: fx.m, i: a, f: i });
+      if (b > fim(f)) novas.push({ m: fx.m, i: f, f: fx.f });
+    }
+    this.gravarFaixas(versificacao, code, cap, vers, novas);
+    return novas;
+  },
+
+  /** Marca o versiculo inteiro; com o mesmo marcador de novo, desmarca. */
+  alternar(versificacao, code, cap, vers, marcadorId) {
+    const fx = this.faixas(versificacao, code, cap, vers);
+    const inteiro = fx.length === 1 && fx[0].i === 0 && fx[0].f == null;
+    if (inteiro && fx[0].m === marcadorId) {
+      this.gravarFaixas(versificacao, code, cap, vers, []);
+      return null;
+    }
+    this.gravarFaixas(versificacao, code, cap, vers, [{ m: marcadorId, i: 0, f: null }]);
+    return marcadorId;
+  },
+
+  /** Todos os trechos de um marcador, para a tela de marcadores. */
   porMarcador(marcadorId) {
     const todos = this.marcados();
-    return Object.keys(todos)
-      .filter(k => todos[k] === marcadorId)
-      .map(k => {
-        const [versificacao, code, cap, vers] = k.split('|');
-        return { versificacao, code, cap: +cap, vers: +vers };
-      });
+    const saida = [];
+    for (const k of Object.keys(todos)) {
+      const [versificacao, code, cap, vers] = k.split('|');
+      for (const fx of this.normalizar(todos[k])) {
+        if (fx.m !== marcadorId) continue;
+        saida.push({ versificacao, code, cap: +cap, vers: +vers, i: fx.i, f: fx.f });
+      }
+    }
+    return saida;
   },
 };
 

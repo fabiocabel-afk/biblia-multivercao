@@ -241,7 +241,7 @@ const App = {
 
   /* Sanfona: abre um por vez, para a lista nao virar um paredao de 66 livros.
    * Guarda qual testamento e qual categoria estao abertos. */
-  dobraT: null,
+  dobraT: undefined,   // undefined = nunca abriu; null = a pessoa fechou
   dobraC: null,
 
   /** Quantos capitulos tem um conjunto de livros. Fica visivel sempre. */
@@ -269,8 +269,10 @@ const App = {
     const arv = Dados.arvore(this.versao);
     const comCategorias = Prefs.get('mostrarCategorias');
 
-    // na primeira abertura, escancara onde o leitor esta agora
-    if (this.dobraT === null) {
+    // so na primeirissima vez o app escancara onde o leitor esta agora.
+    // Depois disso, fechado e fechado — se a pessoa recolheu o Testamento, e
+    // porque queria o outro subindo para perto do dedo.
+    if (this.dobraT === undefined) {
       const atual = Dados.infoLivro(this.versao, this.code);
       this.dobraT = atual ? atual.testament : arv.testaments[0].id;
       this.dobraC = atual ? atual.category : null;
@@ -292,9 +294,8 @@ const App = {
       partes.push(`<div class="dentro ${abertoT ? '' : 'fechada'}">`);
 
       for (const c of t.categories) {
-        const somaC = this.rotuloSoma(this.somaCapitulos(c.books));
-
         if (comCategorias) {
+          const somaC = this.rotuloSoma(this.somaCapitulos(c.books));
           const abertoC = abertoT && this.dobraC === c.id;
           partes.push(`<button class="dobra categoria" data-c="${c.id}"
             aria-expanded="${abertoC}">
@@ -306,9 +307,7 @@ const App = {
           partes.push(c.books.map(b => this.linhaLivro(b)).join(''));
           partes.push('</div>');
         } else {
-          // sem a camada do meio, a categoria vira so um marco com a contagem
-          partes.push(`<div class="marco"><span>${c.name}</span>
-            <span class="soma">${somaC}</span></div>`);
+          // flag desligado: os livros vem direto, sem nomenclatura nenhuma
           partes.push(c.books.map(b => this.linhaLivro(b)).join(''));
         }
       }
@@ -540,109 +539,140 @@ const App = {
     });
   },
 
-  /* ============================================================== ajustes */
+  /* ============================================================== ajustes
+   *
+   * O painel ficou comprido demais para rolar. Agora cada assunto e uma dobra:
+   * abre um por vez, e o resto fica recolhido.
+   */
+
+  dobraA: 'folha',
+
+  secao(id, titulo, conteudo) {
+    const aberta = this.dobraA === id;
+    return `<button class="dobra secao" data-s="${id}" aria-expanded="${aberta}">
+        <span class="seta">▶</span>
+        <span>${titulo}</span>
+      </button>
+      <div class="dentro ${aberta ? '' : 'fechada'}">${conteudo}</div>`;
+  },
 
   desenharAjustes() {
     const corpo = document.getElementById('corpo-ajustes');
     const p = Prefs.todas();
 
-    corpo.innerHTML = `
-      <div class="grupo">
-        <h3>Folha</h3>
-        <div class="rotulo-controle"><span>Temperatura do papel</span>
-          <span id="rot-temp">${p.temperatura}</span></div>
-        <input class="deslizador" type="range" id="ctrl-temp" min="0" max="100" value="${p.temperatura}">
-        <div class="amostra-folha" id="amostra">No princípio, Deus criou o céu e a terra.</div>
+    const folha = `
+      <div class="rotulo-controle"><span>Temperatura do papel</span>
+        <span id="rot-temp">${p.temperatura}</span></div>
+      <input class="deslizador" type="range" id="ctrl-temp" min="0" max="100" value="${p.temperatura}">
+      <div class="amostra-folha" id="amostra">No princípio, Deus criou o céu e a terra.</div>
 
-        <div class="rotulo-controle" style="margin-top:20px"><span>Tamanho da letra</span>
-          <span id="rot-fonte">${p.fonte}px</span></div>
-        <input class="deslizador" type="range" id="ctrl-fonte" min="15" max="34" value="${p.fonte}">
+      <div class="rotulo-controle" style="margin-top:20px"><span>Tamanho da letra</span>
+        <span id="rot-fonte">${p.fonte}px</span></div>
+      <input class="deslizador" type="range" id="ctrl-fonte" min="15" max="34" value="${p.fonte}">
 
-        <label class="interruptor"><span>Modo escuro</span>
-          <input type="checkbox" id="ctrl-escuro" ${p.escuro ? 'checked' : ''}></label>
-        ${p.escuro ? '<p class="contagem">A temperatura do papel só vale no modo claro.</p>' : ''}
+      <label class="interruptor"><span>Modo escuro</span>
+        <input type="checkbox" id="ctrl-escuro" ${p.escuro ? 'checked' : ''}></label>
+      ${p.escuro ? '<p class="contagem">A temperatura do papel só vale no modo claro.</p>' : ''}`;
+
+    const livros = `
+      <label class="interruptor"><span>Mostrar categorias</span>
+        <input type="checkbox" id="ctrl-categorias" ${p.mostrarCategorias ? 'checked' : ''}></label>
+      <p class="contagem">Ligado, o painel abre em três camadas: Testamento,
+      categoria e livro — uma de cada vez. Desligado, os livros vêm direto sob
+      cada Testamento, sem nomes de categoria.</p>`;
+
+    const comparar = `
+      <p class="contagem">Versão que aparece na metade de baixo.</p>
+      <select class="campo" id="ctrl-comparar">
+        ${Dados.versoes.map(v => `<option value="${v.code}"
+          ${v.code === p.versaoComparar ? 'selected' : ''}>${Dados.rotulo(v.code)}</option>`).join('')}
+      </select>`;
+
+    const tirinha = `
+      <p class="contagem">Ao abrir um versículo, ele aparece empilhado nestas versões.</p>
+      ${Dados.versoes.map(v => `<label class="interruptor">
+        <span><span class="sigla">${v.code}</span> ${v.name}</span>
+        <input type="checkbox" data-tirinha="${v.code}"
+          ${p.versoesTirinha.includes(v.code) ? 'checked' : ''}></label>`).join('')}`;
+
+    const marcadores = `
+      <p class="contagem">Trocar a cor aqui recolore de uma vez todos os
+      trechos ligados àquele marcador.</p>
+      ${Marcadores.lista().map(m => `<div class="item-marcador" data-item="${m.id}">
+        <button class="bolha-cor" data-abrir-cor="${m.id}"
+          style="background:${m.cor}" title="Escolher a cor"></button>
+        <input type="text" class="campo" value="${Leitura.escapar(m.nome)}" data-nome="${m.id}">
+        <span class="sub">${Marcadores.porMarcador(m.id).length}</span>
       </div>
+      <div class="caixa-cor fechada" data-caixa="${m.id}"></div>`).join('')}`;
 
-      <div class="grupo">
-        <h3>Painel de livros</h3>
-        <label class="interruptor"><span>Mostrar categorias</span>
-          <input type="checkbox" id="ctrl-categorias" ${p.mostrarCategorias ? 'checked' : ''}></label>
-        <p class="contagem">Com as categorias ligadas, o painel abre em três
-        camadas: Testamento, categoria e livro — uma de cada vez. Desligadas, os
-        livros vêm direto, e a contagem de capítulos de cada conjunto continua
-        aparecendo.</p>
-      </div>
+    const guarda = `<p class="contagem">${Guarda.persistente()
+      ? 'O histórico e os marcadores estão sendo gravados neste dispositivo.'
+      : 'Atenção: este navegador não está permitindo gravar. O histórico vai durar só até fechar o aplicativo.'}</p>`;
 
-      <div class="grupo">
-        <h3>Comparar</h3>
-        <p class="contagem">Versão que aparece na metade de baixo.</p>
-        <select class="campo" id="ctrl-comparar">
-          ${Dados.versoes.map(v => `<option value="${v.code}"
-            ${v.code === p.versaoComparar ? 'selected' : ''}>${Dados.rotulo(v.code)}</option>`).join('')}
-        </select>
-      </div>
+    corpo.innerHTML =
+      this.secao('folha', 'Folha', folha) +
+      this.secao('livros', 'Painel de livros', livros) +
+      this.secao('comparar', 'Comparar', comparar) +
+      this.secao('tirinha', 'Versões empilhadas', tirinha) +
+      this.secao('marcadores', 'Marcadores', marcadores) +
+      this.secao('guarda', 'Armazenamento', guarda);
 
-      <div class="grupo">
-        <h3>Versões da tirinha</h3>
-        <p class="contagem">Ao tocar num versículo, ele aparece empilhado nestas versões.</p>
-        ${Dados.versoes.map(v => `<label class="interruptor">
-          <span><span class="sigla">${v.code}</span> ${v.name}</span>
-          <input type="checkbox" data-tirinha="${v.code}"
-            ${p.versoesTirinha.includes(v.code) ? 'checked' : ''}></label>`).join('')}
-      </div>
+    corpo.querySelectorAll('[data-s]').forEach(el => {
+      el.onclick = () => {
+        this.dobraA = this.dobraA === el.dataset.s ? null : el.dataset.s;
+        this.desenharAjustes();
+      };
+    });
 
-      <div class="grupo">
-        <h3>Marcadores</h3>
-        <p class="contagem">Trocar a cor aqui recolore de uma vez todos os
-        versículos ligados àquele marcador.</p>
-        ${Marcadores.lista().map(m => `<div class="item-marcador">
-          <input type="color" value="${m.cor}" data-cor="${m.id}">
-          <input type="text" class="campo" value="${Leitura.escapar(m.nome)}" data-nome="${m.id}">
-          <span class="sub">${Marcadores.porMarcador(m.id).length}</span>
-        </div>`).join('')}
-      </div>
+    this.ligarAjustes();
+  },
 
-      <div class="grupo">
-        <h3>Armazenamento</h3>
-        <p class="contagem">${Guarda.persistente()
-          ? 'O histórico e os marcadores estão sendo gravados neste dispositivo.'
-          : 'Atenção: este navegador não está permitindo gravar. O histórico vai durar só até fechar o aplicativo.'}</p>
-      </div>`;
+  ligarAjustes() {
+    const corpo = document.getElementById('corpo-ajustes');
+    const achar = id => document.getElementById(id);
 
-    const temp = document.getElementById('ctrl-temp');
-    const amostra = document.getElementById('amostra');
-    const pintarAmostra = () => {
-      amostra.style.background = getComputedStyle(document.documentElement).getPropertyValue('--papel');
-      amostra.style.color = getComputedStyle(document.documentElement).getPropertyValue('--tinta');
-    };
-    pintarAmostra();
+    const temp = achar('ctrl-temp');
+    if (temp) {
+      const amostra = achar('amostra');
+      const pintar = () => {
+        const s = getComputedStyle(document.documentElement);
+        amostra.style.background = s.getPropertyValue('--papel');
+        amostra.style.color = s.getPropertyValue('--tinta');
+      };
+      pintar();
+      temp.oninput = () => {
+        achar('rot-temp').textContent = temp.value;
+        Leitura.aplicarTemperatura(+temp.value);
+        pintar();
+      };
+      temp.onchange = () => Prefs.set('temperatura', +temp.value);
+    }
 
-    temp.oninput = () => {
-      document.getElementById('rot-temp').textContent = temp.value;
-      Leitura.aplicarTemperatura(+temp.value);
-      pintarAmostra();
-    };
-    temp.onchange = () => Prefs.set('temperatura', +temp.value);
+    const fonte = achar('ctrl-fonte');
+    if (fonte) {
+      fonte.oninput = () => {
+        achar('rot-fonte').textContent = fonte.value + 'px';
+        Leitura.aplicarFonte(+fonte.value);
+      };
+      fonte.onchange = () => Prefs.set('fonte', +fonte.value);
+    }
 
-    const fonte = document.getElementById('ctrl-fonte');
-    fonte.oninput = () => {
-      document.getElementById('rot-fonte').textContent = fonte.value + 'px';
-      Leitura.aplicarFonte(+fonte.value);
-    };
-    fonte.onchange = () => Prefs.set('fonte', +fonte.value);
-
-    document.getElementById('ctrl-escuro').onchange = e => {
+    const escuro = achar('ctrl-escuro');
+    if (escuro) escuro.onchange = e => {
       Prefs.set('escuro', e.target.checked);
       Leitura.aplicarEscuro(e.target.checked);
       this.desenharAjustes();
     };
 
-    document.getElementById('ctrl-categorias').onchange = e => {
+    const cats = achar('ctrl-categorias');
+    if (cats) cats.onchange = e => {
       Prefs.set('mostrarCategorias', e.target.checked);
       this.dobraC = null;
     };
 
-    document.getElementById('ctrl-comparar').onchange = e => {
+    const comp = achar('ctrl-comparar');
+    if (comp) comp.onchange = e => {
       Prefs.set('versaoComparar', e.target.value);
       if (this.comparando) this.desenharComparacao();
     };
@@ -651,27 +681,241 @@ const App = {
       el.onchange = () => {
         const atuais = Prefs.get('versoesTirinha');
         const code = el.dataset.tirinha;
-        const novo = el.checked
+        Prefs.set('versoesTirinha', el.checked
           ? [...new Set([...atuais, code])]
-          : atuais.filter(c => c !== code);
-        Prefs.set('versoesTirinha', novo);
-      };
-    });
-
-    // recolore ao vivo, enquanto a pessoa arrasta no seletor de cor
-    corpo.querySelectorAll('[data-cor]').forEach(el => {
-      el.oninput = () => {
-        const id = +el.dataset.cor;
-        Marcadores.atualizar(id, { cor: el.value });
-        document.querySelectorAll(`.v[data-marcador="${id}"]`).forEach(v => {
-          v.style.setProperty('--marca', Leitura.corMarca(el.value));
-        });
+          : atuais.filter(c => c !== code));
       };
     });
 
     corpo.querySelectorAll('[data-nome]').forEach(el => {
       el.onchange = () => Marcadores.atualizar(+el.dataset.nome, { nome: el.value });
     });
+
+    // roda de cores: abre embaixo do marcador que foi tocado
+    corpo.querySelectorAll('[data-abrir-cor]').forEach(el => {
+      el.onclick = () => {
+        const id = +el.dataset.abrirCor;
+        const caixa = corpo.querySelector(`[data-caixa="${id}"]`);
+        const abrindo = caixa.classList.contains('fechada');
+
+        corpo.querySelectorAll('.caixa-cor').forEach(c => {
+          c.classList.add('fechada');
+          c.innerHTML = '';
+        });
+
+        if (!abrindo) return;
+        caixa.classList.remove('fechada');
+        RodaDeCores.montar(caixa, Marcadores.de(id).cor, cor => {
+          Marcadores.atualizar(id, { cor });
+          el.style.background = cor;
+          document.querySelectorAll(`.v [data-marcador="${id}"], .v[data-marcador="${id}"]`)
+            .forEach(v => v.style.setProperty('--marca', Leitura.corMarca(cor)));
+        });
+      };
+    });
+  },
+
+
+  /* ============================================== seleção de trecho
+   *
+   * A seleção é a do próprio navegador — o toque longo e o arrastar que o dedo
+   * já conhece de qualquer texto. O app só escuta o resultado e oferece o que
+   * fazer com ele: copiar, compartilhar ou marcar.
+   *
+   * A marca cobre exatamente o que foi selecionado, e não o versículo inteiro.
+   */
+
+  selecao: null,
+
+  /** O texto do versículo como está na tela, sem o número que o antecede. */
+  textoDoVersiculo(el) {
+    const n = el.querySelector('.n');
+    const inteiro = el.textContent;
+    return n ? inteiro.slice(n.textContent.length) : inteiro;
+  },
+
+  /** Onde, dentro do texto do versículo, cai um ponto da seleção. */
+  posicaoNoVersiculo(el, no, deslocamento) {
+    const r = document.createRange();
+    r.selectNodeContents(el);
+    try { r.setEnd(no, deslocamento); } catch { return 0; }
+    const n = el.querySelector('.n');
+    const desconto = n ? n.textContent.length : 0;
+    return Math.max(0, r.toString().length - desconto);
+  },
+
+  lerSelecao() {
+    const s = window.getSelection();
+    if (!s || s.isCollapsed || !s.rangeCount) return null;
+
+    const r = s.getRangeAt(0);
+    const folha = document.getElementById('folha');
+    if (!folha.contains(r.commonAncestorContainer)) return null;
+
+    const versiculos = [...folha.querySelectorAll('.v')]
+      .filter(el => r.intersectsNode(el));
+    if (!versiculos.length) return null;
+
+    const pedacos = versiculos.map(el => {
+      const texto = this.textoDoVersiculo(el);
+
+      // a selecao envolve o versiculo inteiro, ou comeca/termina no meio dele?
+      const rEl = document.createRange();
+      rEl.selectNodeContents(el);
+      const comecaAntes = r.compareBoundaryPoints(Range.START_TO_START, rEl) <= 0;
+      const terminaDepois = r.compareBoundaryPoints(Range.END_TO_END, rEl) >= 0;
+
+      const i = comecaAntes ? 0
+        : this.posicaoNoVersiculo(el, r.startContainer, r.startOffset);
+      const f = terminaDepois ? texto.length
+        : this.posicaoNoVersiculo(el, r.endContainer, r.endOffset);
+
+      return {
+        vers: +el.dataset.vers,
+        i: Math.min(i, f),
+        f: Math.max(i, f),
+        texto,
+      };
+    }).filter(p => p.f > p.i);
+
+    return pedacos.length ? { pedacos, bruto: s.toString() } : null;
+  },
+
+  /** "Salmos 23:1-4" ou "Salmos 23:4" */
+  referenciaDaSelecao(pedacos) {
+    const nome = Dados.nomeCurto(this.versao, this.code);
+    const a = pedacos[0].vers;
+    const b = pedacos[pedacos.length - 1].vers;
+    return `${nome} ${this.cap}:${a}${b !== a ? '-' + b : ''}`;
+  },
+
+  /** O texto pronto para copiar ou compartilhar, com a referência no fim. */
+  textoParaCitar() {
+    if (!this.selecao) return '';
+    const { pedacos } = this.selecao;
+    const corpo = pedacos.length === 1
+      ? pedacos[0].texto.slice(pedacos[0].i, pedacos[0].f)
+      : pedacos.map(p => `${p.vers} ${p.texto.slice(p.i, p.f)}`).join(' ');
+    return `"${corpo.trim()}"\n${this.referenciaDaSelecao(pedacos)} (${this.versao})`;
+  },
+
+  mostrarBarraSelecao() {
+    const sel = this.lerSelecao();
+    const barra = document.getElementById('barra-selecao');
+
+    if (!sel) {
+      barra.classList.remove('aberta');
+      barra.setAttribute('aria-hidden', 'true');
+      document.body.classList.remove('selecionando');
+      document.getElementById('sel-cores').classList.add('fechada');
+      this.selecao = null;
+      return;
+    }
+
+    this.selecao = sel;
+    const n = sel.pedacos.length;
+    document.getElementById('sel-ref').innerHTML =
+      `${this.referenciaDaSelecao(sel.pedacos)}
+       <span class="sel-conta">${n} versículo${n > 1 ? 's' : ''}</span>`;
+
+    barra.classList.add('aberta');
+    barra.setAttribute('aria-hidden', 'false');
+    document.body.classList.add('selecionando');
+  },
+
+  fecharSelecao() {
+    window.getSelection()?.removeAllRanges();
+    this.mostrarBarraSelecao();
+  },
+
+  avisoRapido(texto) {
+    const antigo = document.querySelector('.aviso-rapido');
+    if (antigo) antigo.remove();
+    const el = document.createElement('div');
+    el.className = 'aviso-rapido';
+    el.textContent = texto;
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 1700);
+  },
+
+  async copiarSelecao() {
+    const texto = this.textoParaCitar();
+    if (!texto) return;
+    try {
+      await navigator.clipboard.writeText(texto);
+      this.avisoRapido('Copiado');
+    } catch {
+      // navegador sem permissão de área de transferência: caminho antigo
+      const campo = document.createElement('textarea');
+      campo.value = texto;
+      campo.style.position = 'fixed';
+      campo.style.opacity = '0';
+      document.body.appendChild(campo);
+      campo.select();
+      try { document.execCommand('copy'); this.avisoRapido('Copiado'); }
+      catch { this.avisoRapido('Não foi possível copiar'); }
+      campo.remove();
+    }
+    this.fecharSelecao();
+  },
+
+  async compartilharSelecao() {
+    const texto = this.textoParaCitar();
+    if (!texto) return;
+    const titulo = this.referenciaDaSelecao(this.selecao.pedacos);
+
+    if (navigator.share) {
+      try { await navigator.share({ title: titulo, text: texto }); }
+      catch { /* a pessoa desistiu: não é erro */ }
+      this.fecharSelecao();
+      return;
+    }
+    // no computador quase nunca existe compartilhamento do sistema
+    await this.copiarSelecao();
+    this.avisoRapido('Copiado — cole onde quiser');
+  },
+
+  abrirCoresDaSelecao() {
+    const caixa = document.getElementById('sel-cores');
+    if (!caixa.classList.contains('fechada')) {
+      caixa.classList.add('fechada');
+      return;
+    }
+
+    const temMarca = this.selecao && this.selecao.pedacos.some(p =>
+      Marcadores.faixas(Dados.versificacaoDe(this.versao),
+        this.code, this.cap, p.vers).length);
+
+    caixa.innerHTML = Marcadores.lista().map(m => `<button data-sm="${m.id}"
+        style="background:${m.cor}" title="${Leitura.escapar(m.nome)}"></button>`).join('')
+      + (temMarca ? '<button data-sm="0" class="apagar" title="Tirar a marca"></button>' : '');
+
+    caixa.classList.remove('fechada');
+
+    caixa.querySelectorAll('[data-sm]').forEach(el => {
+      el.onclick = () => this.marcarSelecao(+el.dataset.sm);
+    });
+  },
+
+  marcarSelecao(marcadorId) {
+    if (!this.selecao) return;
+    const versificacao = Dados.versificacaoDe(this.versao);
+
+    for (const p of this.selecao.pedacos) {
+      const inteiro = p.i === 0 && p.f >= p.texto.length;
+      const fim = inteiro ? null : p.f;
+
+      const faixas = marcadorId === 0
+        ? Marcadores.limparTrecho(versificacao, this.code, this.cap, p.vers,
+            inteiro ? null : p.i, fim)
+        : Marcadores.marcarTrecho(versificacao, this.code, this.cap, p.vers,
+            p.i, fim, marcadorId);
+
+      Leitura.pintarMarca(p.vers, p.texto, faixas);
+    }
+
+    this.avisoRapido(marcadorId === 0 ? 'Marca removida' : 'Marcado');
+    this.fecharSelecao();
   },
 
   /* =========================================================== comparação */
@@ -747,6 +991,51 @@ const App = {
     q('btn-comparar').onclick = () => this.alternarComparacao();
     q('btn-antes').onclick = () => this.passo(-1);
     q('btn-depois').onclick = () => this.passo(1);
+
+    /* A barra de ações aparece sozinha quando há um trecho selecionado.
+     * O atraso curto deixa o navegador terminar de ajustar as alças da seleção
+     * antes de a gente ler o resultado. */
+    let relogioSel = null;
+    document.addEventListener('selectionchange', () => {
+      clearTimeout(relogioSel);
+      relogioSel = setTimeout(() => this.mostrarBarraSelecao(), 180);
+    });
+
+    q('sel-copiar').onclick = () => this.copiarSelecao();
+    q('sel-compartilhar').onclick = () => this.compartilharSelecao();
+    q('sel-marcar').onclick = () => this.abrirCoresDaSelecao();
+    q('sel-limpar').onclick = () => this.fecharSelecao();
+
+    /* Arrastar para os lados vira a pagina, como num livro de verdade.
+     *
+     * Tres cuidados para nao atrapalhar o resto: se o dedo andou mais na
+     * vertical, e rolagem e nao virada; se ha texto selecionado, a pessoa esta
+     * escolhendo um trecho e nao quer trocar de capitulo; e o gesto precisa ser
+     * decidido — curto demais ou demorado demais nao conta. */
+    const folha = q('folha');
+    let toque = null;
+
+    folha.addEventListener('touchstart', e => {
+      if (e.touches.length !== 1) { toque = null; return; }
+      const t = e.touches[0];
+      toque = { x: t.clientX, y: t.clientY, hora: Date.now() };
+    }, { passive: true });
+
+    folha.addEventListener('touchend', e => {
+      if (!toque) return;
+      const t = e.changedTouches[0];
+      const dx = t.clientX - toque.x;
+      const dy = t.clientY - toque.y;
+      const tempo = Date.now() - toque.hora;
+      toque = null;
+
+      if (tempo > 700) return;                       // demorado: nao e virada
+      if (Math.abs(dx) < 70) return;                 // curto: nao e virada
+      if (Math.abs(dx) < Math.abs(dy) * 1.6) return; // mais vertical: e rolagem
+      if (!window.getSelection().isCollapsed) return; // esta selecionando texto
+
+      this.passo(dx < 0 ? 1 : -1);
+    }, { passive: true });
 
     q('btn-busca').onclick = () => {
       this.desenharFiltros();
@@ -836,10 +1125,11 @@ const App = {
         ${Marcadores.lista().map(m => `<button data-m="${m.id}"
           class="${m.id === atual ? 'ativa' : ''}"
           style="background:${m.cor}" title="${Leitura.escapar(m.nome)}"></button>`).join('')}
-        <button data-m="0" class="apagar" title="Remover a marca"></button>
+        ${atual ? '<button data-m="0" class="apagar" title="Remover a marca"></button>' : ''}
       </div>
-      <p class="contagem" style="margin-top:12px">Um marcador por versículo.
-      A bolinha com o xis remove a marca.</p>
+      <p class="contagem" style="margin-top:12px">${atual
+        ? 'A bolinha com o xis remove a marca.'
+        : 'Escolha uma cor para marcar este versículo.'}</p>
       <button class="botao secundario" id="voltar-tirinha" style="width:100%;margin-top:8px">
         Voltar às versões</button>
     </div>`;
@@ -847,20 +1137,17 @@ const App = {
     corpo.querySelectorAll('[data-m]').forEach(el => {
       el.onclick = () => {
         const id = +el.dataset.m;
-        const marcados = Marcadores.marcados();
-        const chave = Marcadores.chave(versificacao, this.code, this.cap, this.destaque);
 
-        let novo;
-        if (id === 0) {                       // bolinha do xis: apaga
-          delete marcados[chave];
-          Guarda.gravar('marcados', marcados);
-          novo = null;
-        } else {
-          novo = Marcadores.alternar(versificacao, this.code, this.cap, this.destaque, id);
+        // pela tirinha a marca cobre o versículo inteiro; para pintar só um
+        // pedaço, a pessoa seleciona o trecho direto no texto
+        if (id === 0) Marcadores.limparTrecho(versificacao, this.code, this.cap, this.destaque);
+        else Marcadores.alternar(versificacao, this.code, this.cap, this.destaque, id);
+
+        const el2 = document.querySelector(`#folha .v[data-vers="${this.destaque}"]`);
+        if (el2) {
+          const faixas = Marcadores.faixas(versificacao, this.code, this.cap, this.destaque);
+          Leitura.pintarMarca(this.destaque, this.textoDoVersiculo(el2), faixas);
         }
-
-        // a cor entra no exato instante do toque, sem esperar redesenho
-        Leitura.pintarMarca(this.destaque, novo);
         this.escolherMarcador();
       };
     });
@@ -950,13 +1237,17 @@ const App = {
 
     const lidos = await Promise.all(itens.map(async it => {
       const conv = Dados.converter(it.code, it.cap, it.versificacao, minha);
-      let texto = '';
+      let texto = '', parcial = false;
       try {
         const r = await Dados.capitulo(this.versao, it.code, conv.capitulo);
         const v = r && r.capitulo.verses.find(x => x.number === it.vers);
-        texto = v && v.text ? v.text : '';
+        const inteiro = v && v.text ? v.text : '';
+        // mostra o pedaço que foi marcado, não o versículo todo
+        const fim = it.f == null ? inteiro.length : it.f;
+        texto = inteiro.slice(it.i || 0, fim).trim();
+        parcial = (it.i || 0) > 0 || fim < inteiro.length;
       } catch { /* livro ausente nesta versão: mostra só a referência */ }
-      return { ...it, capLocal: conv.capitulo, exato: conv.exato, texto };
+      return { ...it, capLocal: conv.capitulo, exato: conv.exato, texto, parcial };
     }));
 
     // ordem de leitura da Bíblia, não a ordem em que foram marcados
@@ -974,7 +1265,9 @@ const App = {
             ${it.capLocal}:${it.vers}</span>
           ${it.exato ? '' : '<span class="sub">numeração diferente</span>'}
           <span class="trecho-marcado">${it.texto
-            ? Leitura.escapar(it.texto.slice(0, 120)) + (it.texto.length > 120 ? '…' : '')
+            ? (it.parcial ? '…' : '')
+              + Leitura.escapar(it.texto.slice(0, 120))
+              + (it.texto.length > 120 || it.parcial ? '…' : '')
             : '(texto não disponível nesta versão)'}</span>
         </button>`).join('');
 

@@ -181,7 +181,8 @@ button {
 }
 
 /* teto de transparencia: a marca nunca escurece a ponto de atrapalhar a leitura */
-.v[data-marcador] {
+/* a marca agora cobre exatamente o trecho selecionado, e nao o versiculo todo */
+.marca[data-marcador] {
   background: var(--marca);
   box-shadow: 0 0 0 2px var(--marca);
   border-radius: 2px;
@@ -195,14 +196,8 @@ button {
 /* O versiculo recem-tocado esta sempre em foco. Se o realce do foco pintasse
    por cima, a cor do marcador so apareceria depois de sair dele — que era
    exatamente o defeito. Aqui a marca vence o fundo e o foco fica no traco. */
-.v.foco[data-marcador] {
-  background: var(--marca);
-  box-shadow: inset 3px 0 0 var(--rubrica), 0 0 0 2px var(--marca);
-}
-
-.v.foco.ponto[data-marcador] {
-  box-shadow: inset 3px 0 0 var(--rubrica), 0 0 0 2px var(--marca);
-}
+/* o realce de foco pinta o versiculo, mas a marca vem por cima dele */
+.v.foco .marca[data-marcador] { background: var(--marca); }
 
 /* ponto de leitura: o dedo entre as paginas. Um traco discreto na lateral,
    na propria tinta da folha — preto no papel branco, marrom no sepia. */
@@ -212,10 +207,7 @@ button {
 }
 
 /* com marcador e ponto ao mesmo tempo, os dois convivem */
-.v.ponto[data-marcador] {
-  box-shadow: inset 3px 0 0 color-mix(in srgb, var(--tinta) 55%, transparent),
-              0 0 0 2px var(--marca);
-}
+
 
 .v.vazio { color: var(--tinta-fraca); font-style: italic; }
 
@@ -867,4 +859,237 @@ body.comparando .comparador { display: flex; }
     border-top: 0;
     border-left: 2px solid color-mix(in srgb, var(--tinta) 16%, transparent);
   }
+}
+
+/* ================================================== ajustes em sanfona */
+
+.dobra.secao {
+  font-size: 15px;
+  font-weight: 600;
+  border-bottom: 1px solid color-mix(in srgb, var(--tinta) 12%, transparent);
+  border-radius: 0;
+  margin-top: 4px;
+}
+
+.dobra.secao[aria-expanded='true'] { border-bottom-color: transparent; }
+.dentro .dobra.secao { margin-top: 0; }
+
+/* ==================================================== roda de cores */
+
+.item-marcador { display: flex; align-items: center; gap: 10px; padding: 6px 0; }
+
+.bolha-cor {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  flex: none;
+  border: 1px solid color-mix(in srgb, var(--tinta) 25%, transparent);
+  cursor: pointer;
+}
+
+.bolha-cor:hover { transform: scale(1.08); }
+
+.caixa-cor {
+  padding: 14px 4px 18px;
+  border-bottom: 1px solid color-mix(in srgb, var(--tinta) 10%, transparent);
+  margin-bottom: 8px;
+}
+
+.caixa-cor.fechada { display: none; }
+
+.roda-linha { display: flex; gap: 16px; align-items: center; }
+
+.roda {
+  position: relative;
+  width: 152px;
+  height: 152px;
+  flex: none;
+  border-radius: 50%;
+  cursor: crosshair;
+  touch-action: none;
+  border: 1px solid color-mix(in srgb, var(--tinta) 18%, transparent);
+  background:
+    radial-gradient(circle closest-side,
+      hsl(0 0% 100% / 1) 0%, hsl(0 0% 100% / 0) 72%),
+    conic-gradient(from 0deg,
+      hsl(0 90% 55%), hsl(60 90% 55%), hsl(120 90% 55%),
+      hsl(180 90% 55%), hsl(240 90% 55%), hsl(300 90% 55%), hsl(360 90% 55%));
+}
+
+.roda-alvo {
+  position: absolute;
+  width: 17px;
+  height: 17px;
+  margin: -8.5px 0 0 -8.5px;
+  border-radius: 50%;
+  border: 2.5px solid #fff;
+  box-shadow: 0 0 0 1.5px rgb(0 0 0 / .45), 0 1px 4px rgb(0 0 0 / .35);
+  pointer-events: none;
+}
+
+.roda-lado { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+
+.roda-amostra {
+  width: 100%;
+  height: 54px;
+  min-width: 74px;
+  border-radius: var(--raio);
+  border: 1px solid color-mix(in srgb, var(--tinta) 18%, transparent);
+}
+
+.roda-hex {
+  font-family: var(--fonte-sigla);
+  font-size: 12px;
+  letter-spacing: .04em;
+  color: var(--tinta-fraca);
+  text-align: center;
+}
+
+.roda-barra {
+  position: relative;
+  height: 24px;
+  margin-top: 16px;
+  border-radius: 12px;
+  cursor: pointer;
+  touch-action: none;
+  border: 1px solid color-mix(in srgb, var(--tinta) 18%, transparent);
+}
+
+.barra-alvo { top: 50%; }
+
+.roda-legenda {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--tinta-fraca);
+  margin-top: 6px;
+}
+
+.roda:focus-visible, .roda-barra:focus-visible {
+  outline: 2px solid var(--rubrica);
+  outline-offset: 3px;
+}
+
+/* ============================================= barra da seleção de trecho */
+
+.barra-selecao {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 40;
+  background: var(--cromo);
+  color: var(--cromo-texto);
+  padding: 12px 14px calc(12px + env(safe-area-inset-bottom));
+  transform: translateY(110%);
+  transition: transform .2s ease;
+  box-shadow: 0 -6px 24px rgb(0 0 0 / .22);
+}
+
+.barra-selecao.aberta { transform: none; }
+
+.sel-topo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.sel-ref {
+  font-weight: 600;
+  font-size: 14px;
+  flex: 1;
+  min-width: 0;
+}
+
+.sel-ref .sel-conta {
+  font-family: var(--fonte-sigla);
+  font-size: 11px;
+  color: var(--cromo-fraco);
+  margin-left: 8px;
+  font-weight: 400;
+}
+
+#sel-limpar { color: var(--cromo-texto); flex: none; padding: 4px; }
+#sel-limpar .icone { stroke: var(--cromo-texto); }
+
+.sel-acoes { display: flex; gap: 8px; }
+.sel-acoes .botao { flex: 1; padding: 11px 8px; font-size: 14px; }
+
+.sel-acoes .botao.secundario {
+  background: transparent;
+  color: var(--cromo-texto);
+  border: 1px solid color-mix(in srgb, var(--cromo-texto) 30%, transparent);
+}
+
+.sel-acoes .botao.secundario:hover {
+  background: color-mix(in srgb, var(--cromo-texto) 12%, transparent);
+}
+
+.sel-cores {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding-top: 12px;
+  margin-top: 12px;
+  border-top: 1px solid color-mix(in srgb, var(--cromo-texto) 18%, transparent);
+}
+
+.sel-cores.fechada { display: none; }
+
+.sel-cores button {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+}
+
+.sel-cores button:hover { transform: scale(1.1); }
+
+.sel-cores button.apagar {
+  background: var(--cromo-texto);
+  position: relative;
+}
+
+.sel-cores button.apagar::before,
+.sel-cores button.apagar::after {
+  content: '';
+  position: absolute;
+  inset: 50% 26%;
+  height: 2px;
+  margin-top: -1px;
+  background: var(--cromo);
+  border-radius: 2px;
+}
+
+.sel-cores button.apagar::before { transform: rotate(45deg); }
+.sel-cores button.apagar::after  { transform: rotate(-45deg); }
+
+/* quando a barra está aberta, o rodapé sai da frente */
+body.selecionando .rodape { transform: translateY(110%); }
+.rodape { transition: transform .2s ease; }
+
+/* o aviso curto de "copiado" */
+.aviso-rapido {
+  position: fixed;
+  left: 50%;
+  bottom: 50%;
+  transform: translate(-50%, 50%);
+  z-index: 60;
+  background: var(--cromo);
+  color: var(--cromo-texto);
+  padding: 12px 20px;
+  border-radius: 999px;
+  font-size: 14px;
+  box-shadow: 0 6px 24px rgb(0 0 0 / .3);
+  pointer-events: none;
+  animation: some 1.6s ease forwards;
+}
+
+@keyframes some {
+  0%, 70% { opacity: 1; }
+  100%    { opacity: 0; }
 }

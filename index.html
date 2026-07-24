@@ -55,6 +55,20 @@
   <div class="metade" id="metade-b"></div>
 </div>
 
+<div class="barra-selecao" id="barra-selecao" aria-hidden="true">
+  <div class="sel-topo">
+    <span class="sel-ref" id="sel-ref"></span>
+    <button id="sel-limpar" aria-label="Cancelar seleção">
+      <svg class="icone"><use href="#i-fechar"/></svg></button>
+  </div>
+  <div class="sel-acoes">
+    <button class="botao secundario" id="sel-copiar">Copiar</button>
+    <button class="botao secundario" id="sel-compartilhar">Compartilhar</button>
+    <button class="botao" id="sel-marcar">Marcar</button>
+  </div>
+  <div class="sel-cores fechada" id="sel-cores"></div>
+</div>
+
 <footer class="rodape">
   <button id="btn-antes"><svg class="icone"><use href="#i-antes"/></svg> Anterior</button>
   <button class="meio" id="btn-comparar" title="Comparar duas versões">
@@ -133,7 +147,8 @@
 
 <script src="assets/js/dados.js"></script>
 <script src="assets/js/armazenamento.js"></script>
-<script src="assets/js/leitura.js"></script>
+<script src="assets/js/cores.js"></script>
+  <script src="assets/js/leitura.js"></script>
 <script src="assets/js/busca.js"></script>
 <script src="assets/js/app.js"></script>
 </body>

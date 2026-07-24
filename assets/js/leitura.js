@@ -71,17 +71,13 @@ const Leitura = {
     let lacunas = 0;
 
     capitulo.verses.forEach((v, i) => {
-      const marcadorId = Marcadores.do(versificacao, livro.code, capitulo.number, v.number);
-      const marcador = marcadorId ? Marcadores.de(marcadorId) : null;
-
+      const faixas = Marcadores.faixas(versificacao, livro.code, capitulo.number, v.number);
       const ehPonto = Ponto.eh(versificacao, livro.code, capitulo.number, v.number);
 
       const attrs = [
         `class="v${v.text ? '' : ' vazio'}${ehPonto ? ' ponto' : ''}"`,
         `data-vers="${v.number}"`,
-        marcador ? `data-marcador="${marcadorId}"` : '',
-        marcador ? `style="--marca:${this.corMarca(marcador.cor)}"` : '',
-      ].filter(Boolean).join(' ');
+      ].join(' ');
 
       const capitular = comCapitular && i === 0
         ? `<span class="capitular">${capitulo.number}</span>`
@@ -91,7 +87,7 @@ const Leitura = {
 
       if (!v.text) lacunas++;
       const texto = v.text
-        ? this.escapar(v.text)
+        ? this.comMarcas(v.text, faixas)
         : '(este versículo não veio no texto de origem)';
 
       partes.push(`${capitular}<span ${attrs}>${numero}${texto}</span> `);
@@ -108,6 +104,43 @@ const Leitura = {
     return saida;
   },
 
+  /* ------------------------------------------------------- marcas no texto
+   *
+   * O texto do versiculo e cortado nos limites das faixas. Cada pedaco marcado
+   * vira um <span> proprio com a cor daquele marcador; o que sobra fica solto.
+   * Assim um mesmo versiculo pode ter dois trechos de cores diferentes, e a
+   * marca acompanha exatamente o que foi selecionado.
+   */
+  comMarcas(texto, faixas) {
+    if (!faixas || !faixas.length) return this.escapar(texto);
+
+    const fim = x => (x == null ? texto.length : Math.min(x, texto.length));
+    const ordenadas = faixas
+      .map(f => ({ m: f.m, i: Math.max(0, f.i), f: fim(f.f) }))
+      .filter(f => f.f > f.i)
+      .sort((a, b) => a.i - b.i);
+
+    if (!ordenadas.length) return this.escapar(texto);
+
+    const partes = [];
+    let cursor = 0;
+
+    for (const fx of ordenadas) {
+      if (fx.i < cursor) continue;                       // sobreposto: ignora
+      if (fx.i > cursor) partes.push(this.escapar(texto.slice(cursor, fx.i)));
+
+      const marcador = Marcadores.de(fx.m);
+      const cor = marcador ? this.corMarca(marcador.cor) : 'transparent';
+      partes.push(`<span class="marca" data-marcador="${fx.m}"
+        data-i="${fx.i}" data-f="${fx.f}"
+        style="--marca:${cor}">${this.escapar(texto.slice(fx.i, fx.f))}</span>`);
+      cursor = fx.f;
+    }
+
+    if (cursor < texto.length) partes.push(this.escapar(texto.slice(cursor)));
+    return partes.join('');
+  },
+
   /* --------------------------------------------------- repintura na hora
    *
    * Trocar a cor de um versiculo nao pode depender de redesenhar o capitulo
@@ -115,16 +148,12 @@ const Leitura = {
    * coisa forcava a tela a se refazer. Aqui a marca entra no exato instante do
    * toque, direto no elemento que ja esta na tela.
    */
-  pintarMarca(vers, marcadorId) {
-    const marcador = marcadorId ? Marcadores.de(marcadorId) : null;
-    document.querySelectorAll(`.v[data-vers="${vers}"]`).forEach(el => {
-      if (marcador) {
-        el.dataset.marcador = marcadorId;
-        el.style.setProperty('--marca', this.corMarca(marcador.cor));
-      } else {
-        delete el.dataset.marcador;
-        el.style.removeProperty('--marca');
-      }
+  pintarMarca(vers, texto, faixas) {
+    document.querySelectorAll(`#folha .v[data-vers="${vers}"]`).forEach(el => {
+      const n = el.querySelector('.n');
+      const capitular = el.previousElementSibling;
+      el.innerHTML = (n ? n.outerHTML : '') + this.comMarcas(texto, faixas);
+      void capitular; // a capitular fica fora do versiculo, nao se mexe nela
     });
   },
 
