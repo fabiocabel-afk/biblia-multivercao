@@ -52,6 +52,7 @@ const Prefs = {
     versoesTirinha: ['ACF', 'NVI', 'NTLH'],
     versaoComparar: 'NVI',
     mostrarCategorias: true,   // painel de livros: com ou sem a camada do meio
+    versiculoPorLinha: false,  // false = texto corrido; true = um versiculo por linha
   },
 
   todas() {
@@ -105,6 +106,42 @@ const Sessoes = {
     const d = new Date(sessao.inicio);
     const dia = d.toLocaleDateString('pt-BR', { weekday: 'long' });
     return dia.charAt(0).toUpperCase() + dia.slice(1) + ' — ' + d.toLocaleDateString('pt-BR');
+  },
+
+  /* A data e a hora nunca somem, mesmo quando a leitura ganha nome proprio.
+     Meses depois, "Estudo sobre a graca" sozinho nao diz quando foi. */
+  quandoDe(sessao) {
+    const d = new Date(sessao.inicio);
+    const data = d.toLocaleDateString('pt-BR');
+    const hora = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    let saida = `${data} às ${hora}`;
+    if (sessao.fim) {
+      const f = new Date(sessao.fim);
+      const mesmoDia = f.toLocaleDateString('pt-BR') === data;
+      const fimHora = f.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+      saida += mesmoDia ? ` — ${fimHora}` : ` — ${f.toLocaleDateString('pt-BR')} ${fimHora}`;
+    }
+    return saida;
+  },
+
+  /** A leitura inteira em texto, pronta para compartilhar. */
+  comoTexto(sessao) {
+    const linhas = [this.nomeDe(sessao), this.quandoDe(sessao), ''];
+    if (!sessao.itens.length) {
+      linhas.push('(nenhuma passagem)');
+    } else {
+      sessao.itens.forEach(it => {
+        const hora = new Date(it.hora).toLocaleTimeString('pt-BR',
+          { hour: '2-digit', minute: '2-digit' });
+        const ref = `${Dados.nomeCurto(it.versao, it.code)} ${it.cap}` +
+          (it.vers ? ':' + it.vers : '');
+        linhas.push(`${hora}  ${ref} (${it.versao})`);
+        if (it.trecho) linhas.push(`   ${it.trecho}`);
+      });
+    }
+    const n = sessao.itens.length;
+    linhas.push('', `${n} ${n === 1 ? 'passagem' : 'passagens'}`);
+    return linhas.join('\n');
   },
 
   /** Rascunho automatico: chamado a cada passagem aberta. Nunca apaga. */

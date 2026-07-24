@@ -27,6 +27,10 @@ const Leitura = {
     const tinta = mistura([23, 20, 15], [74, 58, 36]);
     const fraca = mistura([109, 100, 89], [138, 116, 86]);
 
+    // o numero do versiculo tem cor propria: mais clara e mais amarronzada que
+    // a tinta, para se destacar do texto sem competir com a leitura
+    const numero = mistura([150, 112, 74], [166, 126, 76]);
+
     // as barras: preto quase neutro -> marrom escuro de couro
     const cromo      = mistura([32, 29, 25],    [58, 43, 27]);
     const cromoAlto  = mistura([43, 39, 33],    [76, 58, 38]);
@@ -37,6 +41,7 @@ const Leitura = {
     r.setProperty('--papel', rgb(papel));
     r.setProperty('--tinta', rgb(tinta));
     r.setProperty('--tinta-fraca', rgb(fraca));
+    r.setProperty('--tinta-numero', rgb(numero));
     r.setProperty('--cromo', rgb(cromo));
     r.setProperty('--cromo-alto', rgb(cromoAlto));
     r.setProperty('--cromo-texto', rgb(cromoTexto));
@@ -47,6 +52,13 @@ const Leitura = {
     document.querySelector('meta[name=theme-color]')?.setAttribute('content', hex(cromo));
   },
 
+  /* Duas formas de ler: o texto corrido, como numa Biblia impressa, ou um
+   * versiculo por linha, com o numero servindo de cabecalho. A segunda ajuda
+   * quem esta acompanhando uma pregacao versiculo a versiculo. */
+  aplicarModoVersiculo(porLinha) {
+    document.documentElement.dataset.modoVersiculo = porLinha ? 'linha' : 'corrido';
+  },
+
   aplicarFonte(px) {
     document.documentElement.style.setProperty('--corpo', px + 'px');
   },
@@ -55,7 +67,7 @@ const Leitura = {
     document.documentElement.dataset.escuro = ligado ? 'true' : 'false';
     if (!ligado) this.aplicarTemperatura(Prefs.get('temperatura'));
     else {
-      ['--papel', '--tinta', '--tinta-fraca',
+      ['--papel', '--tinta', '--tinta-fraca', '--tinta-numero',
        '--cromo', '--cromo-alto', '--cromo-texto', '--cromo-fraco']
         .forEach(p => document.documentElement.style.removeProperty(p));
       document.querySelector('meta[name=theme-color]')?.setAttribute('content', '#0e0f11');
@@ -66,6 +78,9 @@ const Leitura = {
 
   /** Monta o HTML de um capitulo inteiro. */
   html(versaoCode, livro, capitulo, { comCapitular = true } = {}) {
+    // no modo "um por linha" o numero e o cabecalho de cada versiculo, entao a
+    // capitular sai: ela roubaria o lugar do numero do primeiro
+    if (Prefs.get('versiculoPorLinha')) comCapitular = false;
     const versificacao = Dados.versificacaoDe(versaoCode);
     const partes = [];
     let lacunas = 0;

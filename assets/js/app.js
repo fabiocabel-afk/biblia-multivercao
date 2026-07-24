@@ -27,6 +27,7 @@ const App = {
     Leitura.aplicarEscuro(p.escuro);
     Leitura.aplicarTemperatura(p.temperatura);
     Leitura.aplicarFonte(p.fonte);
+    Leitura.aplicarModoVersiculo(p.versiculoPorLinha);
 
     // retoma de onde parou
     const s = Sessoes.atual();
@@ -377,50 +378,122 @@ const App = {
 
   /* ============================================================== versões */
 
-  desenharVersoes() {
-    const corpo = document.getElementById('corpo-versao');
+  /* A mesma lista de versões serve em três lugares: o painel principal, os
+   * Ajustes e a troca direta dentro da comparação. Uma só aparência, para a
+   * pessoa reconhecer na hora onde quer que ela apareça. */
+  htmlListaVersoes(selecionada, atributo = 'data-versao') {
     const porCanone = { protestant: [], catholic: [] };
     Dados.versoes.forEach(v => porCanone[v.canon].push(v));
 
     const bloco = (titulo, lista) => lista.length ? `<div class="grupo">
       <h3>${titulo}</h3>
-      ${lista.map(v => `<button class="linha ${v.code === this.versao ? 'ativa' : ''}"
-        data-versao="${v.code}">
+      ${lista.map(v => `<button class="linha ${v.code === selecionada ? 'ativa' : ''}"
+        ${atributo}="${v.code}">
         <span class="sigla" style="border-color:currentColor">${v.code}</span>
         <span>${v.name}</span>
         <span class="sub">${v.year || ''}</span>
       </button>`).join('')}
     </div>` : '';
 
-    corpo.innerHTML =
-      bloco('Protestantes', porCanone.protestant) +
-      bloco('Católica', porCanone.catholic);
+    return bloco('Protestantes', porCanone.protestant)
+         + bloco('Católica', porCanone.catholic);
+  },
+
+  desenharVersoes() {
+    const corpo = document.getElementById('corpo-versao');
+    const alvo = this.alvoVersao || 'principal';
+
+    document.getElementById('titulo-versao').textContent =
+      alvo === 'comparar' ? 'Versão de baixo' : 'Versões';
+
+    corpo.innerHTML = this.htmlListaVersoes(
+      alvo === 'comparar' ? Prefs.get('versaoComparar') : this.versao);
 
     corpo.querySelectorAll('[data-versao]').forEach(el => {
-      el.onclick = () => this.trocarVersao(el.dataset.versao);
+      el.onclick = () => {
+        const code = el.dataset.versao;
+        if (alvo === 'comparar') {
+          // atalho: troca só a metade de baixo, sem sair da comparação
+          Prefs.set('versaoComparar', code);
+          this.alvoVersao = 'principal';
+          this.fecharPaineis();
+          if (this.comparando) this.desenharComparacao();
+        } else {
+          this.trocarVersao(code);
+        }
+      };
     });
   },
 
   /* ================================================================ busca */
 
+  /* O funil de busca era uma tira comprida de pílulas — todas as categorias,
+   * todos os testamentos, tudo à mostra o tempo todo, comendo a tela que os
+   * resultados precisavam. Agora são três dobras: Toda a Bíblia, Por categoria
+   * e Por livro. Abre uma por vez, e quando tudo está fechado sobra só uma
+   * linha dizendo onde a busca vai acontecer. */
+  dobraF: null,
+
   desenharFiltros() {
     const alvo = document.getElementById('filtros-busca');
     const arv = Dados.arvore(this.versao);
-    const opcoes = [{ tipo: 'tudo', id: null, nome: 'Toda a Bíblia' }];
+    const e = Busca.escopo;
 
-    arv.testaments.forEach(t => {
-      opcoes.push({ tipo: 'testamento', id: t.id, nome: t.name });
-      t.categories.forEach(c => opcoes.push({ tipo: 'categoria', id: c.id, nome: c.name }));
-    });
-    opcoes.push({ tipo: 'livro', id: this.code, nome: Dados.nomeCurto(this.versao, this.code) });
+    const marcado = (tipo, id) => e.tipo === tipo && e.id === id ? 'ativa' : '';
 
-    alvo.innerHTML = opcoes.map((o, i) => `<button class="pilula
-      ${o.tipo === Busca.escopo.tipo && o.id === Busca.escopo.id ? 'ativa' : ''}"
-      data-i="${i}">${o.nome}</button>`).join('');
+    const dobra = (id, titulo, dentro) => {
+      const aberta = this.dobraF === id;
+      return `<button class="dobra funil" data-f="${id}" aria-expanded="${aberta}">
+          <span class="seta">▶</span><span>${titulo}</span>
+        </button>
+        <div class="dentro ${aberta ? '' : 'fechada'}">${dentro}</div>`;
+    };
 
-    alvo.querySelectorAll('[data-i]').forEach(el => {
+    const testamentos = `
+      <button class="linha ${marcado('tudo', null)}" data-e="tudo|">
+        <span>Toda a Bíblia</span></button>
+      ${arv.testaments.map(t => `<button class="linha ${marcado('testamento', t.id)}"
+        data-e="testamento|${t.id}"><span>${t.name}</span></button>`).join('')}`;
+
+    const categorias = arv.testaments.flatMap(t => t.categories).map(c =>
+      `<button class="linha ${marcado('categoria', c.id)}" data-e="categoria|${c.id}">
+        <span>${c.name}</span></button>`).join('');
+
+    const livros = Dados.livros(this.versao).map(b =>
+      `<button class="linha ${marcado('livro', b.code)}" data-e="livro|${b.code}">
+        <span>${b.name}</span><span class="sub">${b.chapters || ''}</span>
+      </button>`).join('');
+
+    alvo.innerHTML = `
+      <button class="escopo-atual" id="abrir-funil">
+        <span class="etiqueta">Buscar em</span>
+        <span class="valor">${Leitura.escapar(e.nome)}</span>
+        <span class="seta">${this.dobraF ? '▲' : '▼'}</span>
+      </button>
+      <div class="caixa-funil ${this.dobraF ? '' : 'fechada'}">
+        ${dobra('tudo', 'Toda a Bíblia e Testamentos', testamentos)}
+        ${dobra('categoria', 'Por categoria', categorias)}
+        ${dobra('livro', 'Por livro', livros)}
+      </div>`;
+
+    document.getElementById('abrir-funil').onclick = () => {
+      this.dobraF = this.dobraF ? null : 'tudo';
+      this.desenharFiltros();
+    };
+
+    alvo.querySelectorAll('[data-f]').forEach(el => {
       el.onclick = () => {
-        Busca.escopo = opcoes[+el.dataset.i];
+        this.dobraF = this.dobraF === el.dataset.f ? null : el.dataset.f;
+        this.desenharFiltros();
+      };
+    });
+
+    alvo.querySelectorAll('[data-e]').forEach(el => {
+      el.onclick = () => {
+        const [tipo, id] = el.dataset.e.split('|');
+        const nome = el.querySelector('span').textContent;
+        Busca.escopo = { tipo, id: id || null, nome };
+        this.dobraF = null;   // escolheu: recolhe e devolve a tela aos resultados
         this.desenharFiltros();
         this.rodarBusca();
       };
@@ -472,18 +545,28 @@ const App = {
 
   /* ============================================================ histórico */
 
+  /* Sanfona no histórico: cada leitura abre uma por vez. Com muitas sessões,
+   * a lista corrida virava um paredão sem fim. */
+  dobraH: undefined,
+
   desenharHistorico() {
     const corpo = document.getElementById('corpo-historico');
-    const sessoes = Sessoes.todas().slice().reverse();
+    const sessoes = Sessoes.todas().slice().reverse().filter(s => s.itens.length || s.aberta);
+
+    if (this.dobraH === undefined) {
+      const aberta = sessoes.find(s => s.aberta);
+      this.dobraH = aberta ? aberta.id : (sessoes[0] ? sessoes[0].id : null);
+    }
 
     const cabecalho = `
       <button class="botao" id="btn-salvar-sessao" style="width:100%">
-        Salvar esta pregação e começar outra</button>
+        Salvar esta leitura e iniciar outra</button>
       <p class="contagem" style="margin-top:8px">O histórico grava sozinho e
-      nunca apaga nada. Salvar apenas fecha a pregação atual e abre uma folha limpa.</p>`;
+      nunca apaga nada. Salvar apenas fecha a leitura atual e abre uma folha limpa.</p>`;
 
     const blocos = sessoes.map(s => {
-      if (!s.itens.length && !s.aberta) return '';
+      const aberto = this.dobraH === s.id;
+
       const itens = s.itens.slice().reverse().map((it, i) => {
         const hora = new Date(it.hora).toLocaleTimeString('pt-BR',
           { hour: '2-digit', minute: '2-digit' });
@@ -496,38 +579,85 @@ const App = {
         </button>`;
       }).join('');
 
-      return `<div class="sessao-cabeca">
-          <h3>${Leitura.escapar(Sessoes.nomeDe(s))}</h3>
+      return `<button class="dobra sessao" data-h="${s.id}" aria-expanded="${aberto}">
+          <span class="seta">▶</span>
+          <span class="nome-sessao">
+            <strong>${Leitura.escapar(Sessoes.nomeDe(s))}</strong>
+            <span class="quando">${Sessoes.quandoDe(s)}</span>
+          </span>
           ${s.aberta ? '<span class="marca-aberta">Em andamento</span>' : ''}
-          <button class="pilula" data-renomear="${s.id}" style="font-size:11px">Renomear</button>
-        </div>
-        ${itens || '<p class="contagem">Nenhuma passagem ainda.</p>'}`;
+          <span class="soma">${s.itens.length}</span>
+        </button>
+        <div class="dentro ${aberto ? '' : 'fechada'}">
+          <div class="acoes-sessao">
+            <button class="pilula" data-renomear="${s.id}">Renomear</button>
+            <button class="pilula" data-partilhar="${s.id}">Compartilhar</button>
+            <button class="pilula" data-copiar-sessao="${s.id}">Copiar</button>
+          </div>
+          ${itens || '<p class="contagem">Nenhuma passagem ainda.</p>'}
+        </div>`;
     }).join('');
 
-    corpo.innerHTML = cabecalho + blocos;
+    corpo.innerHTML = cabecalho + (blocos || '<div class="estado">Nada no histórico ainda.</div>');
 
     document.getElementById('btn-salvar-sessao').onclick = () => {
-      const nome = prompt('Nome desta pregação (opcional):', '');
+      const nome = prompt('Nome desta leitura (opcional):', '');
       if (nome === null) return;
       Sessoes.salvar(nome.trim());
+      this.dobraH = undefined;
       this.desenharHistorico();
     };
 
-    corpo.querySelectorAll('[data-renomear]').forEach(el => {
-      el.onclick = e => {
-        e.stopPropagation();
-        const id = el.dataset.renomear;
-        const s = Sessoes.todas().find(x => x.id === id);
-        const nome = prompt('Nome desta pregação:', s ? s.nome : '');
-        if (nome === null) return;
-        Sessoes.renomear(id, nome.trim());
+    corpo.querySelectorAll('[data-h]').forEach(el => {
+      el.onclick = () => {
+        this.dobraH = this.dobraH === el.dataset.h ? null : el.dataset.h;
         this.desenharHistorico();
       };
     });
 
+    const achar = id => Sessoes.todas().find(x => x.id === id);
+
+    corpo.querySelectorAll('[data-renomear]').forEach(el => {
+      el.onclick = e => {
+        e.stopPropagation();
+        const s = achar(el.dataset.renomear);
+        const nome = prompt('Nome desta leitura:', s ? s.nome : '');
+        if (nome === null) return;
+        Sessoes.renomear(el.dataset.renomear, nome.trim());
+        this.desenharHistorico();
+      };
+    });
+
+    corpo.querySelectorAll('[data-partilhar]').forEach(el => {
+      el.onclick = async e => {
+        e.stopPropagation();
+        const s = achar(el.dataset.partilhar);
+        if (!s) return;
+        const texto = Sessoes.comoTexto(s);
+        if (navigator.share) {
+          try { await navigator.share({ title: Sessoes.nomeDe(s), text: texto }); }
+          catch { /* desistiu: não é erro */ }
+        } else {
+          await this.paraAreaDeTransferencia(texto);
+          this.avisoRapido('Copiado — cole onde quiser');
+        }
+      };
+    });
+
+    corpo.querySelectorAll('[data-copiar-sessao]').forEach(el => {
+      el.onclick = async e => {
+        e.stopPropagation();
+        const s = achar(el.dataset.copiarSessao);
+        if (!s) return;
+        await this.paraAreaDeTransferencia(Sessoes.comoTexto(s));
+        this.avisoRapido('Leitura copiada');
+      };
+    });
+
     corpo.querySelectorAll('.item-hist').forEach(el => {
-      el.onclick = () => {
-        const s = Sessoes.todas().find(x => x.id === el.dataset.s);
+      el.onclick = e => {
+        e.stopPropagation();
+        const s = achar(el.dataset.s);
         const it = s.itens[+el.dataset.i];
         this.fecharPaineis();
         if (it.versao !== this.versao) {
@@ -570,6 +700,14 @@ const App = {
         <span id="rot-fonte">${p.fonte}px</span></div>
       <input class="deslizador" type="range" id="ctrl-fonte" min="15" max="34" value="${p.fonte}">
 
+      <div class="rotulo-controle" style="margin-top:22px"><span>Exibição do versículo</span></div>
+      <div class="escolha-dupla">
+        <button data-modo="corrido" class="${p.versiculoPorLinha ? '' : 'ativa'}">
+          <strong>Corrido</strong><span>Como numa Bíblia impressa</span></button>
+        <button data-modo="linha" class="${p.versiculoPorLinha ? 'ativa' : ''}">
+          <strong>Um por linha</strong><span>Número como cabeçalho</span></button>
+      </div>
+
       <label class="interruptor"><span>Modo escuro</span>
         <input type="checkbox" id="ctrl-escuro" ${p.escuro ? 'checked' : ''}></label>
       ${p.escuro ? '<p class="contagem">A temperatura do papel só vale no modo claro.</p>' : ''}`;
@@ -582,11 +720,9 @@ const App = {
       cada Testamento, sem nomes de categoria.</p>`;
 
     const comparar = `
-      <p class="contagem">Versão que aparece na metade de baixo.</p>
-      <select class="campo" id="ctrl-comparar">
-        ${Dados.versoes.map(v => `<option value="${v.code}"
-          ${v.code === p.versaoComparar ? 'selected' : ''}>${Dados.rotulo(v.code)}</option>`).join('')}
-      </select>`;
+      <p class="contagem">Versão que aparece na metade de baixo. Dentro da
+      comparação, tocar na sigla de cada metade também troca por ali mesmo.</p>
+      ${this.htmlListaVersoes(p.versaoComparar, 'data-comparar')}`;
 
     const tirinha = `
       <p class="contagem">Ao abrir um versículo, ele aparece empilhado nestas versões.</p>
@@ -658,6 +794,16 @@ const App = {
       fonte.onchange = () => Prefs.set('fonte', +fonte.value);
     }
 
+    corpo.querySelectorAll('[data-modo]').forEach(el => {
+      el.onclick = () => {
+        const porLinha = el.dataset.modo === 'linha';
+        Prefs.set('versiculoPorLinha', porLinha);
+        Leitura.aplicarModoVersiculo(porLinha);
+        this.desenharAjustes();
+        this.ir(this.code, this.cap, null, { registrar: false });
+      };
+    });
+
     const escuro = achar('ctrl-escuro');
     if (escuro) escuro.onchange = e => {
       Prefs.set('escuro', e.target.checked);
@@ -671,11 +817,13 @@ const App = {
       this.dobraC = null;
     };
 
-    const comp = achar('ctrl-comparar');
-    if (comp) comp.onchange = e => {
-      Prefs.set('versaoComparar', e.target.value);
-      if (this.comparando) this.desenharComparacao();
-    };
+    corpo.querySelectorAll('[data-comparar]').forEach(el => {
+      el.onclick = () => {
+        Prefs.set('versaoComparar', el.dataset.comparar);
+        this.desenharAjustes();
+        if (this.comparando) this.desenharComparacao();
+      };
+    });
 
     corpo.querySelectorAll('[data-tirinha]').forEach(el => {
       el.onchange = () => {
@@ -838,24 +986,30 @@ const App = {
     setTimeout(() => el.remove(), 1700);
   },
 
-  async copiarSelecao() {
-    const texto = this.textoParaCitar();
-    if (!texto) return;
+  /** Copia texto, com o caminho antigo de reserva para navegadores restritos. */
+  async paraAreaDeTransferencia(texto) {
     try {
       await navigator.clipboard.writeText(texto);
-      this.avisoRapido('Copiado');
+      return true;
     } catch {
-      // navegador sem permissão de área de transferência: caminho antigo
       const campo = document.createElement('textarea');
       campo.value = texto;
       campo.style.position = 'fixed';
       campo.style.opacity = '0';
       document.body.appendChild(campo);
       campo.select();
-      try { document.execCommand('copy'); this.avisoRapido('Copiado'); }
-      catch { this.avisoRapido('Não foi possível copiar'); }
+      let deu = false;
+      try { deu = document.execCommand('copy'); } catch { deu = false; }
       campo.remove();
+      return deu;
     }
+  },
+
+  async copiarSelecao() {
+    const texto = this.textoParaCitar();
+    if (!texto) return;
+    this.avisoRapido(await this.paraAreaDeTransferencia(texto)
+      ? 'Copiado' : 'Não foi possível copiar');
     this.fecharSelecao();
   },
 
@@ -882,18 +1036,32 @@ const App = {
       return;
     }
 
-    const temMarca = this.selecao && this.selecao.pedacos.some(p =>
-      Marcadores.faixas(Dados.versificacaoDe(this.versao),
-        this.code, this.cap, p.vers).length);
+    // qual marcador já está posto no trecho selecionado (se houver um só)
+    const versificacao = Dados.versificacaoDe(this.versao);
+    const postos = new Set();
+    for (const p of this.selecao ? this.selecao.pedacos : []) {
+      for (const fx of Marcadores.faixas(versificacao, this.code, this.cap, p.vers)) {
+        postos.add(fx.m);
+      }
+    }
+    const atual = postos.size === 1 ? [...postos][0] : null;
 
     caixa.innerHTML = Marcadores.lista().map(m => `<button data-sm="${m.id}"
-        style="background:${m.cor}" title="${Leitura.escapar(m.nome)}"></button>`).join('')
-      + (temMarca ? '<button data-sm="0" class="apagar" title="Tirar a marca"></button>' : '');
+        class="opcao-marcador ${m.id === atual ? 'ativa' : ''}">
+        <span class="bolha ${m.id === atual ? 'com-x' : ''}"
+          style="background:${m.cor}"></span>
+        <span>${Leitura.escapar(m.nome)}</span>
+      </button>`).join('')
+      + (postos.size ? `<button data-sm="0" class="opcao-marcador tirar">
+          <span class="bolha vazia com-x"></span><span>Tirar a marca</span></button>` : '');
 
     caixa.classList.remove('fechada');
 
     caixa.querySelectorAll('[data-sm]').forEach(el => {
-      el.onclick = () => this.marcarSelecao(+el.dataset.sm);
+      el.onclick = () => {
+        const id = +el.dataset.sm;
+        this.marcarSelecao(id === atual ? 0 : id);
+      };
     });
   },
 
@@ -934,29 +1102,59 @@ const App = {
     a.innerHTML = '<div class="estado">Abrindo…</div>';
     b.innerHTML = '<div class="estado">Abrindo…</div>';
 
-    const montar = async (alvo, versaoCode, capitulo, nota) => {
+    /* A sigla ao lado do livro e um botao: tocar nela troca a versao daquela
+     * metade sem sair da comparacao. Serve de atalho para comparar duas
+     * traducoes em sequencia, sem ir e voltar nos Ajustes. */
+    const sigla = (versaoCode, qual) =>
+      `<button class="sigla trocavel" data-trocar="${qual}"
+        title="Trocar a versão desta metade">${versaoCode}</button>`;
+
+    const montar = async (alvo, versaoCode, capitulo, nota, qual) => {
       if (!Dados.temLivro(versaoCode, this.code)) {
-        alvo.innerHTML = `<div class="cabeca-metade"><span class="sigla">${versaoCode}</span></div>
+        alvo.innerHTML = `<div class="cabeca-metade">${sigla(versaoCode, qual)}</div>
           <div class="estado">${Dados.nomeCurto(this.versao, this.code)} não existe nesta versão.</div>`;
         return;
       }
-      const r = await Dados.capitulo(versaoCode, this.code, capitulo);
+
+      /* Se o arquivo do livro faltar nesta versão, a metade avisa e segue. Antes
+       * a falha subia e derrubava a comparação inteira: nem a outra metade
+       * aparecia, nem os botões de trocar respondiam. */
+      let r = null;
+      try {
+        r = await Dados.capitulo(versaoCode, this.code, capitulo);
+      } catch {
+        alvo.innerHTML = `<div class="cabeca-metade">${sigla(versaoCode, qual)}</div>
+          <div class="estado">Não foi possível abrir este livro na versão
+          ${versaoCode}. Confira se os arquivos dela estão completos.</div>`;
+        return;
+      }
+
       if (!r) {
-        alvo.innerHTML = `<div class="cabeca-metade"><span class="sigla">${versaoCode}</span></div>
+        alvo.innerHTML = `<div class="cabeca-metade">${sigla(versaoCode, qual)}</div>
           <div class="estado">Capítulo não encontrado.</div>`;
         return;
       }
       alvo.innerHTML = `<div class="cabeca-metade">
-          <span class="sigla">${versaoCode}</span>
+          ${sigla(versaoCode, qual)}
           <span>${Leitura.escapar(r.livro.name)} ${capitulo}</span>
           ${nota ? `<span style="color:var(--rubrica)">${nota}</span>` : ''}
         </div>` + Leitura.html(versaoCode, r.livro, r.capitulo, { comCapitular: false });
     };
 
     const conv = Dados.referenciaEm(this.code, this.cap, this.versao, outra);
-    await montar(a, this.versao, this.cap, null);
-    await montar(b, outra, conv.capitulo,
-      conv.exato ? null : 'numeração diferente');
+    await Promise.all([
+      montar(a, this.versao, this.cap, null, 'cima'),
+      montar(b, outra, conv.capitulo, conv.exato ? null : 'numeração diferente', 'baixo'),
+    ]);
+
+    document.querySelectorAll('[data-trocar]').forEach(el => {
+      el.onclick = ev => {
+        ev.stopPropagation();
+        this.alvoVersao = el.dataset.trocar === 'baixo' ? 'comparar' : 'principal';
+        this.desenharVersoes();
+        this.abrir('painel-versao');
+      };
+    });
 
     this.sincronizarRolagem(a, b);
   },
@@ -1121,15 +1319,17 @@ const App = {
 
     corpo.innerHTML = `<div class="grupo" style="padding-top:8px">
       <h3>Marcar este versículo</h3>
-      <div class="faixa-marcadores">
+      <div class="lista-marcadores">
         ${Marcadores.lista().map(m => `<button data-m="${m.id}"
-          class="${m.id === atual ? 'ativa' : ''}"
-          style="background:${m.cor}" title="${Leitura.escapar(m.nome)}"></button>`).join('')}
-        ${atual ? '<button data-m="0" class="apagar" title="Remover a marca"></button>' : ''}
+          class="opcao-marcador ${m.id === atual ? 'ativa' : ''}">
+          <span class="bolha ${m.id === atual ? 'com-x' : ''}"
+            style="background:${m.cor}"></span>
+          <span>${Leitura.escapar(m.nome)}</span>
+        </button>`).join('')}
       </div>
       <p class="contagem" style="margin-top:12px">${atual
-        ? 'A bolinha com o xis remove a marca.'
-        : 'Escolha uma cor para marcar este versículo.'}</p>
+        ? 'O marcador com o xis é o que está posto — toque nele para tirar.'
+        : 'Escolha um marcador para este versículo.'}</p>
       <button class="botao secundario" id="voltar-tirinha" style="width:100%;margin-top:8px">
         Voltar às versões</button>
     </div>`;
@@ -1139,8 +1339,9 @@ const App = {
         const id = +el.dataset.m;
 
         // pela tirinha a marca cobre o versículo inteiro; para pintar só um
-        // pedaço, a pessoa seleciona o trecho direto no texto
-        if (id === 0) Marcadores.limparTrecho(versificacao, this.code, this.cap, this.destaque);
+        // pedaço, a pessoa seleciona o trecho direto no texto.
+        // Tocar no marcador que já está posto (o do xis) tira a marca.
+        if (id === atual) Marcadores.limparTrecho(versificacao, this.code, this.cap, this.destaque);
         else Marcadores.alternar(versificacao, this.code, this.cap, this.destaque, id);
 
         const el2 = document.querySelector(`#folha .v[data-vers="${this.destaque}"]`);
