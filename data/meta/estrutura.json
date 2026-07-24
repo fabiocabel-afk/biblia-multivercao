@@ -1,0 +1,1182 @@
+{
+  "descricao": "Arvore de navegacao do app: Testamento > Categoria > Livro. Serve tambem como funil da busca. Os deuterocanonicos ficam agrupados em categoria propria no fim do Antigo Testamento.",
+  "canons": {
+    "protestant": {
+      "testaments": [
+        {
+          "id": "AT",
+          "name": "Antigo Testamento",
+          "categories": [
+            {
+              "id": "pentateuco",
+              "name": "Pentateuco",
+              "deuterocanonical": false,
+              "books": [
+                {
+                  "code": "GEN",
+                  "name": "Gênesis",
+                  "abbrev": "Gn",
+                  "chapters": 50
+                },
+                {
+                  "code": "EXO",
+                  "name": "Êxodo",
+                  "abbrev": "Êx",
+                  "chapters": 40
+                },
+                {
+                  "code": "LEV",
+                  "name": "Levítico",
+                  "abbrev": "Lv",
+                  "chapters": 27
+                },
+                {
+                  "code": "NUM",
+                  "name": "Números",
+                  "abbrev": "Nm",
+                  "chapters": 36
+                },
+                {
+                  "code": "DEU",
+                  "name": "Deuteronômio",
+                  "abbrev": "Dt",
+                  "chapters": 34
+                }
+              ]
+            },
+            {
+              "id": "historicos",
+              "name": "Históricos",
+              "deuterocanonical": false,
+              "books": [
+                {
+                  "code": "JOS",
+                  "name": "Josué",
+                  "abbrev": "Js",
+                  "chapters": 24
+                },
+                {
+                  "code": "JDG",
+                  "name": "Juízes",
+                  "abbrev": "Jz",
+                  "chapters": 21
+                },
+                {
+                  "code": "RUT",
+                  "name": "Rute",
+                  "abbrev": "Rt",
+                  "chapters": 4
+                },
+                {
+                  "code": "1SA",
+                  "name": "1 Samuel",
+                  "abbrev": "1Sm",
+                  "chapters": 31
+                },
+                {
+                  "code": "2SA",
+                  "name": "2 Samuel",
+                  "abbrev": "2Sm",
+                  "chapters": 24
+                },
+                {
+                  "code": "1KI",
+                  "name": "1 Reis",
+                  "abbrev": "1Rs",
+                  "chapters": 22
+                },
+                {
+                  "code": "2KI",
+                  "name": "2 Reis",
+                  "abbrev": "2Rs",
+                  "chapters": 25
+                },
+                {
+                  "code": "1CH",
+                  "name": "1 Crônicas",
+                  "abbrev": "1Cr",
+                  "chapters": 29
+                },
+                {
+                  "code": "2CH",
+                  "name": "2 Crônicas",
+                  "abbrev": "2Cr",
+                  "chapters": 36
+                },
+                {
+                  "code": "EZR",
+                  "name": "Esdras",
+                  "abbrev": "Ed",
+                  "chapters": 10
+                },
+                {
+                  "code": "NEH",
+                  "name": "Neemias",
+                  "abbrev": "Ne",
+                  "chapters": 13
+                },
+                {
+                  "code": "EST",
+                  "name": "Ester",
+                  "abbrev": "Et",
+                  "chapters": 10
+                }
+              ]
+            },
+            {
+              "id": "poeticos",
+              "name": "Poéticos",
+              "deuterocanonical": false,
+              "books": [
+                {
+                  "code": "JOB",
+                  "name": "Jó",
+                  "abbrev": "Jó",
+                  "chapters": 42
+                },
+                {
+                  "code": "PSA",
+                  "name": "Salmos",
+                  "abbrev": "Sl",
+                  "chapters": 150
+                },
+                {
+                  "code": "PRO",
+                  "name": "Provérbios",
+                  "abbrev": "Pv",
+                  "chapters": 31
+                },
+                {
+                  "code": "ECC",
+                  "name": "Eclesiastes",
+                  "abbrev": "Ec",
+                  "chapters": 12
+                },
+                {
+                  "code": "SNG",
+                  "name": "Cânticos",
+                  "abbrev": "Ct",
+                  "chapters": 8
+                }
+              ]
+            },
+            {
+              "id": "profetas_maiores",
+              "name": "Profetas Maiores",
+              "deuterocanonical": false,
+              "books": [
+                {
+                  "code": "ISA",
+                  "name": "Isaías",
+                  "abbrev": "Is",
+                  "chapters": 66
+                },
+                {
+                  "code": "JER",
+                  "name": "Jeremias",
+                  "abbrev": "Jr",
+                  "chapters": 52
+                },
+                {
+                  "code": "LAM",
+                  "name": "Lamentações de Jeremias",
+                  "abbrev": "Lm",
+                  "chapters": 5
+                },
+                {
+                  "code": "EZK",
+                  "name": "Ezequiel",
+                  "abbrev": "Ez",
+                  "chapters": 48
+                },
+                {
+                  "code": "DAN",
+                  "name": "Daniel",
+                  "abbrev": "Dn",
+                  "chapters": 12
+                }
+              ]
+            },
+            {
+              "id": "profetas_menores",
+              "name": "Profetas Menores",
+              "deuterocanonical": false,
+              "books": [
+                {
+                  "code": "HOS",
+                  "name": "Oséias",
+                  "abbrev": "Os",
+                  "chapters": 14
+                },
+                {
+                  "code": "JOL",
+                  "name": "Joel",
+                  "abbrev": "Jl",
+                  "chapters": 3
+                },
+                {
+                  "code": "AMO",
+                  "name": "Amós",
+                  "abbrev": "Am",
+                  "chapters": 9
+                },
+                {
+                  "code": "OBA",
+                  "name": "Obadias",
+                  "abbrev": "Ob",
+                  "chapters": 1
+                },
+                {
+                  "code": "JON",
+                  "name": "Jonas",
+                  "abbrev": "Jn",
+                  "chapters": 4
+                },
+                {
+                  "code": "MIC",
+                  "name": "Miquéias",
+                  "abbrev": "Mq",
+                  "chapters": 7
+                },
+                {
+                  "code": "NAM",
+                  "name": "Naum",
+                  "abbrev": "Na",
+                  "chapters": 3
+                },
+                {
+                  "code": "HAB",
+                  "name": "Habacuque",
+                  "abbrev": "Hc",
+                  "chapters": 3
+                },
+                {
+                  "code": "ZEP",
+                  "name": "Sofonias",
+                  "abbrev": "Sf",
+                  "chapters": 3
+                },
+                {
+                  "code": "HAG",
+                  "name": "Ageu",
+                  "abbrev": "Ag",
+                  "chapters": 2
+                },
+                {
+                  "code": "ZEC",
+                  "name": "Zacarias",
+                  "abbrev": "Zc",
+                  "chapters": 14
+                },
+                {
+                  "code": "MAL",
+                  "name": "Malaquias",
+                  "abbrev": "Ml",
+                  "chapters": 4
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "NT",
+          "name": "Novo Testamento",
+          "categories": [
+            {
+              "id": "evangelhos",
+              "name": "Evangelhos",
+              "deuterocanonical": false,
+              "books": [
+                {
+                  "code": "MAT",
+                  "name": "Mateus",
+                  "abbrev": "Mt",
+                  "chapters": 28
+                },
+                {
+                  "code": "MRK",
+                  "name": "Marcos",
+                  "abbrev": "Mc",
+                  "chapters": 16
+                },
+                {
+                  "code": "LUK",
+                  "name": "Lucas",
+                  "abbrev": "Lc",
+                  "chapters": 24
+                },
+                {
+                  "code": "JHN",
+                  "name": "João",
+                  "abbrev": "Jo",
+                  "chapters": 21
+                }
+              ]
+            },
+            {
+              "id": "historico_nt",
+              "name": "Histórico",
+              "deuterocanonical": false,
+              "books": [
+                {
+                  "code": "ACT",
+                  "name": "Atos",
+                  "abbrev": "At",
+                  "chapters": 28
+                }
+              ]
+            },
+            {
+              "id": "cartas_paulo",
+              "name": "Cartas de Paulo",
+              "deuterocanonical": false,
+              "books": [
+                {
+                  "code": "ROM",
+                  "name": "Romanos",
+                  "abbrev": "Rm",
+                  "chapters": 16
+                },
+                {
+                  "code": "1CO",
+                  "name": "1 Coríntios",
+                  "abbrev": "1Co",
+                  "chapters": 16
+                },
+                {
+                  "code": "2CO",
+                  "name": "2 Coríntios",
+                  "abbrev": "2Co",
+                  "chapters": 13
+                },
+                {
+                  "code": "GAL",
+                  "name": "Gálatas",
+                  "abbrev": "Gl",
+                  "chapters": 6
+                },
+                {
+                  "code": "EPH",
+                  "name": "Efésios",
+                  "abbrev": "Ef",
+                  "chapters": 6
+                },
+                {
+                  "code": "PHP",
+                  "name": "Filipenses",
+                  "abbrev": "Fp",
+                  "chapters": 4
+                },
+                {
+                  "code": "COL",
+                  "name": "Colossenses",
+                  "abbrev": "Cl",
+                  "chapters": 4
+                },
+                {
+                  "code": "1TH",
+                  "name": "1 Tessalonicenses",
+                  "abbrev": "1Ts",
+                  "chapters": 5
+                },
+                {
+                  "code": "2TH",
+                  "name": "2 Tessalonicenses",
+                  "abbrev": "2Ts",
+                  "chapters": 3
+                },
+                {
+                  "code": "1TI",
+                  "name": "1 Timóteo",
+                  "abbrev": "1Tm",
+                  "chapters": 6
+                },
+                {
+                  "code": "2TI",
+                  "name": "2 Timóteo",
+                  "abbrev": "2Tm",
+                  "chapters": 4
+                },
+                {
+                  "code": "TIT",
+                  "name": "Tito",
+                  "abbrev": "Tt",
+                  "chapters": 3
+                },
+                {
+                  "code": "PHM",
+                  "name": "Filemom",
+                  "abbrev": "Fm",
+                  "chapters": 1
+                }
+              ]
+            },
+            {
+              "id": "cartas_gerais",
+              "name": "Cartas Gerais",
+              "deuterocanonical": false,
+              "books": [
+                {
+                  "code": "HEB",
+                  "name": "Hebreus",
+                  "abbrev": "Hb",
+                  "chapters": 13
+                },
+                {
+                  "code": "JAS",
+                  "name": "Tiago",
+                  "abbrev": "Tg",
+                  "chapters": 5
+                },
+                {
+                  "code": "1PE",
+                  "name": "1 Pedro",
+                  "abbrev": "1Pe",
+                  "chapters": 5
+                },
+                {
+                  "code": "2PE",
+                  "name": "2 Pedro",
+                  "abbrev": "2Pe",
+                  "chapters": 3
+                },
+                {
+                  "code": "1JN",
+                  "name": "1 João",
+                  "abbrev": "1Jo",
+                  "chapters": 5
+                },
+                {
+                  "code": "2JN",
+                  "name": "2 João",
+                  "abbrev": "2Jo",
+                  "chapters": 1
+                },
+                {
+                  "code": "3JN",
+                  "name": "3 João",
+                  "abbrev": "3Jo",
+                  "chapters": 1
+                },
+                {
+                  "code": "JUD",
+                  "name": "Judas",
+                  "abbrev": "Jd",
+                  "chapters": 1
+                }
+              ]
+            },
+            {
+              "id": "apocalipse",
+              "name": "Apocalipse",
+              "deuterocanonical": false,
+              "books": [
+                {
+                  "code": "REV",
+                  "name": "Apocalipse",
+                  "abbrev": "Ap",
+                  "chapters": 22
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "reading_order": [
+        "GEN",
+        "EXO",
+        "LEV",
+        "NUM",
+        "DEU",
+        "JOS",
+        "JDG",
+        "RUT",
+        "1SA",
+        "2SA",
+        "1KI",
+        "2KI",
+        "1CH",
+        "2CH",
+        "EZR",
+        "NEH",
+        "EST",
+        "JOB",
+        "PSA",
+        "PRO",
+        "ECC",
+        "SNG",
+        "ISA",
+        "JER",
+        "LAM",
+        "EZK",
+        "DAN",
+        "HOS",
+        "JOL",
+        "AMO",
+        "OBA",
+        "JON",
+        "MIC",
+        "NAM",
+        "HAB",
+        "ZEP",
+        "HAG",
+        "ZEC",
+        "MAL",
+        "MAT",
+        "MRK",
+        "LUK",
+        "JHN",
+        "ACT",
+        "ROM",
+        "1CO",
+        "2CO",
+        "GAL",
+        "EPH",
+        "PHP",
+        "COL",
+        "1TH",
+        "2TH",
+        "1TI",
+        "2TI",
+        "TIT",
+        "PHM",
+        "HEB",
+        "JAS",
+        "1PE",
+        "2PE",
+        "1JN",
+        "2JN",
+        "3JN",
+        "JUD",
+        "REV"
+      ]
+    },
+    "catholic": {
+      "testaments": [
+        {
+          "id": "AT",
+          "name": "Antigo Testamento",
+          "categories": [
+            {
+              "id": "pentateuco",
+              "name": "Pentateuco",
+              "deuterocanonical": false,
+              "books": [
+                {
+                  "code": "GEN",
+                  "name": "Gênesis",
+                  "abbrev": "Gn",
+                  "chapters": 50
+                },
+                {
+                  "code": "EXO",
+                  "name": "Êxodo",
+                  "abbrev": "Êx",
+                  "chapters": 40
+                },
+                {
+                  "code": "LEV",
+                  "name": "Levítico",
+                  "abbrev": "Lv",
+                  "chapters": 27
+                },
+                {
+                  "code": "NUM",
+                  "name": "Números",
+                  "abbrev": "Nm",
+                  "chapters": 36
+                },
+                {
+                  "code": "DEU",
+                  "name": "Deuteronômio",
+                  "abbrev": "Dt",
+                  "chapters": 34
+                }
+              ]
+            },
+            {
+              "id": "historicos",
+              "name": "Históricos",
+              "deuterocanonical": false,
+              "books": [
+                {
+                  "code": "JOS",
+                  "name": "Josué",
+                  "abbrev": "Js",
+                  "chapters": 24
+                },
+                {
+                  "code": "JDG",
+                  "name": "Juízes",
+                  "abbrev": "Jz",
+                  "chapters": 21
+                },
+                {
+                  "code": "RUT",
+                  "name": "Rute",
+                  "abbrev": "Rt",
+                  "chapters": 4
+                },
+                {
+                  "code": "1SA",
+                  "name": "1 Samuel",
+                  "abbrev": "1Sm",
+                  "chapters": 31
+                },
+                {
+                  "code": "2SA",
+                  "name": "2 Samuel",
+                  "abbrev": "2Sm",
+                  "chapters": 24
+                },
+                {
+                  "code": "1KI",
+                  "name": "1 Reis",
+                  "abbrev": "1Rs",
+                  "chapters": 22
+                },
+                {
+                  "code": "2KI",
+                  "name": "2 Reis",
+                  "abbrev": "2Rs",
+                  "chapters": 25
+                },
+                {
+                  "code": "1CH",
+                  "name": "1 Crônicas",
+                  "abbrev": "1Cr",
+                  "chapters": 29
+                },
+                {
+                  "code": "2CH",
+                  "name": "2 Crônicas",
+                  "abbrev": "2Cr",
+                  "chapters": 36
+                },
+                {
+                  "code": "EZR",
+                  "name": "Esdras",
+                  "abbrev": "Ed",
+                  "chapters": 10
+                },
+                {
+                  "code": "NEH",
+                  "name": "Neemias",
+                  "abbrev": "Ne",
+                  "chapters": 13
+                },
+                {
+                  "code": "EST",
+                  "name": "Ester",
+                  "abbrev": "Et",
+                  "chapters": 16,
+                  "deutero_sections": {
+                    "chapters": [
+                      11,
+                      16
+                    ],
+                    "nota": "Acrescimos gregos de Ester"
+                  }
+                }
+              ]
+            },
+            {
+              "id": "poeticos",
+              "name": "Poéticos",
+              "deuterocanonical": false,
+              "books": [
+                {
+                  "code": "JOB",
+                  "name": "Jó",
+                  "abbrev": "Jó",
+                  "chapters": 42
+                },
+                {
+                  "code": "PSA",
+                  "name": "Salmos",
+                  "abbrev": "Sl",
+                  "chapters": 150
+                },
+                {
+                  "code": "PRO",
+                  "name": "Provérbios",
+                  "abbrev": "Pv",
+                  "chapters": 31
+                },
+                {
+                  "code": "ECC",
+                  "name": "Eclesiastes",
+                  "abbrev": "Ec",
+                  "chapters": 12
+                },
+                {
+                  "code": "SNG",
+                  "name": "Cânticos",
+                  "abbrev": "Ct",
+                  "chapters": 8
+                }
+              ]
+            },
+            {
+              "id": "profetas_maiores",
+              "name": "Profetas Maiores",
+              "deuterocanonical": false,
+              "books": [
+                {
+                  "code": "ISA",
+                  "name": "Isaías",
+                  "abbrev": "Is",
+                  "chapters": 66
+                },
+                {
+                  "code": "JER",
+                  "name": "Jeremias",
+                  "abbrev": "Jr",
+                  "chapters": 52
+                },
+                {
+                  "code": "LAM",
+                  "name": "Lamentações de Jeremias",
+                  "abbrev": "Lm",
+                  "chapters": 5
+                },
+                {
+                  "code": "EZK",
+                  "name": "Ezequiel",
+                  "abbrev": "Ez",
+                  "chapters": 48
+                },
+                {
+                  "code": "DAN",
+                  "name": "Daniel",
+                  "abbrev": "Dn",
+                  "chapters": 14,
+                  "deutero_sections": {
+                    "chapters": [
+                      13,
+                      14
+                    ],
+                    "nota": "Susana (13) e Bel e o Dragao (14)"
+                  }
+                }
+              ]
+            },
+            {
+              "id": "profetas_menores",
+              "name": "Profetas Menores",
+              "deuterocanonical": false,
+              "books": [
+                {
+                  "code": "HOS",
+                  "name": "Oséias",
+                  "abbrev": "Os",
+                  "chapters": 14
+                },
+                {
+                  "code": "JOL",
+                  "name": "Joel",
+                  "abbrev": "Jl",
+                  "chapters": 4
+                },
+                {
+                  "code": "AMO",
+                  "name": "Amós",
+                  "abbrev": "Am",
+                  "chapters": 9
+                },
+                {
+                  "code": "OBA",
+                  "name": "Obadias",
+                  "abbrev": "Ob",
+                  "chapters": 1
+                },
+                {
+                  "code": "JON",
+                  "name": "Jonas",
+                  "abbrev": "Jn",
+                  "chapters": 4
+                },
+                {
+                  "code": "MIC",
+                  "name": "Miquéias",
+                  "abbrev": "Mq",
+                  "chapters": 7
+                },
+                {
+                  "code": "NAM",
+                  "name": "Naum",
+                  "abbrev": "Na",
+                  "chapters": 3
+                },
+                {
+                  "code": "HAB",
+                  "name": "Habacuque",
+                  "abbrev": "Hc",
+                  "chapters": 3
+                },
+                {
+                  "code": "ZEP",
+                  "name": "Sofonias",
+                  "abbrev": "Sf",
+                  "chapters": 3
+                },
+                {
+                  "code": "HAG",
+                  "name": "Ageu",
+                  "abbrev": "Ag",
+                  "chapters": 2
+                },
+                {
+                  "code": "ZEC",
+                  "name": "Zacarias",
+                  "abbrev": "Zc",
+                  "chapters": 14
+                },
+                {
+                  "code": "MAL",
+                  "name": "Malaquias",
+                  "abbrev": "Ml",
+                  "chapters": 3
+                }
+              ]
+            },
+            {
+              "id": "deuterocanonicos",
+              "name": "Deuterocanônicos",
+              "deuterocanonical": true,
+              "books": [
+                {
+                  "code": "TOB",
+                  "name": "Tobias",
+                  "abbrev": "Tb",
+                  "chapters": 14,
+                  "deuterocanonical": true
+                },
+                {
+                  "code": "JDT",
+                  "name": "Judite",
+                  "abbrev": "Jt",
+                  "chapters": 16,
+                  "deuterocanonical": true
+                },
+                {
+                  "code": "1MA",
+                  "name": "1 Macabeus",
+                  "abbrev": "1Mac",
+                  "chapters": 16,
+                  "deuterocanonical": true
+                },
+                {
+                  "code": "2MA",
+                  "name": "2 Macabeus",
+                  "abbrev": "2Mac",
+                  "chapters": 15,
+                  "deuterocanonical": true
+                },
+                {
+                  "code": "WIS",
+                  "name": "Sabedoria",
+                  "abbrev": "Sb",
+                  "chapters": 19,
+                  "deuterocanonical": true
+                },
+                {
+                  "code": "SIR",
+                  "name": "Eclesiástico",
+                  "abbrev": "Eclo",
+                  "chapters": 51,
+                  "deuterocanonical": true
+                },
+                {
+                  "code": "BAR",
+                  "name": "Baruc",
+                  "abbrev": "Br",
+                  "chapters": 6,
+                  "deuterocanonical": true
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "NT",
+          "name": "Novo Testamento",
+          "categories": [
+            {
+              "id": "evangelhos",
+              "name": "Evangelhos",
+              "deuterocanonical": false,
+              "books": [
+                {
+                  "code": "MAT",
+                  "name": "Mateus",
+                  "abbrev": "Mt",
+                  "chapters": 28
+                },
+                {
+                  "code": "MRK",
+                  "name": "Marcos",
+                  "abbrev": "Mc",
+                  "chapters": 16
+                },
+                {
+                  "code": "LUK",
+                  "name": "Lucas",
+                  "abbrev": "Lc",
+                  "chapters": 24
+                },
+                {
+                  "code": "JHN",
+                  "name": "João",
+                  "abbrev": "Jo",
+                  "chapters": 21
+                }
+              ]
+            },
+            {
+              "id": "historico_nt",
+              "name": "Histórico",
+              "deuterocanonical": false,
+              "books": [
+                {
+                  "code": "ACT",
+                  "name": "Atos",
+                  "abbrev": "At",
+                  "chapters": 28
+                }
+              ]
+            },
+            {
+              "id": "cartas_paulo",
+              "name": "Cartas de Paulo",
+              "deuterocanonical": false,
+              "books": [
+                {
+                  "code": "ROM",
+                  "name": "Romanos",
+                  "abbrev": "Rm",
+                  "chapters": 16
+                },
+                {
+                  "code": "1CO",
+                  "name": "1 Coríntios",
+                  "abbrev": "1Co",
+                  "chapters": 16
+                },
+                {
+                  "code": "2CO",
+                  "name": "2 Coríntios",
+                  "abbrev": "2Co",
+                  "chapters": 13
+                },
+                {
+                  "code": "GAL",
+                  "name": "Gálatas",
+                  "abbrev": "Gl",
+                  "chapters": 6
+                },
+                {
+                  "code": "EPH",
+                  "name": "Efésios",
+                  "abbrev": "Ef",
+                  "chapters": 6
+                },
+                {
+                  "code": "PHP",
+                  "name": "Filipenses",
+                  "abbrev": "Fp",
+                  "chapters": 4
+                },
+                {
+                  "code": "COL",
+                  "name": "Colossenses",
+                  "abbrev": "Cl",
+                  "chapters": 4
+                },
+                {
+                  "code": "1TH",
+                  "name": "1 Tessalonicenses",
+                  "abbrev": "1Ts",
+                  "chapters": 5
+                },
+                {
+                  "code": "2TH",
+                  "name": "2 Tessalonicenses",
+                  "abbrev": "2Ts",
+                  "chapters": 3
+                },
+                {
+                  "code": "1TI",
+                  "name": "1 Timóteo",
+                  "abbrev": "1Tm",
+                  "chapters": 6
+                },
+                {
+                  "code": "2TI",
+                  "name": "2 Timóteo",
+                  "abbrev": "2Tm",
+                  "chapters": 4
+                },
+                {
+                  "code": "TIT",
+                  "name": "Tito",
+                  "abbrev": "Tt",
+                  "chapters": 3
+                },
+                {
+                  "code": "PHM",
+                  "name": "Filemom",
+                  "abbrev": "Fm",
+                  "chapters": 1
+                }
+              ]
+            },
+            {
+              "id": "cartas_gerais",
+              "name": "Cartas Gerais",
+              "deuterocanonical": false,
+              "books": [
+                {
+                  "code": "HEB",
+                  "name": "Hebreus",
+                  "abbrev": "Hb",
+                  "chapters": 13
+                },
+                {
+                  "code": "JAS",
+                  "name": "Tiago",
+                  "abbrev": "Tg",
+                  "chapters": 5
+                },
+                {
+                  "code": "1PE",
+                  "name": "1 Pedro",
+                  "abbrev": "1Pe",
+                  "chapters": 5
+                },
+                {
+                  "code": "2PE",
+                  "name": "2 Pedro",
+                  "abbrev": "2Pe",
+                  "chapters": 3
+                },
+                {
+                  "code": "1JN",
+                  "name": "1 João",
+                  "abbrev": "1Jo",
+                  "chapters": 5
+                },
+                {
+                  "code": "2JN",
+                  "name": "2 João",
+                  "abbrev": "2Jo",
+                  "chapters": 1
+                },
+                {
+                  "code": "3JN",
+                  "name": "3 João",
+                  "abbrev": "3Jo",
+                  "chapters": 1
+                },
+                {
+                  "code": "JUD",
+                  "name": "Judas",
+                  "abbrev": "Jd",
+                  "chapters": 1
+                }
+              ]
+            },
+            {
+              "id": "apocalipse",
+              "name": "Apocalipse",
+              "deuterocanonical": false,
+              "books": [
+                {
+                  "code": "REV",
+                  "name": "Apocalipse",
+                  "abbrev": "Ap",
+                  "chapters": 22
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "reading_order": [
+        "GEN",
+        "EXO",
+        "LEV",
+        "NUM",
+        "DEU",
+        "JOS",
+        "JDG",
+        "RUT",
+        "1SA",
+        "2SA",
+        "1KI",
+        "2KI",
+        "1CH",
+        "2CH",
+        "EZR",
+        "NEH",
+        "EST",
+        "JOB",
+        "PSA",
+        "PRO",
+        "ECC",
+        "SNG",
+        "ISA",
+        "JER",
+        "LAM",
+        "EZK",
+        "DAN",
+        "HOS",
+        "JOL",
+        "AMO",
+        "OBA",
+        "JON",
+        "MIC",
+        "NAM",
+        "HAB",
+        "ZEP",
+        "HAG",
+        "ZEC",
+        "MAL",
+        "TOB",
+        "JDT",
+        "1MA",
+        "2MA",
+        "WIS",
+        "SIR",
+        "BAR",
+        "MAT",
+        "MRK",
+        "LUK",
+        "JHN",
+        "ACT",
+        "ROM",
+        "1CO",
+        "2CO",
+        "GAL",
+        "EPH",
+        "PHP",
+        "COL",
+        "1TH",
+        "2TH",
+        "1TI",
+        "2TI",
+        "TIT",
+        "PHM",
+        "HEB",
+        "JAS",
+        "1PE",
+        "2PE",
+        "1JN",
+        "2JN",
+        "3JN",
+        "JUD",
+        "REV"
+      ]
+    }
+  }
+}

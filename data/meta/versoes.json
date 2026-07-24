@@ -1,0 +1,211 @@
+[
+  {
+    "code": "ACF",
+    "folder": "acf",
+    "name": "Almeida Corrigida e Fiel",
+    "year": 1994,
+    "publisher": "SBTB",
+    "license": "copyright",
+    "canon": "protestant",
+    "versification": "hebraica",
+    "books": 66
+  },
+  {
+    "code": "ALM1911",
+    "folder": "alm1911",
+    "name": "Almeida 1911",
+    "year": 1911,
+    "publisher": null,
+    "license": "public-domain",
+    "canon": "protestant",
+    "versification": "hebraica",
+    "books": 66
+  },
+  {
+    "code": "ARA",
+    "folder": "ara",
+    "name": "Almeida Revista e Atualizada",
+    "year": 1993,
+    "publisher": "SBB",
+    "license": "copyright",
+    "canon": "protestant",
+    "versification": "hebraica",
+    "books": 66
+  },
+  {
+    "code": "ARC",
+    "folder": "arc",
+    "name": "Almeida Revista e Corrigida",
+    "year": 1995,
+    "publisher": "SBB",
+    "license": "copyright",
+    "canon": "protestant",
+    "versification": "hebraica",
+    "books": 66
+  },
+  {
+    "code": "AS21",
+    "folder": "as21",
+    "name": "Almeida Século 21",
+    "year": 2009,
+    "publisher": "Vida Nova",
+    "license": "copyright",
+    "canon": "protestant",
+    "versification": "hebraica",
+    "books": 66
+  },
+  {
+    "code": "AVEMARIA",
+    "folder": "avemaria",
+    "name": "Bíblia Ave-Maria",
+    "year": 1959,
+    "publisher": "Editora Ave-Maria",
+    "license": "copyright",
+    "canon": "catholic",
+    "versification": "vulgata",
+    "books": 73
+  },
+  {
+    "code": "BLIVRE",
+    "folder": "blivre",
+    "name": "Bíblia Livre",
+    "year": 2018,
+    "publisher": null,
+    "license": "public-domain",
+    "canon": "protestant",
+    "versification": "hebraica",
+    "books": 66
+  },
+  {
+    "code": "JFAA",
+    "folder": "jfaa",
+    "name": "Almeida Atualizada",
+    "year": null,
+    "publisher": null,
+    "license": "copyright",
+    "canon": "protestant",
+    "versification": "hebraica",
+    "books": 66
+  },
+  {
+    "code": "KJA",
+    "folder": "kja",
+    "name": "King James Atualizada",
+    "year": 1999,
+    "publisher": "Abba Press",
+    "license": "copyright",
+    "canon": "protestant",
+    "versification": "hebraica",
+    "books": 66
+  },
+  {
+    "code": "KJF",
+    "folder": "kjf",
+    "name": "King James Fiel",
+    "year": 1611,
+    "publisher": "BVBooks",
+    "license": "copyright",
+    "canon": "protestant",
+    "versification": "hebraica",
+    "books": 66
+  },
+  {
+    "code": "MENS",
+    "folder": "mens",
+    "name": "A Mensagem",
+    "year": 2016,
+    "publisher": "Editora Vida",
+    "license": "copyright",
+    "canon": "protestant",
+    "versification": "hebraica",
+    "books": 66
+  },
+  {
+    "code": "NAA",
+    "folder": "naa",
+    "name": "Nova Almeida Atualizada",
+    "year": 2017,
+    "publisher": "SBB",
+    "license": "copyright",
+    "canon": "protestant",
+    "versification": "hebraica",
+    "books": 66
+  },
+  {
+    "code": "NBV",
+    "folder": "nbv",
+    "name": "Nova Bíblia Viva",
+    "year": 2007,
+    "publisher": "Mundo Cristão",
+    "license": "copyright",
+    "canon": "protestant",
+    "versification": "hebraica",
+    "books": 66
+  },
+  {
+    "code": "NTLH",
+    "folder": "ntlh",
+    "name": "Nova Tradução na Linguagem de Hoje",
+    "year": 1988,
+    "publisher": "SBB",
+    "license": "copyright",
+    "canon": "protestant",
+    "versification": "hebraica",
+    "books": 66
+  },
+  {
+    "code": "NVI",
+    "folder": "nvi",
+    "name": "Nova Versão Internacional",
+    "year": null,
+    "publisher": "Biblica",
+    "license": "copyright",
+    "canon": "protestant",
+    "versification": "hebraica",
+    "books": 66
+  },
+  {
+    "code": "NVT",
+    "folder": "nvt",
+    "name": "Nova Versão Transformadora",
+    "year": 2016,
+    "publisher": "Mundo Cristão",
+    "license": "copyright",
+    "canon": "protestant",
+    "versification": "hebraica",
+    "books": 66
+  },
+  {
+    "code": "OL",
+    "folder": "ol",
+    "name": "O Livro",
+    "year": 2000,
+    "publisher": "Biblica",
+    "license": "copyright",
+    "canon": "protestant",
+    "versification": "hebraica",
+    "books": 66
+  },
+  {
+    "code": "TB",
+    "folder": "tb",
+    "name": "Tradução Brasileira",
+    "year": 2010,
+    "publisher": "SBB",
+    "license": "public-domain",
+    "canon": "protestant",
+    "versification": "hebraica",
+    "books": 66
+  },
+  {
+    "code": "VFL",
+    "folder": "vfl",
+    "name": "Versão Fácil de Ler",
+    "year": 2017,
+    "publisher": "Bible League International",
+    "license": "copyright",
+    "canon": "protestant",
+    "versification": "hebraica",
+    "books": 66
+  }
+]

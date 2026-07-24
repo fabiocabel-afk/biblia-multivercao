@@ -1,0 +1,692 @@
+/* estilo.css — o texto e o heroi. Todo o resto recolhe.
+ *
+ * A folha muda de temperatura por variavel: o papel vai do branco ao sepia e a
+ * tinta acompanha, do preto ao marrom escuro. Sao os dois extremos de uma
+ * Biblia impressa nova e de uma envelhecida.
+ */
+
+:root {
+  /* temperatura: interpolada em tempo real pelo app (0 a 100) */
+  --papel: #ffffff;
+  --tinta: #17140f;
+  --tinta-fraca: #6d6459;
+
+  /* cromo da interface: fixo, para nao competir com a folha */
+  --cromo: #201d19;
+  --cromo-alto: #2b2721;
+  --cromo-texto: #e8e2d6;
+  --cromo-fraco: #9a9186;
+
+  /* rubrica: o vermelho das marcacoes dos manuscritos. Unico acento do app. */
+  --rubrica: #8c2f39;
+  --rubrica-clara: #b8636b;
+
+  --fonte-texto: 'Iowan Old Style', 'Palatino Linotype', Palatino, 'Book Antiqua', Georgia, serif;
+  --fonte-ui: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --fonte-sigla: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+
+  --corpo: 20px;
+  --barra: 52px;
+  --raio: 6px;
+}
+
+[data-escuro='true'] {
+  --papel: #16181b;
+  --tinta: #d7d2c8;
+  --tinta-fraca: #877f74;
+  --cromo: #0e0f11;
+  --cromo-alto: #1b1d20;
+  --rubrica: #c9707a;
+  --rubrica-clara: #d8969d;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  overscroll-behavior-y: none;
+}
+
+body {
+  background: var(--papel);
+  color: var(--tinta);
+  font-family: var(--fonte-ui);
+  -webkit-text-size-adjust: 100%;
+  transition: background-color .25s ease, color .25s ease;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+:focus-visible {
+  outline: 2px solid var(--rubrica);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+}
+
+/* ============================================================ barra do topo */
+
+.topo {
+  position: fixed;
+  inset: 0 0 auto 0;
+  height: var(--barra);
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 4px;
+  background: var(--cromo);
+  color: var(--cromo-texto);
+  z-index: 40;
+}
+
+.topo button {
+  height: 42px;
+  min-width: 42px;
+  padding: 0 10px;
+  border-radius: var(--raio);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 14px;
+}
+
+.topo button:hover { background: var(--cromo-alto); }
+
+.topo .ref {
+  flex: 1;
+  justify-content: flex-start;
+  font-weight: 600;
+  font-size: 16px;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.topo .ref::after {
+  content: '▾';
+  font-size: 11px;
+  opacity: .6;
+  margin-left: 2px;
+}
+
+.sigla {
+  font-family: var(--fonte-sigla);
+  font-size: 12px;
+  letter-spacing: .04em;
+  padding: 5px 8px;
+  border: 1px solid var(--cromo-fraco);
+  border-radius: 4px;
+}
+
+.icone { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 1.7; }
+
+/* ==================================================================== folha */
+
+.folha {
+  padding: calc(var(--barra) + 22px) 20px calc(var(--barra) + 60px);
+  max-width: 36rem;
+  margin: 0 auto;
+  font-family: var(--fonte-texto);
+  font-size: var(--corpo);
+  line-height: 1.62;
+  text-align: justify;
+  hyphens: auto;
+}
+
+.folha .titulo-livro {
+  font-size: .78em;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  text-align: center;
+  color: var(--tinta-fraca);
+  font-family: var(--fonte-ui);
+  margin: 0 0 1.6em;
+  font-weight: 500;
+}
+
+/* a capitular: o numero do capitulo ocupa tres linhas, o texto flui em volta.
+   E o gesto mais caracteristico da Biblia impressa. */
+.capitular {
+  float: left;
+  font-size: 3.1em;
+  line-height: .82;
+  padding: .06em .16em 0 0;
+  margin-right: .04em;
+  font-weight: 500;
+  color: var(--rubrica);
+  font-feature-settings: 'lnum' 1;
+}
+
+.v { cursor: pointer; }
+.v:hover { background: color-mix(in srgb, var(--tinta) 7%, transparent); }
+
+.v .n {
+  font-family: var(--fonte-ui);
+  font-size: .58em;
+  vertical-align: .42em;
+  color: var(--tinta-fraca);
+  margin-right: .25em;
+  font-weight: 600;
+  user-select: none;
+}
+
+/* teto de transparencia: a marca nunca escurece a ponto de atrapalhar a leitura */
+.v[data-marcador] {
+  background: var(--marca);
+  box-shadow: 0 0 0 2px var(--marca);
+  border-radius: 2px;
+}
+
+.v.foco {
+  box-shadow: inset 3px 0 0 var(--rubrica);
+  background: color-mix(in srgb, var(--rubrica) 8%, transparent);
+}
+
+.v.vazio { color: var(--tinta-fraca); font-style: italic; }
+
+.aviso-lacuna {
+  font-family: var(--fonte-ui);
+  font-size: 13px;
+  line-height: 1.5;
+  text-align: left;
+  color: var(--tinta-fraca);
+  border-left: 2px solid var(--rubrica);
+  padding: 8px 0 8px 12px;
+  margin: 18px 0;
+}
+
+/* ================================================================= rodape */
+
+.rodape {
+  position: fixed;
+  inset: auto 0 0 0;
+  height: var(--barra);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  padding: 0 6px;
+  background: var(--cromo);
+  color: var(--cromo-texto);
+  z-index: 40;
+}
+
+.rodape button {
+  height: 40px;
+  padding: 0 14px;
+  border-radius: var(--raio);
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.rodape button:hover:not(:disabled) { background: var(--cromo-alto); }
+.rodape button:disabled { opacity: .3; cursor: default; }
+.rodape .meio { font-size: 13px; color: var(--cromo-fraco); }
+
+/* ================================================================== paineis */
+
+.veu {
+  position: fixed;
+  inset: 0;
+  background: rgba(12, 10, 8, .5);
+  z-index: 50;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .2s ease;
+}
+
+.veu.aberto { opacity: 1; pointer-events: auto; }
+
+.painel {
+  position: fixed;
+  inset: 0 0 0 auto;
+  width: min(30rem, 100%);
+  background: var(--papel);
+  color: var(--tinta);
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  transform: translateX(100%);
+  transition: transform .24s cubic-bezier(.4, 0, .2, 1);
+  box-shadow: -1px 0 0 color-mix(in srgb, var(--tinta) 14%, transparent);
+}
+
+.painel.aberto { transform: none; }
+
+.painel > header {
+  height: var(--barra);
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px 0 16px;
+  background: var(--cromo);
+  color: var(--cromo-texto);
+}
+
+.painel > header h2 {
+  flex: 1;
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.painel > header button {
+  height: 40px;
+  min-width: 40px;
+  border-radius: var(--raio);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.painel > header button:hover { background: var(--cromo-alto); }
+
+.painel .corpo {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 16px 28px;
+}
+
+/* ------------------------------------------------------------ listas gerais */
+
+.grupo { margin-bottom: 22px; }
+
+.grupo > h3 {
+  margin: 0 0 8px;
+  font-size: 11px;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--tinta-fraca);
+  font-weight: 600;
+}
+
+.linha {
+  width: 100%;
+  text-align: left;
+  padding: 11px 12px;
+  border-radius: var(--raio);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 15px;
+}
+
+.linha:hover { background: color-mix(in srgb, var(--tinta) 7%, transparent); }
+.linha.ativa { background: color-mix(in srgb, var(--rubrica) 13%, transparent); font-weight: 600; }
+.linha .sub { margin-left: auto; font-size: 12px; color: var(--tinta-fraca); font-weight: 400; }
+
+.selo {
+  font-size: 10px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 3px;
+  border: 1px solid var(--rubrica);
+  color: var(--rubrica);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* grade de capitulos */
+.grade {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(46px, 1fr));
+  gap: 6px;
+}
+
+.grade button {
+  aspect-ratio: 1;
+  border-radius: var(--raio);
+  border: 1px solid color-mix(in srgb, var(--tinta) 16%, transparent);
+  font-family: var(--fonte-sigla);
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.grade button:hover { background: color-mix(in srgb, var(--tinta) 8%, transparent); }
+.grade button.ativa { background: var(--rubrica); color: #fff; border-color: var(--rubrica); }
+.grade button.deutero { border-style: dashed; border-color: var(--rubrica); }
+
+/* --------------------------------------------------------------- controles */
+
+.campo {
+  width: 100%;
+  padding: 11px 12px;
+  font: inherit;
+  font-size: 15px;
+  color: var(--tinta);
+  background: color-mix(in srgb, var(--tinta) 5%, transparent);
+  border: 1px solid color-mix(in srgb, var(--tinta) 18%, transparent);
+  border-radius: var(--raio);
+}
+
+.campo::placeholder { color: var(--tinta-fraca); }
+
+.deslizador {
+  width: 100%;
+  margin: 10px 0 4px;
+  accent-color: var(--rubrica);
+}
+
+.rotulo-controle {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 14px;
+  margin-bottom: 2px;
+}
+
+.rotulo-controle span:last-child { color: var(--tinta-fraca); font-size: 13px; }
+
+.amostra-folha {
+  height: 46px;
+  border-radius: var(--raio);
+  border: 1px solid color-mix(in srgb, var(--tinta) 18%, transparent);
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+  font-family: var(--fonte-texto);
+  font-size: 15px;
+  margin-top: 8px;
+}
+
+.botao {
+  padding: 11px 16px;
+  border-radius: var(--raio);
+  background: var(--rubrica);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.botao.secundario {
+  background: none;
+  color: var(--tinta);
+  border: 1px solid color-mix(in srgb, var(--tinta) 22%, transparent);
+}
+
+.botao:hover { filter: brightness(1.08); }
+
+.interruptor {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 11px 0;
+  font-size: 15px;
+}
+
+.interruptor input { width: 42px; height: 24px; accent-color: var(--rubrica); }
+
+/* ------------------------------------------------------------- marcadores */
+
+.faixa-marcadores {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 8px;
+}
+
+.faixa-marcadores button {
+  aspect-ratio: 1;
+  border-radius: 50%;
+  border: 2px solid transparent;
+}
+
+.faixa-marcadores button.ativa { border-color: var(--tinta); }
+
+.item-marcador {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 0;
+}
+
+.item-marcador input[type='color'] {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--tinta) 20%, transparent);
+  border-radius: var(--raio);
+  background: none;
+}
+
+.item-marcador input[type='text'] { flex: 1; }
+
+/* ==================================================== tirinha de versoes */
+
+.tirinha {
+  position: fixed;
+  inset: auto 0 0 0;
+  max-height: 74vh;
+  background: var(--papel);
+  z-index: 70;
+  border-top-left-radius: 14px;
+  border-top-right-radius: 14px;
+  box-shadow: 0 -2px 24px rgba(0, 0, 0, .3);
+  transform: translateY(100%);
+  transition: transform .26s cubic-bezier(.4, 0, .2, 1);
+  display: flex;
+  flex-direction: column;
+}
+
+.tirinha.aberta { transform: none; }
+
+.tirinha > header {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 12px 12px 18px;
+  border-bottom: 1px solid color-mix(in srgb, var(--tinta) 12%, transparent);
+}
+
+.tirinha > header strong { font-size: 15px; }
+
+.tirinha .corpo { overflow-y: auto; padding: 4px 18px 24px; }
+
+.fita {
+  padding: 14px 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--tinta) 9%, transparent);
+}
+
+.fita:last-child { border-bottom: 0; }
+
+.fita .cabeca {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 5px;
+}
+
+.fita .cabeca .sigla {
+  border-color: color-mix(in srgb, var(--tinta) 30%, transparent);
+  color: var(--tinta-fraca);
+}
+
+.fita .cabeca .ref-fita { font-size: 12px; color: var(--tinta-fraca); }
+
+.fita p {
+  margin: 0;
+  font-family: var(--fonte-texto);
+  font-size: calc(var(--corpo) * .92);
+  line-height: 1.56;
+}
+
+.fita .nota-numeracao {
+  margin-top: 6px;
+  font-family: var(--fonte-ui);
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--rubrica);
+}
+
+/* ================================================= comparacao lado a lado */
+
+body.comparando .folha { display: none; }
+
+.comparador {
+  display: none;
+  position: fixed;
+  inset: var(--barra) 0 var(--barra) 0;
+  flex-direction: column;
+}
+
+body.comparando .comparador { display: flex; }
+
+.metade {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 20px 26px;
+  font-family: var(--fonte-texto);
+  font-size: calc(var(--corpo) * .94);
+  line-height: 1.58;
+  text-align: justify;
+  hyphens: auto;
+}
+
+.metade + .metade { border-top: 2px solid color-mix(in srgb, var(--tinta) 16%, transparent); }
+
+.metade > .cabeca-metade {
+  position: sticky;
+  top: -16px;
+  margin: -16px -20px 12px;
+  padding: 8px 20px;
+  background: var(--papel);
+  font-family: var(--fonte-ui);
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--tinta-fraca);
+  border-bottom: 1px solid color-mix(in srgb, var(--tinta) 9%, transparent);
+  z-index: 1;
+}
+
+/* =================================================================== busca */
+
+.resultado {
+  width: 100%;
+  text-align: left;
+  padding: 12px;
+  border-radius: var(--raio);
+  border-bottom: 1px solid color-mix(in srgb, var(--tinta) 9%, transparent);
+}
+
+.resultado:hover { background: color-mix(in srgb, var(--tinta) 6%, transparent); }
+
+.resultado .ref-res {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--rubrica);
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 3px;
+}
+
+.resultado .trecho {
+  font-family: var(--fonte-texto);
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--tinta);
+}
+
+.resultado mark {
+  background: color-mix(in srgb, var(--rubrica) 22%, transparent);
+  color: inherit;
+  border-radius: 2px;
+}
+
+.filtros { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 16px; }
+
+.pilula {
+  padding: 6px 11px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--tinta) 22%, transparent);
+  font-size: 13px;
+}
+
+.pilula.ativa { background: var(--rubrica); border-color: var(--rubrica); color: #fff; }
+
+.estado {
+  padding: 34px 8px;
+  text-align: center;
+  color: var(--tinta-fraca);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.contagem { font-size: 13px; color: var(--tinta-fraca); margin-bottom: 6px; }
+
+/* ================================================================ historico */
+
+.sessao-cabeca {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 20px 0 6px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid color-mix(in srgb, var(--tinta) 12%, transparent);
+}
+
+.sessao-cabeca h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  flex: 1;
+}
+
+.sessao-cabeca .marca-aberta {
+  font-size: 10px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--rubrica);
+  font-weight: 700;
+}
+
+.item-hist {
+  width: 100%;
+  text-align: left;
+  padding: 9px 10px;
+  border-radius: var(--raio);
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+}
+
+.item-hist:hover { background: color-mix(in srgb, var(--tinta) 6%, transparent); }
+.item-hist .hora { font-size: 11px; color: var(--tinta-fraca); font-family: var(--fonte-sigla); flex: 0 0 auto; }
+.item-hist .ref-hist { font-size: 13px; font-weight: 600; flex: 0 0 auto; }
+
+.item-hist .trecho-hist {
+  font-family: var(--fonte-texto);
+  font-size: 13px;
+  color: var(--tinta-fraca);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ================================================================= largura */
+
+@media (min-width: 860px) {
+  .comparador { flex-direction: row; }
+  .metade + .metade {
+    border-top: 0;
+    border-left: 2px solid color-mix(in srgb, var(--tinta) 16%, transparent);
+  }
+}

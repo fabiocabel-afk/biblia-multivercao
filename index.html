@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-escuro="false">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#201d19">
+<title>Bíblia</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="assets/icons/icone-192.png">
+<link rel="apple-touch-icon" href="assets/icons/icone-192.png">
+<link rel="stylesheet" href="assets/css/estilo.css">
+</head>
+<body>
+
+<!-- ícones reutilizados -->
+<svg style="display:none">
+  <symbol id="i-arvore" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16" stroke-linecap="round"/></symbol>
+  <symbol id="i-busca" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4" stroke-linecap="round"/></symbol>
+  <symbol id="i-historico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2" stroke-linecap="round"/></symbol>
+  <symbol id="i-ajustes" viewBox="0 0 24 24"><path d="M5 7h14M5 12h14M5 17h14" stroke-linecap="round"/><circle cx="9" cy="7" r="2.2" fill="currentColor" stroke="none"/><circle cx="15" cy="12" r="2.2" fill="currentColor" stroke="none"/><circle cx="10" cy="17" r="2.2" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="i-comparar" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="7" rx="1.5"/><rect x="3" y="13" width="18" height="7" rx="1.5"/></symbol>
+  <symbol id="i-fechar" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" stroke-linecap="round"/></symbol>
+  <symbol id="i-antes" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-depois" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+</svg>
+
+<header class="topo">
+  <button id="btn-arvore" title="Livros e capítulos" aria-label="Livros e capítulos">
+    <svg class="icone"><use href="#i-arvore"/></svg>
+  </button>
+  <button class="ref" id="btn-ref">Carregando</button>
+  <button id="btn-versao" title="Trocar versão"><span class="sigla" id="sigla-versao">—</span></button>
+  <button id="btn-busca" title="Buscar" aria-label="Buscar">
+    <svg class="icone"><use href="#i-busca"/></svg>
+  </button>
+  <button id="btn-historico" title="Histórico" aria-label="Histórico">
+    <svg class="icone"><use href="#i-historico"/></svg>
+  </button>
+  <button id="btn-ajustes" title="Ajustes" aria-label="Ajustes">
+    <svg class="icone"><use href="#i-ajustes"/></svg>
+  </button>
+</header>
+
+<main class="folha" id="folha">
+  <div class="estado">Abrindo a Bíblia…</div>
+</main>
+
+<!-- comparação lado a lado -->
+<div class="comparador" id="comparador">
+  <div class="metade" id="metade-a"></div>
+  <div class="metade" id="metade-b"></div>
+</div>
+
+<footer class="rodape">
+  <button id="btn-antes"><svg class="icone"><use href="#i-antes"/></svg> Anterior</button>
+  <button class="meio" id="btn-comparar" title="Comparar duas versões">
+    <svg class="icone"><use href="#i-comparar"/></svg> Comparar
+  </button>
+  <button id="btn-depois">Próximo <svg class="icone"><use href="#i-depois"/></svg></button>
+</footer>
+
+<div class="veu" id="veu"></div>
+
+<!-- ------------------------------------------------------------- painéis -->
+
+<aside class="painel" id="painel-arvore" aria-hidden="true">
+  <header>
+    <h2 id="titulo-arvore">Livros</h2>
+    <button data-fechar aria-label="Fechar"><svg class="icone"><use href="#i-fechar"/></svg></button>
+  </header>
+  <div class="corpo" id="corpo-arvore"></div>
+</aside>
+
+<aside class="painel" id="painel-versao" aria-hidden="true">
+  <header>
+    <h2>Versão</h2>
+    <button data-fechar aria-label="Fechar"><svg class="icone"><use href="#i-fechar"/></svg></button>
+  </header>
+  <div class="corpo" id="corpo-versao"></div>
+</aside>
+
+<aside class="painel" id="painel-busca" aria-hidden="true">
+  <header>
+    <h2>Buscar</h2>
+    <button data-fechar aria-label="Fechar"><svg class="icone"><use href="#i-fechar"/></svg></button>
+  </header>
+  <div class="corpo">
+    <input class="campo" id="campo-busca" type="search" placeholder="Palavra ou expressão" autocomplete="off">
+    <div class="filtros" id="filtros-busca"></div>
+    <div id="resultados-busca">
+      <div class="estado">Digite para buscar no texto da versão aberta.<br>Use os filtros para estreitar por parte da Bíblia.</div>
+    </div>
+  </div>
+</aside>
+
+<aside class="painel" id="painel-historico" aria-hidden="true">
+  <header>
+    <h2>Histórico</h2>
+    <button data-fechar aria-label="Fechar"><svg class="icone"><use href="#i-fechar"/></svg></button>
+  </header>
+  <div class="corpo" id="corpo-historico"></div>
+</aside>
+
+<aside class="painel" id="painel-ajustes" aria-hidden="true">
+  <header>
+    <h2>Ajustes</h2>
+    <button data-fechar aria-label="Fechar"><svg class="icone"><use href="#i-fechar"/></svg></button>
+  </header>
+  <div class="corpo" id="corpo-ajustes"></div>
+</aside>
+
+<!-- tirinha: um versículo em várias versões, empilhadas -->
+<section class="tirinha" id="tirinha" aria-hidden="true">
+  <header>
+    <strong id="tirinha-ref">—</strong>
+    <button class="botao secundario" id="tirinha-marcar" style="margin-left:auto;padding:7px 12px;font-size:13px">Marcar</button>
+    <button data-fechar-tirinha aria-label="Fechar"><svg class="icone" style="stroke:var(--tinta)"><use href="#i-fechar"/></svg></button>
+  </header>
+  <div class="corpo" id="tirinha-corpo"></div>
+</section>
+
+<script src="assets/js/dados.js"></script>
+<script src="assets/js/armazenamento.js"></script>
+<script src="assets/js/leitura.js"></script>
+<script src="assets/js/busca.js"></script>
+<script src="assets/js/app.js"></script>
+</body>
+</html>

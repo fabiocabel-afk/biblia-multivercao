@@ -1,0 +1,18 @@
+{
+  "name": "Bíblia",
+  "short_name": "Bíblia",
+  "description": "Leitura e estudo bíblico com comparação de versões e histórico de pregações.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#ffffff",
+  "theme_color": "#201d19",
+  "lang": "pt-BR",
+  "dir": "ltr",
+  "icons": [
+    { "src": "assets/icons/icone-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "assets/icons/icone-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "assets/icons/icone-mascara.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
