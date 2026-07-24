@@ -51,6 +51,7 @@ const Prefs = {
     escuro: false,
     versoesTirinha: ['ACF', 'NVI', 'NTLH'],
     versaoComparar: 'NVI',
+    mostrarCategorias: true,   // painel de livros: com ou sem a camada do meio
   },
 
   todas() {
@@ -140,6 +141,41 @@ const Sessoes = {
     const lista = this.todas();
     const s = lista.find(x => x.id === id);
     if (s) { s.nome = nome; Guarda.gravar('sessoes', lista); }
+  },
+};
+
+/* ------------------------------------------------ ponto de leitura ("parei aqui")
+ *
+ * Diferente dos marcadores: e um so, nao tem cor propria e nao serve para
+ * guardar nada. E o dedo entre as paginas — a gente comeca a ler e esquece
+ * onde parou. Toque simples poe; toque simples no mesmo tira.
+ */
+
+const Ponto = {
+  atual() {
+    return Guarda.ler('ponto', null);
+  },
+
+  /** Este versiculo e o ponto? Confere tambem pela outra numeracao. */
+  eh(versificacao, code, cap, vers) {
+    const p = this.atual();
+    if (!p || p.code !== code || p.vers !== vers) return false;
+    if (p.versificacao === versificacao) return p.cap === cap;
+    const conv = Dados.converter(code, p.cap, p.versificacao, versificacao);
+    return conv.capitulo === cap;
+  },
+
+  /** Poe o ponto aqui. Se ja estava aqui, tira. Devolve true se ficou posto. */
+  alternar(versificacao, code, cap, vers) {
+    if (this.eh(versificacao, code, cap, vers)) {
+      Guarda.gravar('ponto', null);
+      return false;
+    }
+    Guarda.gravar('ponto', {
+      versificacao, code, cap, vers,
+      hora: new Date().toISOString(),
+    });
+    return true;
   },
 };
 

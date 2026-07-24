@@ -10,7 +10,11 @@ const Leitura = {
   /* ------------------------------------------------------ temperatura */
 
   /* A folha vai do branco ao sepia e a tinta acompanha, do preto ao marrom.
-     Interpola os dois extremos de uma Biblia nova e de uma envelhecida. */
+     Interpola os dois extremos de uma Biblia nova e de uma envelhecida.
+
+     As barras do topo e do rodape andam junto: com a folha branca elas ficam
+     quase pretas, e vao amarronzando conforme a folha esquenta. Se ficassem
+     presas no preto, brigariam com a folha sepia. */
   aplicarTemperatura(valor) {
     const t = Math.max(0, Math.min(100, valor)) / 100;
     const mistura = (a, b) => a.map((x, i) => Math.round(x + (b[i] - x) * t));
@@ -23,11 +27,24 @@ const Leitura = {
     const tinta = mistura([23, 20, 15], [74, 58, 36]);
     const fraca = mistura([109, 100, 89], [138, 116, 86]);
 
+    // as barras: preto quase neutro -> marrom escuro de couro
+    const cromo      = mistura([32, 29, 25],    [58, 43, 27]);
+    const cromoAlto  = mistura([43, 39, 33],    [76, 58, 38]);
+    const cromoTexto = mistura([232, 226, 214], [243, 231, 205]);
+    const cromoFraco = mistura([154, 145, 134], [180, 159, 128]);
+
     const r = document.documentElement.style;
     r.setProperty('--papel', rgb(papel));
     r.setProperty('--tinta', rgb(tinta));
     r.setProperty('--tinta-fraca', rgb(fraca));
-    document.querySelector('meta[name=theme-color]')?.setAttribute('content', '#201d19');
+    r.setProperty('--cromo', rgb(cromo));
+    r.setProperty('--cromo-alto', rgb(cromoAlto));
+    r.setProperty('--cromo-texto', rgb(cromoTexto));
+    r.setProperty('--cromo-fraco', rgb(cromoFraco));
+
+    // a barra do sistema operacional tambem acompanha
+    const hex = c => '#' + c.map(x => x.toString(16).padStart(2, '0')).join('');
+    document.querySelector('meta[name=theme-color]')?.setAttribute('content', hex(cromo));
   },
 
   aplicarFonte(px) {
@@ -37,8 +54,12 @@ const Leitura = {
   aplicarEscuro(ligado) {
     document.documentElement.dataset.escuro = ligado ? 'true' : 'false';
     if (!ligado) this.aplicarTemperatura(Prefs.get('temperatura'));
-    else ['--papel', '--tinta', '--tinta-fraca']
-      .forEach(p => document.documentElement.style.removeProperty(p));
+    else {
+      ['--papel', '--tinta', '--tinta-fraca',
+       '--cromo', '--cromo-alto', '--cromo-texto', '--cromo-fraco']
+        .forEach(p => document.documentElement.style.removeProperty(p));
+      document.querySelector('meta[name=theme-color]')?.setAttribute('content', '#0e0f11');
+    }
   },
 
   /* ---------------------------------------------------------- desenhar */
@@ -53,8 +74,10 @@ const Leitura = {
       const marcadorId = Marcadores.do(versificacao, livro.code, capitulo.number, v.number);
       const marcador = marcadorId ? Marcadores.de(marcadorId) : null;
 
+      const ehPonto = Ponto.eh(versificacao, livro.code, capitulo.number, v.number);
+
       const attrs = [
-        `class="v${v.text ? '' : ' vazio'}"`,
+        `class="v${v.text ? '' : ' vazio'}${ehPonto ? ' ponto' : ''}"`,
         `data-vers="${v.number}"`,
         marcador ? `data-marcador="${marcadorId}"` : '',
         marcador ? `style="--marca:${this.corMarca(marcador.cor)}"` : '',
@@ -83,6 +106,34 @@ const Leitura = {
     }
 
     return saida;
+  },
+
+  /* --------------------------------------------------- repintura na hora
+   *
+   * Trocar a cor de um versiculo nao pode depender de redesenhar o capitulo
+   * inteiro: o redesenho e assincrono e a cor so aparecia depois, quando outra
+   * coisa forcava a tela a se refazer. Aqui a marca entra no exato instante do
+   * toque, direto no elemento que ja esta na tela.
+   */
+  pintarMarca(vers, marcadorId) {
+    const marcador = marcadorId ? Marcadores.de(marcadorId) : null;
+    document.querySelectorAll(`.v[data-vers="${vers}"]`).forEach(el => {
+      if (marcador) {
+        el.dataset.marcador = marcadorId;
+        el.style.setProperty('--marca', this.corMarca(marcador.cor));
+      } else {
+        delete el.dataset.marcador;
+        el.style.removeProperty('--marca');
+      }
+    });
+  },
+
+  /** Idem para o ponto de leitura: entra e sai na hora do toque. */
+  pintarPonto(vers, posto) {
+    document.querySelectorAll('.v.ponto').forEach(el => el.classList.remove('ponto'));
+    if (!posto) return;
+    document.querySelectorAll(`.v[data-vers="${vers}"]`)
+      .forEach(el => el.classList.add('ponto'));
   },
 
   /** Teto de transparencia: a marca colore sem nunca apagar a leitura. */
