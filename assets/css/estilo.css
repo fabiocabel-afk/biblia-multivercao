@@ -1957,3 +1957,40 @@ body.com-refs-fixas .painel-refs-fixas {
 
 /* com as referências fixas ligadas, sobe acima do painel de baixo */
 body.com-refs-fixas .voltar-origem { bottom: calc(42vh + 14px); z-index: 32; }
+
+/* =============================== compartilhar ===================== */
+
+.qr-caixa {
+  display: flex;
+  justify-content: center;
+  padding: 20px;
+  margin: 0 auto 18px;
+  max-width: 280px;
+  background: color-mix(in srgb, var(--tinta) 3%, var(--papel));
+  border: 1px solid color-mix(in srgb, var(--tinta) 12%, transparent);
+  border-radius: var(--raio);
+  /* o QR herda esta cor (currentColor), acompanhando o tema */
+  color: var(--tinta);
+}
+
+.qr-caixa svg { width: 100%; height: auto; max-width: 240px; display: block; }
+
+.link-caixa {
+  display: flex;
+  align-items: center;
+  padding: 12px 14px;
+  border-radius: var(--raio);
+  background: color-mix(in srgb, var(--tinta) 6%, transparent);
+  margin-bottom: 14px;
+}
+
+.link-texto {
+  font-family: var(--fonte-sigla);
+  font-size: 13px;
+  color: var(--tinta);
+  word-break: break-all;
+  line-height: 1.4;
+}
+
+.acoes-compartilhar { display: flex; gap: 10px; }
+.acoes-compartilhar .botao { flex: 1; }

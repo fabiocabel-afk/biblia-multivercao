@@ -1088,6 +1088,64 @@ const App = {
       <div class="dentro ${aberta ? '' : 'fechada'}">${conteudo}</div>`;
   },
 
+  /* O app é um site — dá para instalar e compartilhar por um link. Aqui ficam o
+   * QR code (que se adapta ao tema, por herdar a cor do texto) e o endereço,
+   * com atalhos para copiar ou usar o compartilhamento do próprio aparelho. */
+  LINK_APP: 'https://fabiocabel-afk.github.io/biblia-multivercao/',
+
+  async desenharCompartilhar() {
+    const corpo = document.getElementById('corpo-compartilhar');
+    const link = this.LINK_APP;
+
+    let qr = '';
+    try {
+      qr = await fetch('assets/img/qrcode.svg').then(r => r.ok ? r.text() : '');
+    } catch { qr = ''; }
+
+    corpo.innerHTML = `
+      <p class="contagem" style="margin-bottom:16px">Aponte a câmera para o código
+      ou compartilhe o link. O app abre no navegador e pode ser instalado como
+      um aplicativo.</p>
+
+      <div class="qr-caixa">${qr || '<div class="estado">Código indisponível</div>'}</div>
+
+      <div class="link-caixa">
+        <span class="link-texto" id="link-app">${link}</span>
+      </div>
+
+      <div class="acoes-compartilhar">
+        <button class="botao secundario" id="copiar-link">Copiar link</button>
+        <button class="botao" id="enviar-link">Compartilhar…</button>
+      </div>`;
+
+    document.getElementById('copiar-link').onclick = async () => {
+      try {
+        await navigator.clipboard.writeText(link);
+        this.avisoRapido('Link copiado');
+      } catch {
+        this.avisoRapido('Não foi possível copiar');
+      }
+    };
+
+    const enviar = document.getElementById('enviar-link');
+    // o botão de compartilhar nativo só faz sentido onde o aparelho o oferece
+    if (navigator.share) {
+      enviar.onclick = async () => {
+        try {
+          await navigator.share({
+            title: 'Bíblia multiversão',
+            text: 'Bíblia para leitura e estudo, com várias versões e referências cruzadas.',
+            url: link,
+          });
+        } catch { /* a pessoa cancelou; sem problema */ }
+      };
+    } else {
+      // sem compartilhamento nativo, o botão vira um "copiar" também
+      enviar.textContent = 'Copiar link';
+      enviar.onclick = () => document.getElementById('copiar-link').click();
+    }
+  },
+
   desenharAjustes() {
     const corpo = document.getElementById('corpo-ajustes');
     const p = Prefs.todas();
@@ -1695,6 +1753,7 @@ const App = {
       marcadores: () => { this.desenharMarcadores(); this.abrir('painel-marcadores'); },
       estudos: () => { this.desenharEstudos(); this.abrir('painel-estudos'); },
       ajustes: () => { this.desenharAjustes(); this.abrir('painel-ajustes'); },
+      compartilhar: () => { this.desenharCompartilhar(); this.abrir('painel-compartilhar'); },
     };
 
     const fecharMenu = () => {

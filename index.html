@@ -23,6 +23,7 @@
   <symbol id="i-livro" viewBox="0 0 24 24"><path d="M4 5a2 2 0 0 1 2-2h13v18H6a2 2 0 0 1-2-2z"/><path d="M9 3v18" stroke-linecap="round"/></symbol>
   <symbol id="i-estudo" viewBox="0 0 24 24"><path d="M12 4L2 9l10 5 8-4v6" stroke-linejoin="round" stroke-linecap="round"/><path d="M6 12v4c0 1.1 2.7 2.5 6 2.5s6-1.4 6-2.5v-4" stroke-linejoin="round" stroke-linecap="round"/></symbol>
   <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16" stroke-linecap="round"/></symbol>
+  <symbol id="i-compartilhar" viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4" stroke-linecap="round"/></symbol>
   <symbol id="i-fixar" viewBox="0 0 24 24"><path d="M9 3h6l-1 7 3 3v2H7v-2l3-3z" stroke-linejoin="round"/><path d="M12 15v6" stroke-linecap="round"/></symbol>
   <symbol id="i-fechar" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" stroke-linecap="round"/></symbol>
   <symbol id="i-antes" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7" stroke-linecap="round" stroke-linejoin="round"/></symbol>
@@ -50,6 +51,7 @@
   <button data-menu="marcadores"><svg class="icone"><use href="#i-marcador"/></svg><span>Marcadores</span></button>
   <button data-menu="estudos"><svg class="icone"><use href="#i-estudo"/></svg><span>Estudos</span></button>
   <button data-menu="ajustes"><svg class="icone"><use href="#i-ajustes"/></svg><span>Ajustes</span></button>
+  <button data-menu="compartilhar"><svg class="icone"><use href="#i-compartilhar"/></svg><span>Compartilhar</span></button>
 </div>
 
 <main class="folha" id="folha">
@@ -174,6 +176,14 @@
     <button data-fechar aria-label="Fechar"><svg class="icone"><use href="#i-fechar"/></svg></button>
   </header>
   <div class="corpo" id="corpo-ajustes"></div>
+</aside>
+
+<aside class="painel" id="painel-compartilhar" aria-hidden="true">
+  <header>
+    <h2>Compartilhar</h2>
+    <button data-fechar aria-label="Fechar"><svg class="icone"><use href="#i-fechar"/></svg></button>
+  </header>
+  <div class="corpo" id="corpo-compartilhar"></div>
 </aside>
 
 <!-- tirinha: um versículo em várias versões, empilhadas -->
