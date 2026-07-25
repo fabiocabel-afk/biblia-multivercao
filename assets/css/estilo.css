@@ -698,7 +698,7 @@ button {
 
 .tirinha > header strong { font-size: 15px; }
 
-.tirinha .corpo { overflow-y: auto; padding: 4px 18px 24px; }
+.tirinha .corpo { overflow-y: auto; padding: 4px 18px calc(var(--barra) + 20px); }
 
 .fita {
   padding: 14px 0;
@@ -790,8 +790,10 @@ body.comparando .folha { display: none; }
 .comparador {
   display: none;
   position: fixed;
-  inset: var(--barra) 0 var(--barra) 0;
+  inset: var(--barra) 0 0 0;
   flex-direction: column;
+  z-index: 55;
+  background: var(--papel);
 }
 
 body.comparando .comparador { display: flex; }
@@ -1809,3 +1811,119 @@ body.com-refs-fixas .painel-refs-fixas {
   margin-right: 6px;
   flex: none;
 }
+
+/* ==================== atalho para o fixado, na barra do topo ======= */
+
+.atalho-fixado {
+  flex: none;
+  color: var(--cromo-texto);
+}
+
+.atalho-fixado .icone { stroke: var(--rubrica); width: 20px; height: 20px; }
+.atalho-fixado[hidden] { display: none; }
+
+/* ==================== reordenar fixados ============================ */
+
+.ordem-fixado {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  flex: none;
+}
+
+.mini-seta {
+  font-size: 9px;
+  line-height: 1;
+  padding: 2px 4px;
+  color: var(--tinta-fraca);
+  border-radius: 3px;
+}
+
+.mini-seta:hover:not(:disabled) { background: color-mix(in srgb, var(--tinta) 10%, transparent); color: var(--tinta); }
+.mini-seta:disabled { opacity: .25; }
+
+/* botão de fechar a comparação, já que ela cobre o rodapé */
+.fechar-comparar {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 5;
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--papel) 90%, var(--tinta));
+  box-shadow: 0 1px 6px rgb(0 0 0 / .2);
+}
+.fechar-comparar .icone { stroke: var(--tinta); width: 18px; height: 18px; }
+
+/* ==================== tirinha alta (leitura de referência) ========= */
+
+.tirinha.alta { max-height: 88vh; height: 88vh; }
+.tirinha.alta .texto-ref { max-height: none; }
+
+/* contagem de referências ao lado do título */
+.conta-refs {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--tinta-fraca);
+  font-family: var(--fonte-ui);
+  margin-left: 6px;
+}
+
+/* ==================== referências em linhas ======================== */
+
+.lista-refs-linhas { display: flex; flex-direction: column; gap: 2px; }
+
+.ref-linha {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 100%;
+  text-align: left;
+  padding: 11px 12px;
+  border-radius: var(--raio);
+  border-bottom: 1px solid color-mix(in srgb, var(--tinta) 8%, transparent);
+}
+
+.ref-linha:hover { background: color-mix(in srgb, var(--rubrica) 7%, transparent); }
+
+.ref-cabeca { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.ref-linha .ref-alvo { font-weight: 600; font-size: 14.5px; color: var(--tinta); }
+
+.ref-linha .ref-votos {
+  font-family: var(--fonte-sigla);
+  font-size: 11px;
+  color: var(--tinta-fraca);
+  flex: none;
+}
+
+/* o começo do texto da referência: fonte menor, sem negrito */
+.ref-linha .ref-trecho {
+  font-family: var(--fonte-texto);
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--tinta-fraca);
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.ref-linha.contestada { opacity: .55; }
+
+/* botões de voltar / ir, lado a lado */
+.acoes-ref {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  position: sticky;
+  bottom: 0;
+  background: var(--papel);
+  padding-top: 8px;
+}
+.acoes-ref .botao { flex: 1; }
+.acoes-ref .botao.secundario { flex: 0 0 38%; }

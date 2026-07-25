@@ -31,15 +31,10 @@ const App = {
     Leitura.aplicarModoVersiculo(p.versiculoPorLinha);
     this.aplicarRefsFixas(p.refsFixas);
 
-    // retoma de onde parou: o livro fixado tem prioridade; senão, o último
-    // lugar visitado no histórico
-    const fix = Historico.fixado();
+    // retoma sempre do último lugar visitado — é onde a pessoa parou de fato.
+    // Os fixados são atalhos que ela aciona quando quiser, não o ponto de abertura.
     const ultimo = Historico.lista()[0];
-    if (fix && Dados.versao(fix.versao) && Dados.temLivro(fix.versao, fix.code)) {
-      this.versao = fix.versao;
-      this.code = fix.code;
-      this.cap = fix.cap || 1;
-    } else if (ultimo && Dados.versao(ultimo.versao)) {
+    if (ultimo && Dados.versao(ultimo.versao)) {
       this.versao = ultimo.versao;
       this.code = ultimo.code;
       this.cap = ultimo.cap;
@@ -170,6 +165,7 @@ const App = {
   },
 
   atualizarBarra() {
+    this.atualizarAtalhoFixado();
     document.getElementById('btn-ref').textContent =
       Dados.referencia(this.versao, this.code, this.cap);
     document.getElementById('sigla-versao').textContent = this.versao;
@@ -247,8 +243,12 @@ const App = {
   },
 
   fecharTirinha() {
-    document.getElementById('tirinha').classList.remove('aberta');
-    document.getElementById('tirinha').setAttribute('aria-hidden', 'true');
+    const t = document.getElementById('tirinha');
+    t.classList.remove('aberta', 'alta');
+    t.setAttribute('aria-hidden', 'true');
+    // restaura o título original, tirando a contagem de referências que fica ao lado
+    const cab = document.getElementById('tirinha-ref');
+    if (cab.dataset.base) { cab.textContent = cab.dataset.base; delete cab.dataset.base; }
   },
 
   /* =============================================================== árvore */
@@ -624,30 +624,56 @@ const App = {
    * alto fica o livro fixado, quando há um — o alfinete que acompanha o avanço.
    */
 
+  /* O atalho no topo leva ao primeiro fixado. Só aparece quando você está em
+   * OUTRO livro — não faz sentido oferecer "voltar" se você já está nele. */
+  atualizarAtalhoFixado() {
+    const btn = document.getElementById('btn-atalho-fixado');
+    if (!btn) return;
+    const primeiro = Historico.primeiroFixado();
+    const mostrar = primeiro && primeiro.code !== this.code;
+    btn.hidden = !mostrar;
+  },
+
+  irParaPrimeiroFixado() {
+    const f = Historico.primeiroFixado();
+    if (!f) return;
+    if (f.versao !== this.versao) { this.versao = f.versao; Prefs.set('versao', f.versao); }
+    this.ir(f.code, f.cap || 1, f.vers);
+  },
+
   desenharHistorico() {
     const corpo = document.getElementById('corpo-historico');
     const lista = Historico.lista();
-    const fix = Historico.fixado();
+    const fixados = Historico.fixados();
 
     const partes = [];
 
-    // ---- o livro fixado
-    if (fix) {
-      const ref = `${Dados.nomeCurto(fix.versao, fix.code)} ${fix.cap || 1}` +
-        (fix.vers ? ':' + fix.vers : '');
-      partes.push(`<div class="grupo">
-        <h3>Livro fixado</h3>
-        <div class="fixado-linha">
-          <button class="linha ativa" id="ir-fixado" style="flex:1">
+    // ---- os livros fixados (vários, na ordem escolhida)
+    if (fixados.length) {
+      const linhas = fixados.map((f, i) => {
+        const ref = `${Dados.nomeCurto(f.versao, f.code)} ${f.cap || 1}` +
+          (f.vers ? ':' + f.vers : '');
+        return `<div class="fixado-linha">
+          <div class="ordem-fixado">
+            <button class="mini-seta" data-sobe="${f.code}" ${i === 0 ? 'disabled' : ''}
+              aria-label="Subir">▲</button>
+            <button class="mini-seta" data-desce="${f.code}" ${i === fixados.length - 1 ? 'disabled' : ''}
+              aria-label="Descer">▼</button>
+          </div>
+          <button class="linha ativa ir-fixado" data-ir-fixado="${f.code}" style="flex:1">
             <svg class="icone" style="width:16px;height:16px;stroke:var(--rubrica)"><use href="#i-fixar"/></svg>
             <span>${ref}</span>
-            <span class="sub">${fix.versao}</span>
+            <span class="sub">${f.versao}</span>
           </button>
-          <button class="xis" id="desfixar" aria-label="Desafixar" title="Desafixar">
+          <button class="xis" data-desfixar="${f.code}" aria-label="Desafixar" title="Desafixar">
             <svg class="icone"><use href="#i-fechar"/></svg></button>
-        </div>
-        <p class="contagem">O ponto avança conforme você lê — sempre o versículo
-        mais adiantado que você alcançou neste livro.</p>
+        </div>`;
+      }).join('');
+      partes.push(`<div class="grupo">
+        <h3>Fixados</h3>
+        ${linhas}
+        <p class="contagem">Cada fixado retoma de onde você parou naquele livro.
+        Use as setas para reordenar; o atalho no topo leva ao primeiro.</p>
       </div>`);
     }
 
@@ -659,7 +685,7 @@ const App = {
       partes.push(lista.map((it, i) => {
         const ref = `${Dados.nomeCurto(it.versao, it.code)} ${it.cap}` +
           (it.vers ? ':' + it.vers : '');
-        const fixavel = !fix || fix.code !== it.code;
+        const fixavel = !Historico.ehFixado(it.code);
         return `<div class="hist-linha">
           <button class="item-hist" data-i="${i}">
             <span class="ref-hist">${ref}</span>
@@ -679,15 +705,41 @@ const App = {
 
     corpo.innerHTML = partes.join('');
 
-    const irFix = document.getElementById('ir-fixado');
-    if (irFix) irFix.onclick = () => {
-      this.fecharPaineis();
-      if (fix.versao !== this.versao) { this.versao = fix.versao; Prefs.set('versao', fix.versao); }
-      this.ir(fix.code, fix.cap || 1, fix.vers);
-    };
+    corpo.querySelectorAll('[data-ir-fixado]').forEach(el => {
+      el.onclick = () => {
+        const f = Historico.fixados().find(x => x.code === el.dataset.irFixado);
+        this.fecharPaineis();
+        if (f.versao !== this.versao) { this.versao = f.versao; Prefs.set('versao', f.versao); }
+        this.ir(f.code, f.cap || 1, f.vers);
+      };
+    });
 
-    const desf = document.getElementById('desfixar');
-    if (desf) desf.onclick = () => { Historico.desfixar(); this.desenharHistorico(); };
+    corpo.querySelectorAll('[data-desfixar]').forEach(el => {
+      el.onclick = e => {
+        e.stopPropagation();
+        Historico.desfixar(el.dataset.desfixar);
+        this.desenharHistorico();
+        this.atualizarAtalhoFixado();
+      };
+    });
+
+    corpo.querySelectorAll('[data-sobe]').forEach(el => {
+      el.onclick = e => {
+        e.stopPropagation();
+        Historico.moverFixado(el.dataset.sobe, -1);
+        this.desenharHistorico();
+        this.atualizarAtalhoFixado();
+      };
+    });
+
+    corpo.querySelectorAll('[data-desce]').forEach(el => {
+      el.onclick = e => {
+        e.stopPropagation();
+        Historico.moverFixado(el.dataset.desce, 1);
+        this.desenharHistorico();
+        this.atualizarAtalhoFixado();
+      };
+    });
 
     corpo.querySelectorAll('[data-i]').forEach(el => {
       el.onclick = () => {
@@ -712,6 +764,7 @@ const App = {
         const it = Historico.lista()[+el.dataset.fixar];
         Historico.fixar(it.versao, it.code, it.cap, it.vers);
         this.desenharHistorico();
+        this.atualizarAtalhoFixado();
       };
     });
   },
@@ -1289,9 +1342,9 @@ const App = {
        <span class="sel-conta">${n} versículo${n > 1 ? 's' : ''}</span>`;
 
     // o ponto onde a pessoa está de fato lendo é o versículo que ela seleciona;
-    // é ele que atualiza o histórico e faz o alfinete avançar no livro fixado
+    // ele atualiza o histórico e acompanha a posição no livro fixado
     const ultimoVers = sel.pedacos[sel.pedacos.length - 1].vers;
-    Historico.avancarFixado({ code: this.code, cap: this.cap, vers: ultimoVers });
+    Historico.acompanharFixado({ code: this.code, cap: this.cap, vers: ultimoVers });
 
     barra.classList.add('aberta');
     barra.setAttribute('aria-hidden', 'false');
@@ -1611,6 +1664,9 @@ const App = {
       menu.setAttribute('aria-hidden', aberto ? 'false' : 'true');
     };
 
+    q('btn-atalho-fixado').onclick = () => this.irParaPrimeiroFixado();
+    q('fechar-comparar').onclick = () => this.alternarComparacao();
+
     menu.querySelectorAll('[data-menu]').forEach(el => {
       el.onclick = () => { fecharMenu(); abrirItem[el.dataset.menu](); };
     });
@@ -1876,6 +1932,10 @@ const App = {
     document.getElementById('tirinha-marcar').style.display =
       aba === 'versoes' ? '' : 'none';
     if (aba === 'versoes') {
+      const t = document.getElementById('tirinha');
+      t.classList.remove('alta');
+      const cab = document.getElementById('tirinha-ref');
+      if (cab.dataset.base) { cab.textContent = cab.dataset.base; delete cab.dataset.base; }
       Leitura.tirinha(this.code, this.cap, this.destaque, this.versao);
     } else {
       this.desenharReferencias();
@@ -1887,7 +1947,11 @@ const App = {
    * fraca. */
   async desenharReferencias() {
     const corpo = document.getElementById('tirinha-corpo');
+    const cabecalho = document.getElementById('tirinha-ref');
     corpo.innerHTML = '<div class="estado">Buscando referências…</div>';
+
+    // a tirinha volta à altura normal quando mostra a lista
+    document.getElementById('tirinha').classList.remove('alta');
 
     const todas = await Dados.referenciasDe(this.versao, this.code, this.cap, this.destaque);
 
@@ -1898,21 +1962,26 @@ const App = {
       return;
     }
 
+    // a quantidade aparece ao lado do título, no cabeçalho da tirinha
+    const refOriginal = cabecalho.dataset.base || cabecalho.textContent;
+    cabecalho.dataset.base = refOriginal;
+    cabecalho.innerHTML = `${refOriginal} <span class="conta-refs">${todas.length} referência${todas.length > 1 ? 's' : ''}</span>`;
+
     const linha = r => {
       const ate = r.vFim !== r.vIni ? `-${r.vFim}` : '';
       const nome = Dados.nomeCurto(this.versao, r.code);
       const contestada = r.votos < 0 ? ' contestada' : '';
-      return `<button class="ref-cruzada${contestada}"
+      return `<button class="ref-linha${contestada}"
           data-ref="${r.code}|${r.cap}|${r.vIni}|${r.vFim}">
-        <span class="ref-alvo">${nome} ${r.cap}:${r.vIni}${ate}</span>
-        <span class="ref-votos" title="força da conexão">${r.votos}</span>
+        <span class="ref-cabeca">
+          <span class="ref-alvo">${nome} ${r.cap}:${r.vIni}${ate}</span>
+          <span class="ref-votos">${r.votos}</span>
+        </span>
+        <span class="ref-trecho" data-trecho="${r.code}|${r.cap}|${r.vIni}">…</span>
       </button>`;
     };
 
-    corpo.innerHTML = `
-      <p class="contagem" style="margin-bottom:10px">${todas.length}
-        referência${todas.length > 1 ? 's' : ''}, da mais forte para a mais fraca.</p>
-      <div class="lista-refs">${todas.map(linha).join('')}</div>`;
+    corpo.innerHTML = `<div class="lista-refs-linhas">${todas.map(linha).join('')}</div>`;
 
     corpo.querySelectorAll('[data-ref]').forEach(el => {
       el.onclick = () => {
@@ -1920,6 +1989,42 @@ const App = {
         this.abrirTextoDaReferencia(code, +cap, +vIni, +vFim);
       };
     });
+
+    // preenche os trechos aos poucos, sem travar a lista
+    this.preencherTrechosRefs(corpo);
+  },
+
+  /* Busca o começo do texto de cada referência e preenche a linha. Em paralelo,
+   * mas agrupado por capítulo para não recarregar o mesmo várias vezes. */
+  async preencherTrechosRefs(corpo) {
+    const alvos = [...corpo.querySelectorAll('[data-trecho]')];
+    const porCapitulo = new Map();
+    for (const el of alvos) {
+      const [code, cap] = el.dataset.trecho.split('|');
+      const chave = `${code}|${cap}`;
+      if (!porCapitulo.has(chave)) porCapitulo.set(chave, []);
+      porCapitulo.get(chave).push(el);
+    }
+
+    for (const [chave, els] of porCapitulo) {
+      const [code, capProt] = chave.split('|');
+      let capLocal = +capProt;
+      if (Dados.versificacaoDe(this.versao) === 'vulgata') {
+        capLocal = Dados.converter(code, +capProt, 'hebraica', 'vulgata').capitulo;
+      }
+      try {
+        const r = await Dados.capitulo(this.versao, code, capLocal);
+        if (!r) { els.forEach(e => e.textContent = ''); continue; }
+        for (const el of els) {
+          const vers = +el.dataset.trecho.split('|')[2];
+          const v = r.capitulo.verses.find(x => x.number === vers);
+          const t = v && v.text ? v.text : '';
+          el.textContent = t.length > 90 ? t.slice(0, 90) + '…' : t;
+        }
+      } catch {
+        els.forEach(e => e.textContent = '');
+      }
+    }
   },
 
   /* Ao tocar numa referência, o texto dela aparece aqui mesmo, sem sair do
@@ -1929,7 +2034,9 @@ const App = {
     const corpo = document.getElementById('tirinha-corpo');
     corpo.innerHTML = '<div class="estado">Abrindo o texto…</div>';
 
-    // a referência vem em numeração protestante; converte se a versão for Vulgata
+    // ao abrir o texto, a tirinha cresce para caber a leitura (cerca de 75%)
+    document.getElementById('tirinha').classList.add('alta');
+
     let capLocal = cap;
     if (Dados.versificacaoDe(this.versao) === 'vulgata') {
       capLocal = Dados.converter(code, cap, 'hebraica', 'vulgata').capitulo;
@@ -1941,8 +2048,7 @@ const App = {
       const r = await Dados.capitulo(this.versao, code, capLocal);
       if (r) {
         nomeLivro = r.livro.name;
-        // mostra desde o versículo inicial até uns 6 além do fim, para dar contexto
-        const ate = vFim + 6;
+        const ate = vFim + 8;
         versos = r.capitulo.verses.filter(v => v.number >= vIni && v.number <= ate);
       }
     } catch { /* livro ausente nesta versão */ }
@@ -1956,14 +2062,15 @@ const App = {
         }).join('')
       : '<div class="estado">Texto não disponível nesta versão.</div>';
 
+    // botões lado a lado; o "ir" usa nome curto, que cabe em livros de nome longo
+    const nomeCurto = Dados.nomeCurto(this.versao, code);
     corpo.innerHTML = `
-      <div class="cabeca-ref-texto">
-        <button class="voltar-etapa" id="voltar-refs">← Referências</button>
-        <strong>${ref}</strong>
-      </div>
+      <div class="cabeca-ref-texto"><strong>${ref}</strong></div>
       <div class="texto-ref">${corpoTexto}</div>
-      <button class="botao" id="ir-ref-cap" style="width:100%;margin-top:10px">
-        Ir para ${nomeLivro} ${capLocal}</button>`;
+      <div class="acoes-ref">
+        <button class="botao secundario" id="voltar-refs">← Voltar</button>
+        <button class="botao" id="ir-ref-cap">Ir para ${nomeCurto} ${capLocal}</button>
+      </div>`;
 
     document.getElementById('voltar-refs').onclick = () => this.desenharReferencias();
     document.getElementById('ir-ref-cap').onclick = () => {

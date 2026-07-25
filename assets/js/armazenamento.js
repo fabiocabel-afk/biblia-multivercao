@@ -101,7 +101,7 @@ const Historico = {
       trecho: (trecho || '').slice(0, 90), hora: new Date().toISOString() });
     if (lista.length > this.LIMITE) lista = lista.slice(0, this.LIMITE);
     Guarda.gravar('historico', lista);
-    this.avancarFixado({ code, cap, vers });
+    this.acompanharFixado({ code, cap, vers });
   },
 
   remover(indice) {
@@ -114,34 +114,71 @@ const Historico = {
     Guarda.gravar('historico', []);
   },
 
-  /* ------------------------------------------------------ livro fixado */
+  /* ------------------------------------------------------ livros fixados
+   *
+   * Alfinetes nos livros que a pessoa esta pregando ou estudando a fundo. Ao
+   * contrario do historico (que envelhece com os 120), eles ficam ate a pessoa
+   * tira-los. Pode haver varios — o estudo costuma cruzar livros — e a ordem e
+   * livre: o novo entra no fim, e a pessoa reordena como quiser.
+   *
+   * Cada fixado ACOMPANHA a ultima posicao lida naquele livro. Se voce fixou
+   * Genesis 5, leu ate Genesis 29 e saiu, ao voltar pelo atalho cai em Genesis
+   * 29 — de onde parou, nao de onde fixou. Vale para qualquer forma de navegar:
+   * tocar num versiculo, arrastar, "proxima pagina".
+   */
+  fixados() {
+    const bruto = Guarda.ler('fixados', null);
+    if (bruto) return bruto;
+    // migra do formato antigo (um so fixado) se existir
+    const velho = Guarda.ler('fixado', null);
+    if (velho) {
+      const lista = [{ ...velho, id: 'f' + Date.now() }];
+      Guarda.gravar('fixados', lista);
+      return lista;
+    }
+    return [];
+  },
 
-  fixado() {
-    return Guarda.ler('fixado', null);
+  ehFixado(code) {
+    return this.fixados().some(f => f.code === code);
   },
 
   fixar(versao, code, cap, vers) {
-    Guarda.gravar('fixado', { versao, code, cap: cap || 1, vers: vers || null });
+    const lista = this.fixados();
+    if (lista.some(f => f.code === code)) return;   // um por livro
+    lista.push({ id: 'f' + Date.now(), versao, code, cap: cap || 1, vers: vers || null });
+    Guarda.gravar('fixados', lista);
   },
 
-  desfixar() {
-    Guarda.gravar('fixado', null);
+  desfixar(code) {
+    Guarda.gravar('fixados', this.fixados().filter(f => f.code !== code));
   },
 
-  /* O alfinete acompanha o avanco no livro: ao progredir, guarda o ponto mais
-     adiantado ja alcancado. Nunca recua sozinho — se a pessoa volta atras para
-     reler, o alfinete continua marcando onde ela tinha chegado. O avanco se
-     baseia no versiculo selecionado, nao apenas no capitulo aberto. */
-  avancarFixado({ code, cap, vers }) {
-    const f = this.fixado();
-    if (!f || f.code !== code) return;
-    const capAtual = f.cap || 0;
-    const versAtual = f.vers || 0;
-    if (cap > capAtual || (cap === capAtual && (vers || 0) > versAtual)) {
-      f.cap = cap;
-      f.vers = vers || f.vers;
-      Guarda.gravar('fixado', f);
-    }
+  /** Move um fixado para outra posicao (reordenar). */
+  moverFixado(code, direcao) {
+    const lista = this.fixados();
+    const i = lista.findIndex(f => f.code === code);
+    const j = i + direcao;
+    if (i < 0 || j < 0 || j >= lista.length) return;
+    [lista[i], lista[j]] = [lista[j], lista[i]];
+    Guarda.gravar('fixados', lista);
+  },
+
+  /** O primeiro fixado — alvo do atalho no topo. */
+  primeiroFixado() {
+    return this.fixados()[0] || null;
+  },
+
+  /* Acompanha a posicao dentro de cada livro fixado. Diferente do antigo, este
+     SEGUE onde a pessoa esta — inclusive recuando, se ela voltou para reler.
+     A ideia e "onde parei neste livro", para retomar de la. */
+  acompanharFixado({ code, cap, vers }) {
+    const lista = this.fixados();
+    const f = lista.find(x => x.code === code);
+    if (!f) return;
+    f.cap = cap;
+    f.vers = vers || null;
+    Guarda.gravar('fixados', lista);
   },
 };
 

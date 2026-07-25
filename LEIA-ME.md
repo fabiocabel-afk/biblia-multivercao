@@ -1,77 +1,58 @@
-# O que mudou — bugs, seletor de versículo, referências e ajustes
+# O que mudou — fixados múltiplos, camadas e referências em linhas
 
-Uma leva grande, 12 itens. A pasta data continua intocada — SÓ o app muda.
-
-## Como trocar
-
-Apague index.html, sw.js, manifest.json, teste.js e a pasta assets. Copie os
-novos. Ctrl + Shift + R uma vez ao abrir.
+A pasta data continua intocada — só o app muda. Apague index.html, sw.js,
+manifest.json, teste.js e a pasta assets, copie os novos, e dê Ctrl+Shift+R uma
+vez ao abrir.
 
 ---
 
 ## Bugs corrigidos
 
-**A marcação que não saía.** Quando você abria um versículo por toque duplo e
-depois tocava em outro, o realce do primeiro ficava preso. Agora o toque simples
-limpa esse realce.
+**O fixado agora acompanha onde você parou.** Antes ele guardava só o ponto mais
+avançado e nunca seguia sua posição de volta — você fixava Gênesis 5, ia até o 29,
+mas ao voltar caía no 5. Agora ele acompanha sua última posição no livro, valendo
+para qualquer forma de navegar: tocar num versículo, arrastar, ou "próxima página".
+Você retoma exatamente de onde parou.
 
-**Modo "um por linha".** A margem esquerda estava grande demais e o número ficava
-pendurado para fora. Agora as margens são iguais dos dois lados e o número abre a
-linha junto do texto, sem sair para fora — só ganha destaque quando você
-seleciona o versículo. E a barra lateral do "onde parei" não cai mais em cima do
-número.
+**Os botões não ficam mais atrás da barra inferior.** O "ir para o capítulo" da
+referência agora reserva espaço e para acima do rodapé. E o **comparar** passou
+para a frente da barra — como a ideia dele é uma comparação rápida, ele cobre o
+rodapé e ganhou um botão próprio de fechar (o X no canto).
 
-## Seletor de livro, agora com versículo
+## Fixados: agora vários, reordenáveis
 
-Depois de escolher o livro e o capítulo, aparece a grade de versículos daquele
-capítulo. Serve para registrar de onde você parte — muitos capítulos têm dezenas
-de versículos e quase sempre você já tem um em mente.
+Dá para fixar mais de um livro — o estudo quase sempre cruza livros. O novo entra
+embaixo, e você reordena com as setas ▲▼. Cada um fica no Histórico, na seção
+**Fixados** no topo, com o botão de desfixar. Continuam fixos até você tirá-los.
 
-O primeiro toque leva até o versículo, com o efeito de "parei aqui", e cria o
-registro. Tocando em outros abaixo, o registro se estende até o maior: se você
-toca no 5, depois no 6, pula o 7 e toca no 13, o registro fica de 5 a 13.
+**Atalho no topo.** À esquerda da sigla da tradução apareceu um ícone de alfinete:
+é um retorno rápido para o primeiro fixado. Ele só aparece quando você está em
+outro livro — some quando você já está nele.
 
-## Referências
+## Referências: nova apresentação
 
-**Sumiu o deslizador de filtro** — estava atrapalhando.
-
-**Texto embutido.** Ao tocar numa referência, o texto dela aparece ali dentro
-mesmo, com o versículo apontado em destaque e alguns a mais de contexto. Você rola
-e lê sem sair do livro. Um botão "Ir para o capítulo" leva até lá se quiser; senão,
-"← Referências" volta à lista. O painel ficou mais alto para caber a leitura.
-
-**Referências fixas (novo, nos Ajustes).** Ligando essa opção, a tela se divide:
-o texto em cima (maior) e as referências embaixo. Sem versículo selecionado,
-mostra as do capítulo inteiro (cada uma marcada com o versículo de origem); ao
-tocar num versículo, filtra pelas dele. Tocar numa referência abre o texto
-embaixo, com volta — igual ao de cima. Vem desligada por padrão, mas fica salva
-se você ligar.
-
-## Ajustes
-
-- "Folha" agora se chama **Página**.
-- A escolha "corrido / um por linha" virou **botão redondo** de seleção única.
-- O painel **abre sempre com tudo fechado**.
-- A seção aberta ganhou um **fundo levemente diferente** no título, para não se
-  confundir com o conteúdo — antes os itens de baixo pareciam estar dentro dela.
-
-## Padrões iniciais
-
-- Temperatura do papel começa em **50%**.
-- A fonte fica como está.
-- A exibição começa em **corrido**.
-
-## Leitura
-
-O **nome do livro** aparece grande e em negrito **só no primeiro capítulo**, para
-dar aquela impressão de abertura de livro numa Bíblia física. Nos demais
-capítulos, discreto como antes.
+- A **quantidade** aparece ao lado do título ("João 3:16 — 23 referências").
+- A lista virou **uma por linha**, esticada, em vez de dois botões por linha.
+- Cada linha traz o livro, capítulo e versículo na fonte normal, e abaixo o
+  **começo do texto** daquele versículo, em fonte menor e sem negrito — para você
+  já ter uma ideia sem precisar abrir.
+- Ao **abrir** uma referência, o painel **cresce** (cerca de 3/4 da tela) para
+  você ler melhor e rolar pelo texto.
+- Os botões **Voltar** e **Ir para** ficam **lado a lado**. O "ir" usa o nome
+  curto do livro, que cabe mesmo em nomes grandes.
+- A volta é temporária: ao fechar, o estado é descartado. É só para você ir e
+  voltar rápido, buscando contexto sem se perder no livro principal.
 
 ---
 
 ## Conferido
 
-- 35 verificações desta leva, todas passando.
-- As 240 das levas anteriores, atualizadas, todas passando.
+- 28 verificações desta leva, todas passando.
+- As 275 das levas anteriores, atualizadas, todas passando.
 - Os 26 testes de dados continuam passando.
 - Nenhum erro de javascript.
+
+## Uma observação
+
+O seu fixado antigo (do formato de um só) é migrado automaticamente para a nova
+lista na primeira vez que abrir — não se perde.
