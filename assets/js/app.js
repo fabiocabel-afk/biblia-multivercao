@@ -1621,6 +1621,9 @@ const App = {
     };
 
     q('tirinha-marcar').onclick = () => this.escolherMarcador();
+    document.querySelectorAll('.aba-tirinha').forEach(el => {
+      el.onclick = () => this.mostrarAbaTirinha(el.dataset.aba);
+    });
 
     document.onkeydown = e => {
       if (e.target.matches('input, select, textarea')) {
@@ -1650,13 +1653,98 @@ const App = {
 
   abrirTirinha(vers) {
     this.destaque = vers;
+    this.abaTirinha = 'versoes';
     document.querySelectorAll('.v.foco').forEach(x => x.classList.remove('foco'));
     document.querySelectorAll(`#folha .v[data-vers="${vers}"]`)
       .forEach(x => x.classList.add('foco'));
-    Leitura.tirinha(this.code, this.cap, vers, this.versao);
+    this.mostrarAbaTirinha('versoes');
     const t = document.getElementById('tirinha');
     t.classList.add('aberta');
     t.setAttribute('aria-hidden', 'false');
+  },
+
+  mostrarAbaTirinha(aba) {
+    this.abaTirinha = aba;
+    document.querySelectorAll('.aba-tirinha').forEach(el =>
+      el.classList.toggle('ativa', el.dataset.aba === aba));
+    // "Marcar" só vale para o versículo em si (aba Versões)
+    document.getElementById('tirinha-marcar').style.display =
+      aba === 'versoes' ? '' : 'none';
+    if (aba === 'versoes') {
+      Leitura.tirinha(this.code, this.cap, this.destaque, this.versao);
+    } else {
+      this.desenharReferencias();
+    }
+  },
+
+  /* As passagens relacionadas ao versiculo, vindas do Treasury of Scripture
+   * Knowledge. Vem ordenadas por voto; um deslizador deixa filtrar as mais
+   * fortes, escondendo as de apoio mais fraco quando a lista fica longa. */
+  filtroRefs: 0,
+
+  async desenharReferencias() {
+    const corpo = document.getElementById('tirinha-corpo');
+    corpo.innerHTML = '<div class="estado">Buscando referências…</div>';
+
+    const todas = await Dados.referenciasDe(this.versao, this.code, this.cap, this.destaque);
+
+    if (!todas.length) {
+      corpo.innerHTML = `<div class="estado">Nenhuma referência cruzada para
+        este versículo.<br><span class="sub">Elas vêm do Treasury of Scripture
+        Knowledge; nem todo versículo tem.</span></div>`;
+      return;
+    }
+
+    // votos vao de negativos (contestadas) ao topo; o filtro corta por baixo
+    const maxVoto = todas[0].votos;
+    const limite = Math.round((this.filtroRefs / 100) * maxVoto);
+    const visiveis = todas.filter(r => r.votos >= limite);
+
+    const linha = r => {
+      const ate = r.vFim !== r.vIni ? `-${r.vFim}` : '';
+      const nome = Dados.nomeCurto(this.versao, r.code);
+      const contestada = r.votos < 0 ? ' contestada' : '';
+      return `<button class="ref-cruzada${contestada}" data-ref="${r.code}|${r.cap}|${r.vIni}">
+        <span class="ref-alvo">${nome} ${r.cap}:${r.vIni}${ate}</span>
+        <span class="ref-votos" title="força da conexão">${r.votos}</span>
+      </button>`;
+    };
+
+    corpo.innerHTML = `
+      <div class="filtro-refs">
+        <label>Mostrar <strong id="refs-conta">${visiveis.length}</strong> de ${todas.length}</label>
+        <input type="range" class="deslizador" id="ctrl-filtro-refs"
+          min="0" max="100" value="${this.filtroRefs}">
+        <span class="sub">só as mais fortes →</span>
+      </div>
+      <div class="lista-refs" id="lista-refs">${visiveis.map(linha).join('')}</div>`;
+
+    const ligarCliques = () => {
+      corpo.querySelectorAll('[data-ref]').forEach(el => {
+        el.onclick = () => {
+          const [code, cap, vers] = el.dataset.ref.split('|');
+          this.fecharTirinha();
+          // a referencia esta em numeracao protestante; converte se a versao
+          // aberta for Vulgata, para cair no capitulo certo
+          let capDestino = +cap;
+          if (Dados.versificacaoDe(this.versao) === 'vulgata') {
+            const conv = Dados.converter(code, +cap, 'hebraica', 'vulgata');
+            capDestino = conv.capitulo;
+          }
+          this.ir(code, capDestino, +vers);
+        };
+      });
+    };
+    ligarCliques();
+
+    document.getElementById('ctrl-filtro-refs').oninput = e => {
+      this.filtroRefs = +e.target.value;
+      const lim = Math.round((this.filtroRefs / 100) * maxVoto);
+      const vis = todas.filter(r => r.votos >= lim);
+      document.getElementById('refs-conta').textContent = vis.length;
+      document.getElementById('lista-refs').innerHTML = vis.map(linha).join('');
+      ligarCliques();
+    };
   },
 
   escolherMarcador() {

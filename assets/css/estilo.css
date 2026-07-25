@@ -1576,3 +1576,82 @@ body.selecionando .rodape { transform: translateY(110%); }
   stroke: var(--tinta-fraca);
   flex: none;
 }
+
+/* ============================= abas da tirinha ===================== */
+
+.abas-tirinha {
+  display: flex;
+  gap: 4px;
+  padding: 0 4px 8px;
+  border-bottom: 1px solid color-mix(in srgb, var(--tinta) 10%, transparent);
+  margin-bottom: 10px;
+}
+
+.aba-tirinha {
+  flex: 1;
+  padding: 9px;
+  border-radius: var(--raio);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--tinta-fraca);
+}
+
+.aba-tirinha:hover { background: color-mix(in srgb, var(--tinta) 6%, transparent); }
+
+.aba-tirinha.ativa {
+  color: var(--rubrica);
+  background: color-mix(in srgb, var(--rubrica) 9%, transparent);
+}
+
+/* ============================= referências cruzadas =============== */
+
+.filtro-refs {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+  font-size: 13px;
+  color: var(--tinta-fraca);
+}
+
+.filtro-refs .deslizador { flex: 1; min-width: 120px; }
+.filtro-refs strong { color: var(--tinta); }
+
+.lista-refs {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 6px;
+}
+
+.ref-cruzada {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: var(--raio);
+  border: 1px solid color-mix(in srgb, var(--tinta) 12%, transparent);
+  text-align: left;
+}
+
+.ref-cruzada:hover {
+  background: color-mix(in srgb, var(--rubrica) 8%, transparent);
+  border-color: color-mix(in srgb, var(--rubrica) 40%, transparent);
+}
+
+.ref-cruzada .ref-alvo { font-weight: 600; font-size: 14px; color: var(--tinta); }
+
+.ref-cruzada .ref-votos {
+  font-family: var(--fonte-sigla);
+  font-size: 11px;
+  color: var(--tinta-fraca);
+  background: color-mix(in srgb, var(--tinta) 8%, transparent);
+  padding: 1px 6px;
+  border-radius: 999px;
+  flex: none;
+}
+
+/* contestadas (voto negativo) aparecem apagadas, para não enganar */
+.ref-cruzada.contestada { opacity: .5; }
+.ref-cruzada.contestada .ref-votos { color: var(--rubrica); }

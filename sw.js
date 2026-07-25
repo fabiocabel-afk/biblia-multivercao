@@ -8,7 +8,7 @@
 /* A casca sobe de versao a cada mudanca no app, para o navegador nao servir a
  * versao antiga. Os textos biblicos ficam numa versao propria e estavel: eles
  * nunca mudam, e nao ha por que rebaixar tudo por causa de um ajuste de tela. */
-const CASCA = 'casca-biblia-v10';
+const CASCA = 'casca-biblia-v11';
 const TEXTOS = 'textos-biblia-v1';
 
 const ESSENCIAIS = [
@@ -52,8 +52,8 @@ self.addEventListener('fetch', evento => {
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;
 
-  // texto biblico: cache primeiro, porque nunca muda
-  if (url.pathname.includes('/data/biblias/')) {
+  // texto biblico e referencias cruzadas: cache primeiro, porque nunca mudam
+  if (url.pathname.includes('/data/biblias/') || url.pathname.includes('/data/refs/')) {
     evento.respondWith(
       caches.match(req).then(guardado => guardado || fetch(req).then(resp => {
         if (resp.ok) {

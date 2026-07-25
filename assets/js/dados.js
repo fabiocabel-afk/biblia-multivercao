@@ -191,6 +191,54 @@ const Dados = {
     const base = `${this.nomeCurto(versaoCode, bookCode)} ${cap}`;
     return vers ? `${base}:${vers}` : base;
   },
+
+  /* ------------------------------------------------- referencias cruzadas
+   *
+   * O arquivo de cada livro (data/refs/<CODE>.json) traz, por capitulo e
+   * versiculo, as passagens relacionadas — o Treasury of Scripture Knowledge.
+   * Carregado sob demanda e guardado em cache, igual aos textos.
+   *
+   * A numeracao do arquivo e a hebraica/protestante. Ao consultar a partir de
+   * uma versao Vulgata (Ave-Maria), convertemos o capitulo de entrada; os
+   * alvos ficam na numeracao protestante, que e a referencia neutra.
+   */
+  _refsCache: new Map(),
+
+  async carregarRefs(bookCode) {
+    if (this._refsCache.has(bookCode)) return this._refsCache.get(bookCode);
+    try {
+      const dados = await fetch(`data/refs/${bookCode}.json`).then(r =>
+        r.ok ? r.json() : null);
+      this._refsCache.set(bookCode, dados);
+      return dados;
+    } catch {
+      this._refsCache.set(bookCode, null);
+      return null;
+    }
+  },
+
+  /**
+   * Referencias de um versiculo, ja ordenadas por voto (as mais fortes
+   * primeiro). `versaoCode` diz de qual numeracao vem o pedido, para converter
+   * quando a versao for Vulgata.
+   * Devolve [] se o livro nao tiver arquivo de referencias ou o versiculo nada.
+   */
+  async referenciasDe(versaoCode, bookCode, cap, vers) {
+    const dados = await this.carregarRefs(bookCode);
+    if (!dados) return [];
+
+    // o arquivo esta em numeracao protestante; converte o capitulo se preciso
+    const versificacao = this.versificacaoDe(versaoCode);
+    let capProt = cap;
+    if (versificacao === 'vulgata') {
+      const conv = this.converter(bookCode, cap, 'vulgata', 'hebraica');
+      capProt = conv.capitulo;
+    }
+
+    const doCap = dados[String(capProt)];
+    if (!doCap) return [];
+    return doCap[String(vers)] || [];
+  },
 };
 
 /** Minusculas e sem acento. So para o indice de busca, nunca para exibir. */
