@@ -29,6 +29,7 @@ const App = {
     Leitura.aplicarTemperatura(p.temperatura);
     Leitura.aplicarFonte(p.fonte);
     Leitura.aplicarModoVersiculo(p.versiculoPorLinha);
+    this.aplicarRefsFixas(p.refsFixas);
 
     // retoma de onde parou: o livro fixado tem prioridade; senão, o último
     // lugar visitado no histórico
@@ -136,7 +137,7 @@ const App = {
     this.cap = cap;
     this.destaque = vers || null;
 
-    folha.innerHTML = `<p class="titulo-livro">${Leitura.escapar(r.livro.name)}</p>`
+    folha.innerHTML = `<p class="titulo-livro ${cap === 1 ? 'abertura' : ''}">${Leitura.escapar(r.livro.name)}</p>`
       + Leitura.html(this.versao, r.livro, r.capitulo);
 
     this.atualizarBarra();
@@ -160,6 +161,12 @@ const App = {
     }
 
     if (this.comparando) this.desenharComparacao();
+
+    // ao abrir um capítulo, as referências fixas (se ligadas) mostram as dele
+    if (Prefs.get('refsFixas')) {
+      this.destaque = vers || null;
+      this.atualizarRefsFixas(vers || null);
+    }
   },
 
   atualizarBarra() {
@@ -375,9 +382,69 @@ const App = {
     document.getElementById('titulo-arvore').textContent = info ? info.name : code;
     document.getElementById('voltar-livros').onclick = () => this.desenharArvore();
     corpo.querySelectorAll('[data-cap]').forEach(el => {
+      el.onclick = () => this.desenharVersiculosDoSeletor(code, +el.dataset.cap);
+    });
+  },
+
+  /* Depois do capítulo, a escolha do versículo de partida. Serve para registrar
+   * de onde a pessoa começa — muitos capítulos têm dezenas de versículos, e
+   * quase sempre ela já tem um em mente. O primeiro toque leva até lá (com o
+   * efeito de "parei aqui") e abre o registro; os toques seguintes ESTENDEM o
+   * registro até o maior versículo tocado. Ex.: toca 5, depois 6, pula 7, toca
+   * 13 → o registro fica de 5 a 13. */
+  async desenharVersiculosDoSeletor(code, cap) {
+    const corpo = document.getElementById('corpo-arvore');
+    corpo.innerHTML = '<div class="estado">Carregando…</div>';
+
+    const info = Dados.infoLivro(this.versao, code);
+    const nome = info ? info.name : code;
+    let total = 0;
+    try {
+      const r = await Dados.capitulo(this.versao, code, cap);
+      total = r ? r.capitulo.verses.length : 0;
+    } catch { total = 0; }
+
+    // estado da seleção que estende: início fixo, fim acompanha o maior tocado
+    this.selVers = null;
+
+    const grade = [];
+    for (let v = 1; v <= total; v++) {
+      grade.push(`<button class="cel-num" data-v="${v}">${v}</button>`);
+    }
+
+    document.getElementById('titulo-arvore').textContent = `${nome} ${cap}`;
+    corpo.innerHTML = `
+      <button class="linha" id="voltar-caps" style="margin-bottom:12px">
+        ← Capítulos de ${nome}</button>
+      <div class="grupo"><h3>${nome} ${cap} — de onde começar?</h3>
+      <p class="contagem" style="margin-bottom:10px">Toque no versículo de
+      partida. Tocando em outros abaixo, o registro se estende até o último.</p>
+      <div class="grade-num">${grade.join('')}</div></div>`;
+
+    document.getElementById('voltar-caps').onclick = () => this.desenharCapitulos(code);
+
+    corpo.querySelectorAll('[data-v]').forEach(el => {
       el.onclick = () => {
-        this.fecharPaineis();
-        this.ir(code, +el.dataset.cap);
+        const v = +el.dataset.v;
+        if (this.selVers === null) {
+          // primeiro toque: vai até lá e abre o registro
+          this.selVers = { ini: v, fim: v };
+          this.fecharPaineis();
+          this.ir(code, cap, v);
+        } else {
+          // toques seguintes: estende o registro até o maior versículo tocado
+          this.selVers.fim = Math.max(this.selVers.fim, v);
+          el.classList.add('ativa');
+          for (let k = this.selVers.ini; k <= this.selVers.fim; k++) {
+            const c = corpo.querySelector(`[data-v="${k}"]`);
+            if (c) c.classList.add('no-trecho');
+          }
+          // atualiza o registro no histórico com o intervalo estendido
+          Historico.registrar({
+            versao: this.versao, code, cap, vers: this.selVers.ini,
+            trecho: `${this.selVers.ini}–${this.selVers.fim}`,
+          });
+        }
       };
     });
   },
@@ -913,11 +980,11 @@ const App = {
    * abre um por vez, e o resto fica recolhido.
    */
 
-  dobraA: 'folha',
+  dobraA: null,
 
   secao(id, titulo, conteudo) {
     const aberta = this.dobraA === id;
-    return `<button class="dobra secao" data-s="${id}" aria-expanded="${aberta}">
+    return `<button class="dobra secao ${aberta ? 'aberta' : ''}" data-s="${id}" aria-expanded="${aberta}">
         <span class="seta">▶</span>
         <span>${titulo}</span>
       </button>
@@ -939,12 +1006,24 @@ const App = {
       <input class="deslizador" type="range" id="ctrl-fonte" min="15" max="34" value="${p.fonte}">
 
       <div class="rotulo-controle" style="margin-top:22px"><span>Exibição do versículo</span></div>
-      <div class="escolha-dupla">
-        <button data-modo="corrido" class="${p.versiculoPorLinha ? '' : 'ativa'}">
-          <strong>Corrido</strong><span>Como numa Bíblia impressa</span></button>
-        <button data-modo="linha" class="${p.versiculoPorLinha ? 'ativa' : ''}">
-          <strong>Um por linha</strong><span>Número como cabeçalho</span></button>
+      <div class="escolha-radio">
+        <label class="opcao-radio">
+          <input type="radio" name="modo-versiculo" value="corrido" ${p.versiculoPorLinha ? '' : 'checked'}>
+          <span class="marca-radio"></span>
+          <span class="rotulo-radio"><strong>Corrido</strong><span>Como numa Bíblia impressa</span></span>
+        </label>
+        <label class="opcao-radio">
+          <input type="radio" name="modo-versiculo" value="linha" ${p.versiculoPorLinha ? 'checked' : ''}>
+          <span class="marca-radio"></span>
+          <span class="rotulo-radio"><strong>Um por linha</strong><span>Número abrindo a linha</span></span>
+        </label>
       </div>
+
+      <label class="interruptor" style="margin-top:20px"><span>Referências fixas na tela</span>
+        <input type="checkbox" id="ctrl-refs-fixas" ${p.refsFixas ? 'checked' : ''}></label>
+      <p class="contagem">Divide a tela: o texto em cima, as referências cruzadas
+      embaixo. Sem versículo selecionado, mostra as do capítulo todo; ao tocar
+      num versículo, filtra pelas dele.</p>
 
       <label class="interruptor"><span>Modo escuro</span>
         <input type="checkbox" id="ctrl-escuro" ${p.escuro ? 'checked' : ''}></label>
@@ -985,7 +1064,7 @@ const App = {
       : 'Atenção: este navegador não está permitindo gravar. O histórico vai durar só até fechar o aplicativo.'}</p>`;
 
     corpo.innerHTML =
-      this.secao('folha', 'Folha', folha) +
+      this.secao('folha', 'Página', folha) +
       this.secao('livros', 'Painel de livros', livros) +
       this.secao('comparar', 'Comparar', comparar) +
       this.secao('tirinha', 'Versões empilhadas', tirinha) +
@@ -1032,15 +1111,20 @@ const App = {
       fonte.onchange = () => Prefs.set('fonte', +fonte.value);
     }
 
-    corpo.querySelectorAll('[data-modo]').forEach(el => {
-      el.onclick = () => {
-        const porLinha = el.dataset.modo === 'linha';
+    corpo.querySelectorAll('input[name="modo-versiculo"]').forEach(el => {
+      el.onchange = () => {
+        const porLinha = el.value === 'linha';
         Prefs.set('versiculoPorLinha', porLinha);
         Leitura.aplicarModoVersiculo(porLinha);
-        this.desenharAjustes();
         this.ir(this.code, this.cap, null, { registrar: false });
       };
     });
+
+    const refsFixas = achar('ctrl-refs-fixas');
+    if (refsFixas) refsFixas.onchange = e => {
+      Prefs.set('refsFixas', e.target.checked);
+      this.aplicarRefsFixas(e.target.checked);
+    };
 
     const escuro = achar('ctrl-escuro');
     if (escuro) escuro.onchange = e => {
@@ -1646,9 +1730,130 @@ const App = {
 
   /** Toque simples: poe ou tira o ponto de leitura, na hora. */
   marcarPonto(vers) {
+    // o realce (foco) que a tirinha deixa ao abrir por toque duplo precisa sair
+    // quando a pessoa toca noutro versiculo — senao fica preso na tela
+    document.querySelectorAll('#folha .v.foco').forEach(x => x.classList.remove('foco'));
+    this.destaque = null;
+
     const versificacao = Dados.versificacaoDe(this.versao);
     const posto = Ponto.alternar(versificacao, this.code, this.cap, vers);
     Leitura.pintarPonto(vers, posto);
+
+    // com as referências fixas ligadas, tocar num versículo filtra as dele;
+    // tocar de novo no mesmo (tirando o ponto) volta às do capítulo todo
+    if (Prefs.get('refsFixas')) {
+      this.destaque = posto ? vers : null;
+      this.atualizarRefsFixas(this.destaque);
+    }
+  },
+
+  /* ==================================================== referências fixas
+   *
+   * Quando ligada nos Ajustes, esta faixa divide a tela: o texto em cima
+   * (maior) e as referências cruzadas embaixo. Sem versículo selecionado, mostra
+   * as do capítulo inteiro; ao tocar num versículo, filtra pelas dele. Tocar
+   * numa referência abre o texto dela embaixo, com volta — sem sair do livro.
+   */
+  aplicarRefsFixas(ligado) {
+    document.body.classList.toggle('com-refs-fixas', ligado);
+    const painel = document.getElementById('painel-refs-fixas');
+    painel.setAttribute('aria-hidden', ligado ? 'false' : 'true');
+    if (ligado) this.atualizarRefsFixas();
+  },
+
+  async atualizarRefsFixas(vers = null) {
+    if (!Prefs.get('refsFixas')) return;
+    const corpo = document.getElementById('corpo-refs-fixas');
+    const titulo = document.getElementById('titulo-refs-fixas');
+    const nome = Dados.nomeCurto(this.versao, this.code);
+
+    if (vers) {
+      titulo.textContent = `Referências de ${nome} ${this.cap}:${vers}`;
+      corpo.innerHTML = '<div class="estado">Buscando…</div>';
+      const refs = await Dados.referenciasDe(this.versao, this.code, this.cap, vers);
+      this.pintarRefsFixas(corpo, refs);
+    } else {
+      // capítulo todo: reúne as referências de cada versículo, marcando a origem
+      titulo.textContent = `Referências de ${nome} ${this.cap}`;
+      corpo.innerHTML = '<div class="estado">Buscando…</div>';
+      const dados = await Dados.carregarRefs(this.code);
+      if (!dados) { corpo.innerHTML = '<div class="estado">Sem referências para este livro.</div>'; return; }
+
+      let capProt = this.cap;
+      if (Dados.versificacaoDe(this.versao) === 'vulgata') {
+        capProt = Dados.converter(this.code, this.cap, 'vulgata', 'hebraica').capitulo;
+      }
+      const doCap = dados[String(capProt)] || {};
+      const lista = [];
+      for (const v of Object.keys(doCap).sort((a, b) => +a - +b)) {
+        for (const r of doCap[v]) lista.push({ ...r, origem: +v });
+      }
+      this.pintarRefsFixas(corpo, lista, true);
+    }
+  },
+
+  pintarRefsFixas(corpo, refs, comOrigem = false) {
+    if (!refs.length) {
+      corpo.innerHTML = '<div class="estado">Nenhuma referência aqui.</div>';
+      return;
+    }
+    const linha = r => {
+      const ate = r.vFim !== r.vIni ? `-${r.vFim}` : '';
+      const nome = Dados.nomeCurto(this.versao, r.code);
+      const origem = comOrigem ? `<span class="ref-origem">v.${r.origem}</span>` : '';
+      const contestada = r.votos < 0 ? ' contestada' : '';
+      return `<button class="ref-cruzada${contestada}" data-ref="${r.code}|${r.cap}|${r.vIni}|${r.vFim}">
+        ${origem}<span class="ref-alvo">${nome} ${r.cap}:${r.vIni}${ate}</span>
+        <span class="ref-votos">${r.votos}</span>
+      </button>`;
+    };
+    corpo.innerHTML = `<div class="lista-refs">${refs.map(linha).join('')}</div>`;
+    corpo.querySelectorAll('[data-ref]').forEach(el => {
+      el.onclick = () => {
+        const [code, cap, vIni, vFim] = el.dataset.ref.split('|');
+        this.abrirTextoRefFixa(code, +cap, +vIni, +vFim);
+      };
+    });
+  },
+
+  async abrirTextoRefFixa(code, cap, vIni, vFim) {
+    const corpo = document.getElementById('corpo-refs-fixas');
+    corpo.innerHTML = '<div class="estado">Abrindo…</div>';
+
+    let capLocal = cap;
+    if (Dados.versificacaoDe(this.versao) === 'vulgata') {
+      capLocal = Dados.converter(code, cap, 'hebraica', 'vulgata').capitulo;
+    }
+
+    let versos = [], nomeLivro = Dados.nomeCurto(this.versao, code);
+    try {
+      const r = await Dados.capitulo(this.versao, code, capLocal);
+      if (r) {
+        nomeLivro = r.livro.name;
+        versos = r.capitulo.verses.filter(v => v.number >= vIni && v.number <= vFim + 6);
+      }
+    } catch { /* ausente */ }
+
+    const ref = `${nomeLivro} ${capLocal}:${vIni}` + (vFim !== vIni ? `-${vFim}` : '');
+    const texto = versos.length
+      ? versos.map(v => {
+          const foco = v.number >= vIni && v.number <= vFim ? ' em-foco' : '';
+          return `<p class="verso-ref${foco}"><span class="n">${v.number}</span>${Leitura.escapar(v.text || '')}</p>`;
+        }).join('')
+      : '<div class="estado">Texto não disponível nesta versão.</div>';
+
+    corpo.innerHTML = `
+      <div class="cabeca-ref-texto">
+        <button class="voltar-etapa" id="voltar-refs-fixas">← Referências</button>
+        <strong>${ref}</strong>
+      </div>
+      <div class="texto-ref">${texto}</div>
+      <button class="botao" id="ir-ref-fixa" style="width:100%;margin-top:10px">
+        Ir para ${nomeLivro} ${capLocal}</button>`;
+
+    document.getElementById('voltar-refs-fixas').onclick = () =>
+      this.atualizarRefsFixas(this.destaque);
+    document.getElementById('ir-ref-fixa').onclick = () => this.ir(code, capLocal, vIni);
   },
 
   abrirTirinha(vers) {
@@ -1678,10 +1883,8 @@ const App = {
   },
 
   /* As passagens relacionadas ao versiculo, vindas do Treasury of Scripture
-   * Knowledge. Vem ordenadas por voto; um deslizador deixa filtrar as mais
-   * fortes, escondendo as de apoio mais fraco quando a lista fica longa. */
-  filtroRefs: 0,
-
+   * Knowledge. Vem ordenadas por voto, da conexão mais forte para a mais
+   * fraca. */
   async desenharReferencias() {
     const corpo = document.getElementById('tirinha-corpo');
     corpo.innerHTML = '<div class="estado">Buscando referências…</div>';
@@ -1695,55 +1898,77 @@ const App = {
       return;
     }
 
-    // votos vao de negativos (contestadas) ao topo; o filtro corta por baixo
-    const maxVoto = todas[0].votos;
-    const limite = Math.round((this.filtroRefs / 100) * maxVoto);
-    const visiveis = todas.filter(r => r.votos >= limite);
-
     const linha = r => {
       const ate = r.vFim !== r.vIni ? `-${r.vFim}` : '';
       const nome = Dados.nomeCurto(this.versao, r.code);
       const contestada = r.votos < 0 ? ' contestada' : '';
-      return `<button class="ref-cruzada${contestada}" data-ref="${r.code}|${r.cap}|${r.vIni}">
+      return `<button class="ref-cruzada${contestada}"
+          data-ref="${r.code}|${r.cap}|${r.vIni}|${r.vFim}">
         <span class="ref-alvo">${nome} ${r.cap}:${r.vIni}${ate}</span>
         <span class="ref-votos" title="força da conexão">${r.votos}</span>
       </button>`;
     };
 
     corpo.innerHTML = `
-      <div class="filtro-refs">
-        <label>Mostrar <strong id="refs-conta">${visiveis.length}</strong> de ${todas.length}</label>
-        <input type="range" class="deslizador" id="ctrl-filtro-refs"
-          min="0" max="100" value="${this.filtroRefs}">
-        <span class="sub">só as mais fortes →</span>
+      <p class="contagem" style="margin-bottom:10px">${todas.length}
+        referência${todas.length > 1 ? 's' : ''}, da mais forte para a mais fraca.</p>
+      <div class="lista-refs">${todas.map(linha).join('')}</div>`;
+
+    corpo.querySelectorAll('[data-ref]').forEach(el => {
+      el.onclick = () => {
+        const [code, cap, vIni, vFim] = el.dataset.ref.split('|');
+        this.abrirTextoDaReferencia(code, +cap, +vIni, +vFim);
+      };
+    });
+  },
+
+  /* Ao tocar numa referência, o texto dela aparece aqui mesmo, sem sair do
+   * livro principal. A pessoa lê, rola, e volta — ou pula de vez para aquele
+   * capítulo, se quiser. */
+  async abrirTextoDaReferencia(code, cap, vIni, vFim) {
+    const corpo = document.getElementById('tirinha-corpo');
+    corpo.innerHTML = '<div class="estado">Abrindo o texto…</div>';
+
+    // a referência vem em numeração protestante; converte se a versão for Vulgata
+    let capLocal = cap;
+    if (Dados.versificacaoDe(this.versao) === 'vulgata') {
+      capLocal = Dados.converter(code, cap, 'hebraica', 'vulgata').capitulo;
+    }
+
+    let versos = [];
+    let nomeLivro = Dados.nomeCurto(this.versao, code);
+    try {
+      const r = await Dados.capitulo(this.versao, code, capLocal);
+      if (r) {
+        nomeLivro = r.livro.name;
+        // mostra desde o versículo inicial até uns 6 além do fim, para dar contexto
+        const ate = vFim + 6;
+        versos = r.capitulo.verses.filter(v => v.number >= vIni && v.number <= ate);
+      }
+    } catch { /* livro ausente nesta versão */ }
+
+    const ref = `${nomeLivro} ${capLocal}:${vIni}` + (vFim !== vIni ? `-${vFim}` : '');
+
+    const corpoTexto = versos.length
+      ? versos.map(v => {
+          const destaque = v.number >= vIni && v.number <= vFim ? ' em-foco' : '';
+          return `<p class="verso-ref${destaque}"><span class="n">${v.number}</span>${Leitura.escapar(v.text || '')}</p>`;
+        }).join('')
+      : '<div class="estado">Texto não disponível nesta versão.</div>';
+
+    corpo.innerHTML = `
+      <div class="cabeca-ref-texto">
+        <button class="voltar-etapa" id="voltar-refs">← Referências</button>
+        <strong>${ref}</strong>
       </div>
-      <div class="lista-refs" id="lista-refs">${visiveis.map(linha).join('')}</div>`;
+      <div class="texto-ref">${corpoTexto}</div>
+      <button class="botao" id="ir-ref-cap" style="width:100%;margin-top:10px">
+        Ir para ${nomeLivro} ${capLocal}</button>`;
 
-    const ligarCliques = () => {
-      corpo.querySelectorAll('[data-ref]').forEach(el => {
-        el.onclick = () => {
-          const [code, cap, vers] = el.dataset.ref.split('|');
-          this.fecharTirinha();
-          // a referencia esta em numeracao protestante; converte se a versao
-          // aberta for Vulgata, para cair no capitulo certo
-          let capDestino = +cap;
-          if (Dados.versificacaoDe(this.versao) === 'vulgata') {
-            const conv = Dados.converter(code, +cap, 'hebraica', 'vulgata');
-            capDestino = conv.capitulo;
-          }
-          this.ir(code, capDestino, +vers);
-        };
-      });
-    };
-    ligarCliques();
-
-    document.getElementById('ctrl-filtro-refs').oninput = e => {
-      this.filtroRefs = +e.target.value;
-      const lim = Math.round((this.filtroRefs / 100) * maxVoto);
-      const vis = todas.filter(r => r.votos >= lim);
-      document.getElementById('refs-conta').textContent = vis.length;
-      document.getElementById('lista-refs').innerHTML = vis.map(linha).join('');
-      ligarCliques();
+    document.getElementById('voltar-refs').onclick = () => this.desenharReferencias();
+    document.getElementById('ir-ref-cap').onclick = () => {
+      this.fecharTirinha();
+      if (this.versao) this.ir(code, capLocal, vIni);
     };
   },
 

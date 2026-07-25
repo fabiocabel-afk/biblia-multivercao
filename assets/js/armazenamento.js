@@ -46,13 +46,14 @@ const Guarda = (() => {
 const Prefs = {
   padrao: {
     versao: 'ACF',
-    temperatura: 18,      // 0 = papel branco, 100 = sepia carregado
+    temperatura: 50,      // 0 = papel branco, 100 = sepia carregado; começa no meio
     fonte: 20,            // px do corpo do texto
     escuro: false,
     versoesTirinha: ['ACF', 'NVI', 'NTLH'],
     versaoComparar: 'NVI',
     mostrarCategorias: true,   // painel de livros: com ou sem a camada do meio
     versiculoPorLinha: false,  // false = texto corrido; true = um versiculo por linha
+    refsFixas: false,          // painel de referências dividindo a tela; desligado por padrão
   },
 
   todas() {
