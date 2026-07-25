@@ -262,13 +262,20 @@ const Estudos = {
       for (const t of trechos) {
         if (trechos.length > 1) linhas.push(`— ${this.refDoTrecho(t)} (${t.versao}) —`);
         else linhas.push(`${this.refDoTrecho(t)} (${t.versao})`, '');
+
+        // o livro e o capítulo já aparecem no cabeçalho do trecho, então cada
+        // linha leva só o número do versículo — sem repetir "cap:vers".
+        // Quando o trecho cruza capítulos, um marco "Capítulo N" separa a virada,
+        // para não haver dois versículos com o mesmo número seguidos sem contexto.
+        const varios = t.capInicio !== t.capFim;
         for (let cap = t.capInicio; cap <= t.capFim; cap++) {
           const r = await Dados.capitulo(t.versao, t.code, cap);
           if (!r) continue;
+          if (varios) linhas.push(`[Capítulo ${cap}]`);
           for (const v of r.capitulo.verses) {
             if (cap === t.capInicio && v.number < t.versInicio) continue;
             if (cap === t.capFim && v.number > t.versFim) continue;
-            if (v.text) linhas.push(`${cap}:${v.number}  ${v.text}`);
+            if (v.text) linhas.push(`${v.number}  ${v.text}`);
           }
         }
         if (trechos.length > 1) linhas.push('');

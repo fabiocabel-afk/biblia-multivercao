@@ -10,6 +10,7 @@ const App = {
   code: 'GEN',
   cap: 1,
   destaque: null,
+  destaqueComparacao: null,
   comparando: false,
 
   /* ================================================================ inicio */
@@ -758,75 +759,148 @@ const App = {
 
   /* Monta o trecho a partir da seleção, perguntando até onde vai. Devolve o
    * trecho pronto, ou null se a pessoa cancelou ou errou o formato. */
-  montarTrechoDaSelecao() {
-    const pedacos = this.selecao.pedacos;
-    const capInicio = this.cap;
-    const versInicio = pedacos[0].vers;
 
-    const sugestao = `${this.cap}:${pedacos[pedacos.length - 1].vers}`;
-    const ate = prompt(
-      'Até onde vai o estudo? Use capítulo:versículo.\n' +
-      'Pode avançar para o próximo capítulo, desde que no mesmo livro.',
-      sugestao);
-    if (ate === null) return null;
-
-    const m = /^\s*(\d+)\s*:\s*(\d+)\s*$/.exec(ate);
-    if (!m) { this.avisoRapido('Formato inválido — use capítulo:versículo'); return null; }
-    const capFim = +m[1], versFim = +m[2];
-
-    const info = Dados.infoLivro(this.versao, this.code);
-    const totalCaps = info ? info.chapters : capInicio;
-    if (capFim < capInicio || capFim > totalCaps ||
-        (capFim === capInicio && versFim < versInicio)) {
-      this.avisoRapido('O fim precisa vir depois do início, no mesmo livro');
-      return null;
-    }
-
-    return { versao: this.versao, code: this.code,
-      capInicio, versInicio, capFim, versFim };
-  },
-
-  /* Ao tocar em "Salvar estudo", abre a escolha: um estudo novo, ou juntar a um
-   * que já existe. Mostra a lista dos estudos anteriores logo ali na barra. */
+  /* Ao tocar em "Salvar estudo", abre um painel próprio — mesma largura e fundo
+   * claro dos outros — com a opção de estudo novo e a lista dos que já existem.
+   * A seleção fica guardada enquanto a pessoa escolhe. */
   abrirSalvarEstudo() {
     if (!this.selecao) return;
-    const caixa = document.getElementById('sel-cores');
+    this.selecaoGuardada = this.selecao;
+    document.getElementById('barra-selecao').classList.remove('aberta');
+    document.body.classList.remove('selecionando');
 
-    // se já estava aberto mostrando isto, recolhe
-    if (!caixa.classList.contains('fechada') && caixa.dataset.modo === 'estudo') {
-      caixa.classList.add('fechada');
-      return;
+    // primeiro escolhe até onde vai o trecho; só depois decide onde salvar
+    this.estudoParcial = {
+      versao: this.versao,
+      code: this.code,
+      capInicio: this.cap,
+      versInicio: this.selecaoGuardada.pedacos[0].vers,
+      capFim: this.cap,
+      versFim: this.selecaoGuardada.pedacos[this.selecaoGuardada.pedacos.length - 1].vers,
+    };
+
+    this.escolherFimCapitulo();
+    this.abrir('painel-salvar-estudo');
+  },
+
+  /* Escolha do capítulo final, em grade, mostrando só os capítulos que o livro
+   * realmente tem. Começa no capítulo de início — não há como terminar antes de
+   * onde a seleção começou. */
+  escolherFimCapitulo() {
+    const corpo = document.getElementById('corpo-salvar-estudo');
+    document.getElementById('titulo-salvar').textContent = 'Até que capítulo?';
+
+    const e = this.estudoParcial;
+    const info = Dados.infoLivro(e.versao, e.code);
+    const total = info ? info.chapters : e.capInicio;
+    const nome = Dados.nomeCurto(e.versao, e.code);
+
+    const grade = [];
+    for (let c = e.capInicio; c <= total; c++) {
+      grade.push(`<button class="cel-num ${c === e.capFim ? 'ativa' : ''}"
+        data-cap="${c}">${c}</button>`);
     }
 
+    corpo.innerHTML = `
+      <p class="contagem" style="margin-bottom:14px">O trecho começa em
+        <strong>${nome} ${e.capInicio}:${e.versInicio}</strong>.
+        Até que capítulo ele vai?</p>
+      <div class="grade-num">${grade.join('')}</div>`;
+
+    corpo.querySelectorAll('[data-cap]').forEach(el => {
+      el.onclick = () => {
+        e.capFim = +el.dataset.cap;
+        // se mudou de capítulo, o versículo final precisa ser reescolhido
+        this.escolherFimVersiculo();
+      };
+    });
+  },
+
+  /* Escolha do versículo final, mostrando só os versículos que o capítulo tem.
+   * Se o fim é o mesmo capítulo do início, não deixa escolher antes do começo. */
+  async escolherFimVersiculo() {
+    const corpo = document.getElementById('corpo-salvar-estudo');
+    document.getElementById('titulo-salvar').textContent = 'Até que versículo?';
+    corpo.innerHTML = '<div class="estado">Carregando…</div>';
+
+    const e = this.estudoParcial;
+    const nome = Dados.nomeCurto(e.versao, e.code);
+
+    let totalVers = 0;
+    try {
+      const r = await Dados.capitulo(e.versao, e.code, e.capFim);
+      totalVers = r ? r.capitulo.verses.length : 0;
+    } catch { totalVers = 0; }
+
+    const minimo = e.capFim === e.capInicio ? e.versInicio : 1;
+    if (e.versFim < minimo || e.versFim > totalVers) e.versFim = Math.min(minimo, totalVers) || minimo;
+
+    const grade = [];
+    for (let v = minimo; v <= totalVers; v++) {
+      grade.push(`<button class="cel-num ${v === e.versFim ? 'ativa' : ''}"
+        data-vers="${v}">${v}</button>`);
+    }
+
+    corpo.innerHTML = `
+      <button class="voltar-etapa" id="voltar-cap">← Trocar o capítulo (${e.capFim})</button>
+      <p class="contagem" style="margin:10px 0 14px">Termina em
+        <strong>${nome} ${e.capFim}</strong>, versículo:</p>
+      <div class="grade-num">${grade.join('')}</div>`;
+
+    document.getElementById('voltar-cap').onclick = () => this.escolherFimCapitulo();
+
+    corpo.querySelectorAll('[data-vers]').forEach(el => {
+      el.onclick = () => {
+        e.versFim = +el.dataset.vers;
+        this.desenharSalvarEstudo();   // agora sim: onde salvar
+      };
+    });
+  },
+
+  desenharSalvarEstudo() {
+    const corpo = document.getElementById('corpo-salvar-estudo');
+    document.getElementById('titulo-salvar').textContent = 'Salvar estudo';
     const anteriores = Estudos.todos();
-    caixa.dataset.modo = 'estudo';
-    caixa.innerHTML = `
-      <button class="opcao-estudo novo" data-novo="1">
-        <span class="mais">+</span><span>Novo estudo</span>
+    const e = this.estudoParcial;
+    const refTrecho = Estudos.refDoTrecho(e);
+
+    corpo.innerHTML = `
+      <button class="voltar-etapa" id="voltar-vers">← Trocar até onde vai</button>
+      <p class="contagem" style="margin:10px 0 14px">Guardando
+        <strong>${refTrecho}</strong> · ${e.versao}</p>
+
+      <button class="opcao-estudo-grande novo" id="estudo-novo">
+        <span class="mais">+</span>
+        <span><strong>Novo estudo</strong>
+          <span class="sub">Começar um estudo com este trecho</span></span>
       </button>
-      ${anteriores.length ? '<div class="sep-estudos">ou juntar a um estudo</div>' : ''}
-      ${anteriores.map(e => `<button class="opcao-estudo" data-juntar="${e.id}">
-        <strong>${Leitura.escapar(Estudos.nomeDe(e))}</strong>
-        <span class="est-ref">${Estudos.refDe(e)}</span>
-      </button>`).join('')}`;
 
-    caixa.classList.remove('fechada');
+      ${anteriores.length ? `<div class="grupo"><h3>Ou juntar a um estudo</h3>
+        ${anteriores.map(est => {
+          const n = Estudos.trechosDe(est).length;
+          return `<button class="opcao-estudo-grande" data-juntar="${est.id}">
+            <span><strong>${Leitura.escapar(Estudos.nomeDe(est))}</strong>
+              <span class="sub">${Estudos.refDe(est)}</span></span>
+            <span class="conta-trechos">${n} trecho${n > 1 ? 's' : ''}</span>
+          </button>`;
+        }).join('')}
+      </div>` : ''}`;
 
-    caixa.querySelector('[data-novo]').onclick = () => {
-      const trecho = this.montarTrechoDaSelecao();
-      if (!trecho) return;
+    document.getElementById('voltar-vers').onclick = () => this.escolherFimVersiculo();
+
+    document.getElementById('estudo-novo').onclick = () => {
       const nome = prompt('Nome do novo estudo (opcional):', '');
       if (nome === null) return;
-      Estudos.criar({ nome: nome.trim(), trecho });
+      Estudos.criar({ nome: nome.trim(), trecho: { ...e } });
+      this.fecharPaineis();
       this.fecharSelecao();
       this.avisoRapido('Estudo criado');
     };
 
-    caixa.querySelectorAll('[data-juntar]').forEach(el => {
+    corpo.querySelectorAll('[data-juntar]').forEach(el => {
       el.onclick = () => {
-        const trecho = this.montarTrechoDaSelecao();
-        if (!trecho) return;
-        Estudos.acrescentar(el.dataset.juntar, trecho);
+        Estudos.acrescentar(el.dataset.juntar, { ...e });
+        this.fecharPaineis();
         this.fecharSelecao();
         this.avisoRapido('Adicionado ao estudo');
       };
@@ -1200,13 +1274,10 @@ const App = {
 
   abrirCoresDaSelecao() {
     const caixa = document.getElementById('sel-cores');
-    // se já estava mostrando as cores, recolhe; se estava no modo estudo,
-    // troca para as cores
-    if (!caixa.classList.contains('fechada') && caixa.dataset.modo === 'marcar') {
+    if (!caixa.classList.contains('fechada')) {
       caixa.classList.add('fechada');
       return;
     }
-    caixa.dataset.modo = 'marcar';
 
     // qual marcador já está posto no trecho selecionado (se houver um só)
     const versificacao = Dados.versificacaoDe(this.versao);
@@ -1328,46 +1399,93 @@ const App = {
       };
     });
 
+    // Tocar num versículo de qualquer metade realça o MESMO número nas duas,
+    // para a pessoa não perder de vista qual versículo está comparando.
+    const realcar = vers => {
+      [a, b].forEach(metade => {
+        metade.querySelectorAll('.v.foco-par').forEach(x => x.classList.remove('foco-par'));
+        if (vers != null) metade.querySelectorAll(`.v[data-vers="${vers}"]`)
+          .forEach(x => x.classList.add('foco-par'));
+      });
+      this.destaqueComparacao = vers;
+    };
+
+    [a, b].forEach(metade => {
+      metade.onclick = e => {
+        const v = e.target.closest('.v');
+        if (!v) return;
+        const vers = +v.dataset.vers;
+        realcar(this.destaqueComparacao === vers ? null : vers);
+      };
+    });
+
+    // se já havia um versículo em foco, mantém ao redesenhar (troca de versão)
+    if (this.destaqueComparacao != null) realcar(this.destaqueComparacao);
+
     this.sincronizarRolagem(a, b);
   },
 
-  /* A rolagem das duas metades anda junto. A versao antiga casava por
-   * proporcao de altura — mas quando as versoes tem tamanhos de texto
-   * diferentes (e mais ainda ao trocar uma delas), o mesmo versiculo caia em
-   * alturas diferentes e o sincronismo se perdia. Agora o alinhamento e por
-   * versiculo: ao rolar uma metade, a outra vai para o mesmo versiculo. */
+  /* A rolagem das duas metades anda junto. O jeito por proporção de altura era
+   * bem fluido, mas perdia o versículo quando as versões tinham tamanhos
+   * diferentes. O alinhamento por versículo acertava o alvo, mas "saltava" a
+   * cada evento — ficava robotizado.
+   *
+   * Aqui os dois se combinam: a metade espelhada segue o MESMO deslocamento em
+   * pixels da que a pessoa move (movimento idêntico, natural, sem salto), e só
+   * quando o desalinhamento entre os versículos do topo passa de um limite é que
+   * um empurrãozinho suave corrige o rumo. No uso normal, desliza liso; a
+   * correção só aparece se as alturas divergirem demais. */
   sincronizarRolagem(a, b) {
     let travado = false;
+    const anterior = new WeakMap();
+    anterior.set(a, a.scrollTop);
+    anterior.set(b, b.scrollTop);
 
-    // o versículo "de referência" é aquele cujo topo está mais perto da marca
-    // (um pouco abaixo do topo do painel). Pegar o primeiro que cruza a marca
-    // erra por até um versículo; medir a distância e escolher o menor não erra.
     const marcaDe = painel => painel.getBoundingClientRect().top + 8;
 
-    const versAncora = painel => {
+    const versNoTopo = painel => {
       const marca = marcaDe(painel);
       let melhor = null, menor = Infinity;
       for (const v of painel.querySelectorAll('.v')) {
         const r = v.getBoundingClientRect();
-        if (r.bottom < marca - 40) continue;        // já passou bem acima
-        if (r.top > marca + painel.clientHeight) break; // ainda muito abaixo
-        const dist = Math.abs(r.top - marca);
-        if (dist < menor) { menor = dist; melhor = v; }
+        if (r.bottom < marca - 60) continue;
+        if (r.top > marca + 60) break;
+        const d = Math.abs(r.top - marca);
+        if (d < menor) { menor = d; melhor = v; }
       }
-      return melhor ? melhor.dataset.vers : null;
+      return melhor;
     };
 
     const liga = (de, para) => {
-      de.onscroll = () => {
+      de.addEventListener('scroll', () => {
         if (travado) return;
         travado = true;
-        const vers = versAncora(de);
-        const alvo = vers && para.querySelector(`.v[data-vers="${vers}"]`);
-        if (alvo) {
-          para.scrollTop += alvo.getBoundingClientRect().top - marcaDe(para);
+
+        // 1) espelha o deslocamento exato — é o que dá o deslize natural
+        const delta = de.scrollTop - (anterior.get(de) ?? de.scrollTop);
+        para.scrollTop += delta;
+
+        // 2) correção rumo ao versículo certo. Em gestos normais o erro é
+        // pequeno e a correção é quase imperceptível; num reposicionamento
+        // brusco (troca de versão, salto), o erro é grande e ela puxa mais
+        // firme para reencontrar o versículo, sem nunca dar um salto seco.
+        const vDe = versNoTopo(de);
+        if (vDe) {
+          const alvo = para.querySelector(`.v[data-vers="${vDe.dataset.vers}"]`);
+          if (alvo) {
+            const erro = (alvo.getBoundingClientRect().top - marcaDe(para))
+              - (vDe.getBoundingClientRect().top - marcaDe(de));
+            const abs = Math.abs(erro);
+            // fator cresce com o erro: 0.12 para desvios pequenos, até 0.6 nos grandes
+            const fator = abs > 120 ? 0.6 : abs > 40 ? 0.25 : abs > 12 ? 0.12 : 0;
+            para.scrollTop += erro * fator;
+          }
         }
+
+        anterior.set(de, de.scrollTop);
+        anterior.set(para, para.scrollTop);
         requestAnimationFrame(() => { travado = false; });
-      };
+      }, { passive: true });
     };
 
     liga(a, b);
@@ -1381,14 +1499,43 @@ const App = {
 
     q('btn-arvore').onclick = () => { this.desenharArvore(); this.abrir('painel-arvore'); };
     q('btn-ref').onclick = () => { this.desenharCapitulos(this.code); this.abrir('painel-arvore'); };
-    q('btn-versao').onclick = () => { this.desenharVersoes(); this.abrir('painel-versao'); };
-    q('btn-marcadores').onclick = () => { this.desenharMarcadores(); this.abrir('painel-marcadores'); };
-    q('btn-historico').onclick = () => { this.desenharHistorico(); this.abrir('painel-historico'); };
-    q('btn-estudos').onclick = () => { this.desenharEstudos(); this.abrir('painel-estudos'); };
-    q('btn-ajustes').onclick = () => { this.desenharAjustes(); this.abrir('painel-ajustes'); };
+    q('btn-versao').onclick = () => { this.alvoVersao = 'principal'; this.desenharVersoes(); this.abrir('painel-versao'); };
     q('btn-comparar').onclick = () => this.alternarComparacao();
     q('btn-antes').onclick = () => this.passo(-1);
     q('btn-depois').onclick = () => this.passo(1);
+
+    /* O menu do canto reúne os painéis que não cabiam na barra. Abre por baixo
+     * do botão e fecha ao escolher um item ou ao tocar fora. */
+    const menu = q('menu-flutuante');
+    const abrirItem = {
+      busca: () => { this.desenharFiltros(); this.abrir('painel-busca');
+                     setTimeout(() => q('campo-busca').focus(), 220); },
+      historico: () => { this.desenharHistorico(); this.abrir('painel-historico'); },
+      marcadores: () => { this.desenharMarcadores(); this.abrir('painel-marcadores'); },
+      estudos: () => { this.desenharEstudos(); this.abrir('painel-estudos'); },
+      ajustes: () => { this.desenharAjustes(); this.abrir('painel-ajustes'); },
+    };
+
+    const fecharMenu = () => {
+      menu.classList.remove('aberto');
+      menu.setAttribute('aria-hidden', 'true');
+    };
+
+    q('btn-menu').onclick = e => {
+      e.stopPropagation();
+      const aberto = menu.classList.toggle('aberto');
+      menu.setAttribute('aria-hidden', aberto ? 'false' : 'true');
+    };
+
+    menu.querySelectorAll('[data-menu]').forEach(el => {
+      el.onclick = () => { fecharMenu(); abrirItem[el.dataset.menu](); };
+    });
+
+    // tocar fora do menu o fecha
+    document.addEventListener('click', e => {
+      if (menu.classList.contains('aberto') && !menu.contains(e.target)
+          && e.target.id !== 'btn-menu') fecharMenu();
+    });
 
     /* A barra de ações aparece sozinha quando há um trecho selecionado.
      * O atraso curto deixa o navegador terminar de ajustar as alças da seleção
@@ -1435,12 +1582,6 @@ const App = {
 
       this.passo(dx < 0 ? 1 : -1);
     }, { passive: true });
-
-    q('btn-busca').onclick = () => {
-      this.desenharFiltros();
-      this.abrir('painel-busca');
-      setTimeout(() => q('campo-busca').focus(), 220);
-    };
 
     let atraso;
     q('campo-busca').oninput = () => {
@@ -1489,7 +1630,12 @@ const App = {
       if (e.key === 'Escape') this.fecharPaineis();
       if (e.key === 'ArrowLeft') this.passo(-1);
       if (e.key === 'ArrowRight') this.passo(1);
-      if (e.key === '/') { e.preventDefault(); q('btn-busca').click(); }
+      if (e.key === '/') {
+        e.preventDefault();
+        this.desenharFiltros();
+        this.abrir('painel-busca');
+        setTimeout(() => document.getElementById('campo-busca').focus(), 220);
+      }
     };
   },
 

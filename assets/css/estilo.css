@@ -198,7 +198,15 @@ button {
 
 .v.foco {
   box-shadow: inset 3px 0 0 var(--rubrica);
-  background: color-mix(in srgb, var(--rubrica) 8%, transparent);
+  background: color-mix(in srgb, var(--rubrica) 14%, transparent);
+}
+
+/* realce na comparação: aparece nas duas metades ao mesmo tempo, para a pessoa
+   não perder de vista qual versículo está lendo em cada versão */
+.v.foco-par {
+  background: color-mix(in srgb, var(--rubrica) 16%, transparent);
+  box-shadow: inset 3px 0 0 var(--rubrica);
+  border-radius: 3px;
 }
 
 /* O versiculo recem-tocado esta sempre em foco. Se o realce do foco pintasse
@@ -1418,45 +1426,6 @@ body.selecionando .rodape { transform: translateY(110%); }
 .marcado-linha .item-marcado { flex: 1; min-width: 0; }
 .marcado-linha .remover-marca { flex: none; }
 
-/* ================== escolha de estudo na barra de seleção =========== */
-
-#sel-cores[data-modo='estudo'] { grid-template-columns: 1fr; }
-
-.opcao-estudo {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  width: 100%;
-  text-align: left;
-  padding: 10px 12px;
-  border-radius: var(--raio);
-  color: var(--cromo-texto);
-  border: 1px solid color-mix(in srgb, var(--cromo-texto) 20%, transparent);
-  margin-bottom: 6px;
-}
-
-.opcao-estudo:hover { background: color-mix(in srgb, var(--cromo-texto) 12%, transparent); }
-.opcao-estudo strong { font-size: 14px; }
-.opcao-estudo .est-ref { font-size: 11.5px; color: var(--cromo-fraco); font-family: var(--fonte-sigla); }
-
-.opcao-estudo.novo {
-  flex-direction: row;
-  align-items: center;
-  gap: 10px;
-  border-style: dashed;
-  font-weight: 600;
-}
-
-.opcao-estudo.novo .mais { font-size: 20px; line-height: 1; }
-
-.sep-estudos {
-  font-size: 10px;
-  letter-spacing: .1em;
-  text-transform: uppercase;
-  color: var(--cromo-fraco);
-  margin: 8px 0 6px;
-}
-
 /* ================== trechos dentro de um estudo ==================== */
 
 .estudo-cabeca { padding: 10px 10px 6px; display: flex; flex-direction: column; gap: 2px; }
@@ -1477,3 +1446,133 @@ body.selecionando .rodape { transform: translateY(110%); }
 }
 .trecho-estudo .ir-trecho:hover { background: color-mix(in srgb, var(--tinta) 6%, transparent); }
 .trecho-estudo .est-ref { font-weight: 600; font-size: 13.5px; }
+
+/* ================= painel salvar estudo (opções grandes) =========== */
+
+.opcao-estudo-grande {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  text-align: left;
+  padding: 14px;
+  border-radius: var(--raio);
+  border: 1px solid color-mix(in srgb, var(--tinta) 14%, transparent);
+  margin-bottom: 8px;
+  color: var(--tinta);
+}
+
+.opcao-estudo-grande:hover { background: color-mix(in srgb, var(--tinta) 6%, transparent); }
+.opcao-estudo-grande strong { font-size: 15px; display: block; }
+.opcao-estudo-grande .sub { font-size: 12.5px; color: var(--tinta-fraca); display: block; margin-top: 2px; }
+
+.opcao-estudo-grande.novo {
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--rubrica) 45%, transparent);
+}
+
+.opcao-estudo-grande.novo .mais {
+  font-size: 26px;
+  line-height: 1;
+  color: var(--rubrica);
+  flex: none;
+  width: 28px;
+  text-align: center;
+}
+
+.opcao-estudo-grande .conta-trechos {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--tinta-fraca);
+  font-family: var(--fonte-sigla);
+  white-space: nowrap;
+}
+
+/* ================= grade de números (capítulo / versículo) ========= */
+
+.grade-num {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(48px, 1fr));
+  gap: 8px;
+}
+
+.cel-num {
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--raio);
+  border: 1px solid color-mix(in srgb, var(--tinta) 16%, transparent);
+  font-family: var(--fonte-sigla);
+  font-size: 16px;
+  color: var(--tinta);
+  background: color-mix(in srgb, var(--papel) 100%, transparent);
+}
+
+.cel-num:hover { background: color-mix(in srgb, var(--tinta) 8%, transparent); }
+
+.cel-num.ativa {
+  background: var(--rubrica);
+  color: var(--papel);
+  border-color: var(--rubrica);
+  font-weight: 700;
+}
+
+.voltar-etapa {
+  color: var(--rubrica);
+  font-size: 13px;
+  padding: 4px 0;
+  text-align: left;
+}
+
+.voltar-etapa:hover { text-decoration: underline; }
+
+/* ============================= menu do canto ======================= */
+
+.menu-flutuante {
+  position: fixed;
+  top: calc(var(--barra) - 4px);
+  right: 6px;
+  z-index: 45;
+  background: var(--papel);
+  border: 1px solid color-mix(in srgb, var(--tinta) 14%, transparent);
+  border-radius: var(--raio);
+  box-shadow: 0 8px 30px rgb(0 0 0 / .22);
+  padding: 6px;
+  min-width: 210px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  transform-origin: top right;
+  transform: scale(.94);
+  opacity: 0;
+  pointer-events: none;
+  transition: transform .14s ease, opacity .14s ease;
+}
+
+.menu-flutuante.aberto {
+  transform: scale(1);
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.menu-flutuante button {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: var(--raio);
+  text-align: left;
+  color: var(--tinta);
+  font-size: 15px;
+}
+
+.menu-flutuante button:hover { background: color-mix(in srgb, var(--tinta) 8%, transparent); }
+
+.menu-flutuante .icone {
+  width: 20px;
+  height: 20px;
+  stroke: var(--tinta-fraca);
+  flex: none;
+}
