@@ -111,6 +111,12 @@ const App = {
   /* ============================================================== navegar */
 
   async ir(code, cap, vers, { registrar = true } = {}) {
+    // navegar por conta própria descarta a volta rápida; só o pulo para a
+    // referência (que ativa a flag) a preserva, para poder voltar depois
+    if (!this._pulandoDeReferencia && this.origemDaReferencia) {
+      this.esconderVoltarOrigem();
+    }
+
     const folha = document.getElementById('folha');
     folha.innerHTML = '<div class="estado">Abrindo…</div>';
 
@@ -639,6 +645,44 @@ const App = {
     if (!f) return;
     if (f.versao !== this.versao) { this.versao = f.versao; Prefs.set('versao', f.versao); }
     this.ir(f.code, f.cap || 1, f.vers);
+  },
+
+  /* Ao pular para uma referência, guarda de onde a pessoa veio e mostra embaixo
+   * um botão de volta rápida. É temporário: some assim que ela usa, ou quando
+   * navega para qualquer outro lugar por conta própria. */
+  origemDaReferencia: null,
+  _pulandoDeReferencia: false,
+
+  pularParaReferencia(code, cap, vers) {
+    this.origemDaReferencia = {
+      versao: this.versao, code: this.code, cap: this.cap, vers: this.destaque || null,
+    };
+    this._pulandoDeReferencia = true;   // este ir() não deve limpar a origem
+    if (this.versao) this.ir(code, cap, vers);
+    this._pulandoDeReferencia = false;
+    this.mostrarVoltarOrigem();
+  },
+
+  mostrarVoltarOrigem() {
+    const o = this.origemDaReferencia;
+    const btn = document.getElementById('voltar-origem');
+    if (!o) { btn.hidden = true; return; }
+    const ref = `${Dados.nomeCurto(o.versao, o.code)} ${o.cap}` + (o.vers ? ':' + o.vers : '');
+    document.getElementById('voltar-origem-texto').textContent = `Voltar para ${ref}`;
+    btn.hidden = false;
+  },
+
+  esconderVoltarOrigem() {
+    this.origemDaReferencia = null;
+    document.getElementById('voltar-origem').hidden = true;
+  },
+
+  voltarParaOrigem() {
+    const o = this.origemDaReferencia;
+    if (!o) return;
+    this.esconderVoltarOrigem();   // limpa antes, para o ir() não guardar de novo
+    if (o.versao !== this.versao) { this.versao = o.versao; Prefs.set('versao', o.versao); }
+    this.ir(o.code, o.cap, o.vers);
   },
 
   desenharHistorico() {
@@ -1666,6 +1710,7 @@ const App = {
 
     q('btn-atalho-fixado').onclick = () => this.irParaPrimeiroFixado();
     q('fechar-comparar').onclick = () => this.alternarComparacao();
+    q('voltar-origem').onclick = () => this.voltarParaOrigem();
 
     menu.querySelectorAll('[data-menu]').forEach(el => {
       el.onclick = () => { fecharMenu(); abrirItem[el.dataset.menu](); };
@@ -1858,18 +1903,24 @@ const App = {
       const nome = Dados.nomeCurto(this.versao, r.code);
       const origem = comOrigem ? `<span class="ref-origem">v.${r.origem}</span>` : '';
       const contestada = r.votos < 0 ? ' contestada' : '';
-      return `<button class="ref-cruzada${contestada}" data-ref="${r.code}|${r.cap}|${r.vIni}|${r.vFim}">
-        ${origem}<span class="ref-alvo">${nome} ${r.cap}:${r.vIni}${ate}</span>
-        <span class="ref-votos">${r.votos}</span>
+      return `<button class="ref-linha${contestada}"
+          data-ref="${r.code}|${r.cap}|${r.vIni}|${r.vFim}">
+        <span class="ref-cabeca">
+          <span class="ref-alvo">${origem}${nome} ${r.cap}:${r.vIni}${ate}</span>
+          <span class="ref-votos">${r.votos}</span>
+        </span>
+        <span class="ref-trecho" data-trecho="${r.code}|${r.cap}|${r.vIni}">…</span>
       </button>`;
     };
-    corpo.innerHTML = `<div class="lista-refs">${refs.map(linha).join('')}</div>`;
+    corpo.innerHTML = `<div class="lista-refs-linhas">${refs.map(linha).join('')}</div>`;
     corpo.querySelectorAll('[data-ref]').forEach(el => {
       el.onclick = () => {
         const [code, cap, vIni, vFim] = el.dataset.ref.split('|');
         this.abrirTextoRefFixa(code, +cap, +vIni, +vFim);
       };
     });
+    // preenche o começo do texto de cada linha, como na tirinha
+    this.preencherTrechosRefs(corpo);
   },
 
   async abrirTextoRefFixa(code, cap, vIni, vFim) {
@@ -1909,7 +1960,7 @@ const App = {
 
     document.getElementById('voltar-refs-fixas').onclick = () =>
       this.atualizarRefsFixas(this.destaque);
-    document.getElementById('ir-ref-fixa').onclick = () => this.ir(code, capLocal, vIni);
+    document.getElementById('ir-ref-fixa').onclick = () => this.pularParaReferencia(code, capLocal, vIni);
   },
 
   abrirTirinha(vers) {
@@ -2075,7 +2126,7 @@ const App = {
     document.getElementById('voltar-refs').onclick = () => this.desenharReferencias();
     document.getElementById('ir-ref-cap').onclick = () => {
       this.fecharTirinha();
-      if (this.versao) this.ir(code, capLocal, vIni);
+      this.pularParaReferencia(code, capLocal, vIni);
     };
   },
 

@@ -1,4 +1,4 @@
-# O que mudou — fixados múltiplos, camadas e referências em linhas
+# O que mudou — referências fixas em linhas e volta rápida
 
 A pasta data continua intocada — só o app muda. Apague index.html, sw.js,
 manifest.json, teste.js e a pasta assets, copie os novos, e dê Ctrl+Shift+R uma
@@ -6,53 +6,36 @@ vez ao abrir.
 
 ---
 
-## Bugs corrigidos
+## 1. Referências fixas no mesmo padrão da tirinha
 
-**O fixado agora acompanha onde você parou.** Antes ele guardava só o ponto mais
-avançado e nunca seguia sua posição de volta — você fixava Gênesis 5, ia até o 29,
-mas ao voltar caía no 5. Agora ele acompanha sua última posição no livro, valendo
-para qualquer forma de navegar: tocar num versículo, arrastar, ou "próxima página".
-Você retoma exatamente de onde parou.
+As referências fixas (a faixa de baixo, quando você liga a opção nos Ajustes)
+agora aparecem no mesmo formato de linhas da tirinha: uma por linha, com o livro,
+capítulo e versículo em cima, e o começo do texto daquele versículo embaixo, em
+fonte menor. Na visão do capítulo todo, cada linha ainda mostra de qual versículo
+ela vem (v.16, v.17...).
 
-**Os botões não ficam mais atrás da barra inferior.** O "ir para o capítulo" da
-referência agora reserva espaço e para acima do rodapé. E o **comparar** passou
-para a frente da barra — como a ideia dele é uma comparação rápida, ele cobre o
-rodapé e ganhou um botão próprio de fechar (o X no canto).
+## 2. Botão de volta rápida
 
-## Fixados: agora vários, reordenáveis
+Faltava isto: quando você toca em "Ir para" numa referência — seja na tirinha,
+seja nas referências fixas — o app te leva ao capítulo dela, mas antes você
+perdia o lugar de onde saiu.
 
-Dá para fixar mais de um livro — o estudo quase sempre cruza livros. O novo entra
-embaixo, e você reordena com as setas ▲▼. Cada um fica no Histórico, na seção
-**Fixados** no topo, com o botão de desfixar. Continuam fixos até você tirá-los.
+Agora, ao chegar, aparece embaixo um botão **"Voltar para [livro cap:versículo]"**,
+apontando exatamente para onde você estava. Um toque e você retorna.
 
-**Atalho no topo.** À esquerda da sigla da tradução apareceu um ícone de alfinete:
-é um retorno rápido para o primeiro fixado. Ele só aparece quando você está em
-outro livro — some quando você já está nele.
+Ele é temporário, feito só para o ir-e-volta rápido enquanto você busca contexto:
 
-## Referências: nova apresentação
+- Some assim que você usa.
+- Some se você navegar para qualquer outro lugar por conta própria (trocar de
+  capítulo, abrir outro livro).
 
-- A **quantidade** aparece ao lado do título ("João 3:16 — 23 referências").
-- A lista virou **uma por linha**, esticada, em vez de dois botões por linha.
-- Cada linha traz o livro, capítulo e versículo na fonte normal, e abaixo o
-  **começo do texto** daquele versículo, em fonte menor e sem negrito — para você
-  já ter uma ideia sem precisar abrir.
-- Ao **abrir** uma referência, o painel **cresce** (cerca de 3/4 da tela) para
-  você ler melhor e rolar pelo texto.
-- Os botões **Voltar** e **Ir para** ficam **lado a lado**. O "ir" usa o nome
-  curto do livro, que cabe mesmo em nomes grandes.
-- A volta é temporária: ao fechar, o estado é descartado. É só para você ir e
-  voltar rápido, buscando contexto sem se perder no livro principal.
+Assim você consulta uma referência e volta ao seu estudo sem se perder.
 
 ---
 
 ## Conferido
 
-- 28 verificações desta leva, todas passando.
-- As 275 das levas anteriores, atualizadas, todas passando.
+- 14 verificações desta leva, todas passando.
+- As 303 das levas anteriores, todas passando.
 - Os 26 testes de dados continuam passando.
 - Nenhum erro de javascript.
-
-## Uma observação
-
-O seu fixado antigo (do formato de um só) é migrado automaticamente para a nova
-lista na primeira vez que abrir — não se perde.
