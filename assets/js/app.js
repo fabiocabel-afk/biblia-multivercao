@@ -248,6 +248,46 @@ const App = {
     this.fecharTirinha();
   },
 
+  /* O botão de fixar no cabeçalho da tirinha é um interruptor: reflete o mesmo
+   * estado das "Referências fixas na tela" dos Ajustes. Ligado, mostra o ícone
+   * de desfixar; um toque aqui ou lá desliga, e os dois lados acompanham. */
+  sincronizarBotaoFixarTirinha() {
+    const btn = document.getElementById('tirinha-fixar');
+    if (!btn) return;
+    const ligado = !!Prefs.get('refsFixas');
+    btn.classList.toggle('ativo', ligado);
+    btn.setAttribute('aria-pressed', ligado ? 'true' : 'false');
+    const rotulo = ligado ? 'Desfixar referências da tela' : 'Fixar referências na tela';
+    btn.setAttribute('aria-label', rotulo);
+    btn.title = rotulo;
+  },
+
+  alternarFixarPelaTirinha() {
+    const ligar = !Prefs.get('refsFixas');
+    Prefs.set('refsFixas', ligar);
+    this.aplicarRefsFixas(ligar);
+    this.sincronizarBotaoFixarTirinha();
+    // reflete no interruptor dos Ajustes, se estiver aberto
+    const ctrl = document.getElementById('ctrl-refs-fixas');
+    if (ctrl) ctrl.checked = ligar;
+    if (ligar) {
+      // fixa as referências do versículo em foco e fecha a tirinha,
+      // dando a impressão de que ela "desceu" e virou o painel fixo
+      this.atualizarRefsFixas(this.destaque || null);
+      this.fecharTirinha();
+    }
+  },
+
+  /* Desfixa direto pelo painel fixo (o X/alfinete ao lado do título). Desliga
+   * as referências fixas e mantém a tirinha e os Ajustes em sincronia. */
+  desligarRefsFixas() {
+    Prefs.set('refsFixas', false);
+    this.aplicarRefsFixas(false);
+    this.sincronizarBotaoFixarTirinha();
+    const ctrl = document.getElementById('ctrl-refs-fixas');
+    if (ctrl) ctrl.checked = false;
+  },
+
   fecharTirinha() {
     const t = document.getElementById('tirinha');
     t.classList.remove('aberta', 'alta');
@@ -1212,7 +1252,12 @@ const App = {
         <input type="text" class="campo" value="${Leitura.escapar(m.nome)}" data-nome="${m.id}">
         <span class="sub">${Marcadores.porMarcador(m.id).length}</span>
       </div>
-      <div class="caixa-cor fechada" data-caixa="${m.id}"></div>`).join('')}`;
+      <div class="caixa-cor fechada" data-caixa="${m.id}"></div>`).join('')}
+      <button class="botao secundario add-marcador" id="add-marcador"
+        ${Marcadores.podeAdicionar() ? '' : 'disabled'}>+ Novo marcador</button>
+      ${Marcadores.podeAdicionar()
+        ? ''
+        : `<p class="contagem">Limite de ${Marcadores.limite()} marcadores atingido.</p>`}`;
 
     const guarda = `<p class="contagem">${Guarda.persistente()
       ? 'O histórico e os marcadores estão sendo gravados neste dispositivo.'
@@ -1279,6 +1324,7 @@ const App = {
     if (refsFixas) refsFixas.onchange = e => {
       Prefs.set('refsFixas', e.target.checked);
       this.aplicarRefsFixas(e.target.checked);
+      this.sincronizarBotaoFixarTirinha();
     };
 
     const escuro = achar('ctrl-escuro');
@@ -1315,6 +1361,12 @@ const App = {
     corpo.querySelectorAll('[data-nome]').forEach(el => {
       el.onchange = () => Marcadores.atualizar(+el.dataset.nome, { nome: el.value });
     });
+
+    const addMarc = achar('add-marcador');
+    if (addMarc) addMarc.onclick = () => {
+      if (!Marcadores.adicionar()) return;   // no teto de 66, não faz nada
+      this.desenharAjustes();   // redesenha; a seção Marcadores segue aberta
+    };
 
     // roda de cores: abre embaixo do marcador que foi tocado
     corpo.querySelectorAll('[data-abrir-cor]').forEach(el => {
@@ -1865,6 +1917,8 @@ const App = {
     };
 
     q('tirinha-marcar').onclick = () => this.escolherMarcador();
+    q('tirinha-fixar').onclick = () => this.alternarFixarPelaTirinha();
+    q('desfixar-refs').onclick = () => this.desligarRefsFixas();
     document.querySelectorAll('.aba-tirinha').forEach(el => {
       el.onclick = () => this.mostrarAbaTirinha(el.dataset.aba);
     });
@@ -2059,6 +2113,7 @@ const App = {
     document.querySelectorAll(`#folha .v[data-vers="${vers}"]`)
       .forEach(x => x.classList.add('foco'));
     this.mostrarAbaTirinha('versoes');
+    this.sincronizarBotaoFixarTirinha();
     const t = document.getElementById('tirinha');
     t.classList.add('aberta');
     t.setAttribute('aria-hidden', 'false');
@@ -2068,9 +2123,12 @@ const App = {
     this.abaTirinha = aba;
     document.querySelectorAll('.aba-tirinha').forEach(el =>
       el.classList.toggle('ativa', el.dataset.aba === aba));
-    // "Marcar" só vale para o versículo em si (aba Versões)
+    // "Marcar" só vale para o versículo em si (aba Versões);
+    // o fixar só faz sentido na aba Referências, que é o que se fixa na tela
     document.getElementById('tirinha-marcar').style.display =
       aba === 'versoes' ? '' : 'none';
+    document.getElementById('tirinha-fixar').hidden = aba !== 'refs';
+    if (aba === 'refs') this.sincronizarBotaoFixarTirinha();
     if (aba === 'versoes') {
       const t = document.getElementById('tirinha');
       t.classList.remove('alta');

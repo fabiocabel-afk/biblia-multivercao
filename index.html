@@ -62,6 +62,9 @@
 <div class="painel-refs-fixas" id="painel-refs-fixas" aria-hidden="true">
   <div class="cabeca-refs-fixas">
     <strong id="titulo-refs-fixas">Referências do capítulo</strong>
+    <button id="desfixar-refs" class="desfixar-refs" aria-label="Desfixar referências da tela" title="Desfixar referências da tela">
+      <svg class="icone"><use href="#i-fixar"/></svg>
+    </button>
   </div>
   <div class="corpo-refs-fixas" id="corpo-refs-fixas"></div>
 </div>
@@ -191,7 +194,8 @@
   <header>
     <strong id="tirinha-ref">—</strong>
     <button class="botao secundario" id="tirinha-marcar" style="margin-left:auto;padding:7px 12px;font-size:13px">Marcar</button>
-    <button data-fechar-tirinha aria-label="Fechar"><svg class="icone" style="stroke:var(--tinta)"><use href="#i-fechar"/></svg></button>
+    <button id="tirinha-fixar" class="botao-cab-tirinha" aria-label="Fixar referências na tela" title="Fixar referências na tela" hidden><svg class="icone"><use href="#i-fixar"/></svg></button>
+    <button data-fechar-tirinha class="botao-cab-tirinha" aria-label="Fechar"><svg class="icone" style="stroke:var(--tinta)"><use href="#i-fechar"/></svg></button>
   </header>
   <div class="abas-tirinha">
     <button class="aba-tirinha ativa" data-aba="versoes">Versões</button>

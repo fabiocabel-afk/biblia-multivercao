@@ -379,29 +379,30 @@ const Ponto = {
 
 /* ------------------------------------------------------------- marcadores */
 
+/* Comeca enxuto: tres marcadores. Quem usa mais adiciona os que quiser pelo
+ * botao "Novo marcador" nos Ajustes; quem usa menos deixa como esta. */
 const MARCADORES_PADRAO = [
-  { id: 1,  nome: 'Marcador 1',  cor: '#F2C94C' },
-  { id: 2,  nome: 'Marcador 2',  cor: '#F2994A' },
-  { id: 3,  nome: 'Marcador 3',  cor: '#EB5757' },
-  { id: 4,  nome: 'Marcador 4',  cor: '#E58FB0' },
-  { id: 5,  nome: 'Marcador 5',  cor: '#BB6BD9' },
-  { id: 6,  nome: 'Marcador 6',  cor: '#7B61FF' },
-  { id: 7,  nome: 'Marcador 7',  cor: '#2D9CDB' },
-  { id: 8,  nome: 'Marcador 8',  cor: '#56CCF2' },
-  { id: 9,  nome: 'Marcador 9',  cor: '#27AE60' },
-  { id: 10, nome: 'Marcador 10', cor: '#6FCF97' },
-  { id: 11, nome: 'Marcador 11', cor: '#A68B5B' },
-  { id: 12, nome: 'Marcador 12', cor: '#828282' },
+  { id: 1, nome: 'Marcador 1', cor: '#F2C94C' },
+  { id: 2, nome: 'Marcador 2', cor: '#F2994A' },
+  { id: 3, nome: 'Marcador 3', cor: '#EB5757' },
 ];
+
+/* Cores sugeridas para marcadores novos. Cada novo nasce com uma cor ainda
+ * nao usada na lista; a pessoa troca depois se quiser. */
+const PALETA_MARCADORES = [
+  '#F2C94C', '#F2994A', '#EB5757', '#E58FB0', '#BB6BD9', '#7B61FF',
+  '#2D9CDB', '#56CCF2', '#27AE60', '#6FCF97', '#A68B5B', '#828282',
+];
+
+/* Teto de marcadores: 66, um para cada livro da Biblia, se a pessoa quiser. */
+const MAX_MARCADORES = 66;
 
 const Marcadores = {
   lista() {
     const salvos = Guarda.ler('marcadores', null);
-    if (!salvos) return MARCADORES_PADRAO.map(m => ({ ...m }));
-    return MARCADORES_PADRAO.map(p => {
-      const s = salvos.find(x => x.id === p.id);
-      return s ? { ...p, ...s } : { ...p };
-    });
+    if (!salvos || !salvos.length) return MARCADORES_PADRAO.map(m => ({ ...m }));
+    // a lista salva e a verdadeira: inclui os marcadores adicionados depois
+    return salvos.map(m => ({ ...m }));
   },
 
   de(id) {
@@ -414,6 +415,24 @@ const Marcadores = {
     const m = lista.find(x => x.id === id);
     if (m) Object.assign(m, campos);
     Guarda.gravar('marcadores', lista);
+  },
+
+  /** Cria um marcador novo no fim da lista, ja com uma cor distinta das em uso.
+   * A pessoa pode trocar a cor e o nome logo em seguida. */
+  limite() { return MAX_MARCADORES; },
+  podeAdicionar() { return this.lista().length < MAX_MARCADORES; },
+
+  adicionar() {
+    const lista = this.lista();
+    if (lista.length >= MAX_MARCADORES) return null;   // teto de 66
+    const usadas = new Set(lista.map(m => (m.cor || '').toUpperCase()));
+    const cor = PALETA_MARCADORES.find(c => !usadas.has(c.toUpperCase()))
+      || PALETA_MARCADORES[lista.length % PALETA_MARCADORES.length];
+    const id = lista.reduce((mx, m) => Math.max(mx, m.id), 0) + 1;
+    const novo = { id, nome: `Marcador ${id}`, cor };
+    lista.push(novo);
+    Guarda.gravar('marcadores', lista);
+    return novo;
   },
 
   /* Chave da marcacao: guarda a versificacao de origem, para que a marca
