@@ -1321,8 +1321,9 @@ body.selecionando .rodape { transform: translateY(110%); }
   color: var(--tinta-numero);
 }
 
-/* neste modo a capitular atrapalha o alinhamento, então sai de cena */
-[data-modo-versiculo='linha'] .capitular { display: none; }
+/* A capitular aparece igual à do corrido (mesmo tamanho e cor): ela flutua à
+   esquerda e as primeiras linhas do capítulo acompanham ao lado dela. */
+[data-modo-versiculo='linha'] .capitular { display: block; }
 
 /* No modo por linha, a barra lateral do "onde parei" precisa de folga à
    esquerda para não cair em cima do número que abre a linha. */

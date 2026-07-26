@@ -78,9 +78,10 @@ const Leitura = {
 
   /** Monta o HTML de um capitulo inteiro. */
   html(versaoCode, livro, capitulo, { comCapitular = true } = {}) {
-    // no modo "um por linha" o numero e o cabecalho de cada versiculo, entao a
-    // capitular sai: ela roubaria o lugar do numero do primeiro
-    if (Prefs.get('versiculoPorLinha')) comCapitular = false;
+    // A capitular (o numero grande do capitulo) aparece nos dois modos, igual.
+    // No corrido ela substitui o numero do primeiro versiculo; no "um por linha"
+    // o numero do primeiro continua, porque ali cada linha comeca pelo numero.
+    const porLinha = Prefs.get('versiculoPorLinha');
     const versificacao = Dados.versificacaoDe(versaoCode);
     const partes = [];
     let lacunas = 0;
@@ -98,7 +99,8 @@ const Leitura = {
         ? `<span class="capitular">${capitulo.number}</span>`
         : '';
 
-      const numero = (comCapitular && i === 0) ? '' : `<span class="n">${v.number}</span>`;
+      // o numero do primeiro versiculo so sai no corrido; no "um por linha" fica
+      const numero = (comCapitular && i === 0 && !porLinha) ? '' : `<span class="n">${v.number}</span>`;
 
       if (!v.text) lacunas++;
       const texto = v.text
