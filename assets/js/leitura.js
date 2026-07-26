@@ -95,19 +95,29 @@ const Leitura = {
         `data-vers="${v.number}"`,
       ].join(' ');
 
-      const capitular = comCapitular && i === 0
+      const ehAbertura = comCapitular && i === 0;
+      const capitular = ehAbertura
         ? `<span class="capitular">${capitulo.number}</span>`
         : '';
 
       // o numero do primeiro versiculo so sai no corrido; no "um por linha" fica
-      const numero = (comCapitular && i === 0 && !porLinha) ? '' : `<span class="n">${v.number}</span>`;
+      const numero = (ehAbertura && !porLinha) ? '' : `<span class="n">${v.number}</span>`;
 
       if (!v.text) lacunas++;
       const texto = v.text
         ? this.comMarcas(v.text, faixas)
         : '(este versículo não veio no texto de origem)';
 
-      partes.push(`${capitular}<span ${attrs}>${numero}${texto}</span> `);
+      const verso = `<span ${attrs}>${numero}${texto}</span>`;
+
+      // No "um por linha" a capitular vai numa coluna própria à esquerda, fora da
+      // caixa do versiculo — assim a marcacao (e o "onde parei") pegam so o texto,
+      // nunca o numero do capitulo. No corrido, segue flutuando como sempre.
+      if (ehAbertura && porLinha) {
+        partes.push(`<div class="linha-abertura">${capitular}${verso}</div>`);
+      } else {
+        partes.push(`${capitular}${verso} `);
+      }
     });
 
     let saida = partes.join('');

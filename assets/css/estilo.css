@@ -1321,9 +1321,24 @@ body.selecionando .rodape { transform: translateY(110%); }
   color: var(--tinta-numero);
 }
 
-/* A capitular aparece igual à do corrido (mesmo tamanho e cor): ela flutua à
-   esquerda e as primeiras linhas do capítulo acompanham ao lado dela. */
-[data-modo-versiculo='linha'] .capitular { display: block; }
+/* A capitular aparece igual à do corrido (mesmo tamanho e cor). No "um por
+   linha" ela fica numa coluna à esquerda, fora da caixa do versículo, para a
+   marcação e o "onde parei" pegarem só o texto — nunca o número do capítulo. */
+[data-modo-versiculo='linha'] .linha-abertura {
+  display: flex;
+  align-items: flex-start;
+  gap: .12em;
+  margin: 0 0 .85em;
+}
+[data-modo-versiculo='linha'] .linha-abertura .capitular {
+  float: none;
+  flex: none;
+  padding-top: 0;
+}
+[data-modo-versiculo='linha'] .linha-abertura .v {
+  flex: 1;
+  margin-bottom: 0;
+}
 
 /* No modo por linha, a barra lateral do "onde parei" precisa de folga à
    esquerda para não cair em cima do número que abre a linha. */
