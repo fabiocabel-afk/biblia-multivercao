@@ -92,13 +92,23 @@ const Historico = {
     return Guarda.ler('historico', []);
   },
 
-  /** Registra uma visita. `vers` vem da selecao ou da passagem aberta. */
+  /** Registra uma visita. `vers` vem da selecao ou da passagem aberta.
+   *
+   * Uma entrada por CAPITULO, nao por versiculo: ler o mesmo capitulo e ir
+   * avancando nao enche o historico de linhas repetidas — a mesma entrada sobe
+   * para o topo e passa a mostrar o ultimo versiculo lido ("onde parei").
+   *
+   * Quando a visita vem sem versiculo (so reabriu o capitulo, virou a pagina),
+   * a posicao ja registrada e preservada — nao se perde onde a pessoa parou. */
   registrar({ versao, code, cap, vers, trecho }) {
     let lista = this.lista();
-    // tira qualquer visita anterior ao mesmo versiculo/capitulo, para reinserir no topo
-    lista = lista.filter(it => !(it.code === code && it.cap === cap && it.vers === vers));
-    lista.unshift({ versao, code, cap, vers: vers || null,
-      trecho: (trecho || '').slice(0, 90), hora: new Date().toISOString() });
+    const antiga = lista.find(it => it.code === code && it.cap === cap);
+    const versFinal   = vers || (antiga ? antiga.vers : null);
+    const trechoFinal = (vers || !antiga) ? (trecho || '').slice(0, 90) : antiga.trecho;
+
+    lista = lista.filter(it => !(it.code === code && it.cap === cap));
+    lista.unshift({ versao, code, cap, vers: versFinal || null,
+      trecho: trechoFinal || '', hora: new Date().toISOString() });
     if (lista.length > this.LIMITE) lista = lista.slice(0, this.LIMITE);
     Guarda.gravar('historico', lista);
     this.acompanharFixado({ code, cap, vers });
@@ -176,8 +186,15 @@ const Historico = {
     const lista = this.fixados();
     const f = lista.find(x => x.code === code);
     if (!f) return;
-    f.cap = cap;
-    f.vers = vers || null;
+    // Mudou de capitulo: a posicao passa a ser o novo capitulo, do inicio,
+    // ate a pessoa tocar num versiculo. Mesmo capitulo com versiculo: segue o
+    // toque. Mesmo capitulo sem versiculo (so reabriu): preserva onde parou.
+    if (f.cap !== cap) {
+      f.cap = cap;
+      f.vers = vers || null;
+    } else if (vers) {
+      f.vers = vers;
+    }
     Guarda.gravar('fixados', lista);
   },
 };

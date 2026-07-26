@@ -1889,6 +1889,13 @@ const App = {
   /* =========================================================== marcadores */
 
   /** Toque simples: poe ou tira o ponto de leitura, na hora. */
+  /** O texto do versículo (pelo número) como está na tela, sem o número, para
+   *  servir de amostra na linha do histórico. */
+  amostraDoVersiculo(vers) {
+    const el = document.querySelector(`#folha .v[data-vers="${vers}"]`);
+    return el ? this.textoDoVersiculo(el).trim() : '';
+  },
+
   marcarPonto(vers) {
     // o realce (foco) que a tirinha deixa ao abrir por toque duplo precisa sair
     // quando a pessoa toca noutro versiculo — senao fica preso na tela
@@ -1898,6 +1905,16 @@ const App = {
     const versificacao = Dados.versificacaoDe(this.versao);
     const posto = Ponto.alternar(versificacao, this.code, this.cap, vers);
     Leitura.pintarPonto(vers, posto);
+
+    // marcar o ponto é dizer "parei aqui": a mesma entrada do capítulo no
+    // histórico passa a apontar este versículo (sem criar outra) e o livro
+    // fixado acompanha, para o atalho voltar exatamente onde a leitura parou
+    if (posto) {
+      Historico.registrar({
+        versao: this.versao, code: this.code, cap: this.cap, vers,
+        trecho: this.amostraDoVersiculo(vers),
+      });
+    }
 
     // com as referências fixas ligadas, tocar num versículo filtra as dele;
     // tocar de novo no mesmo (tirando o ponto) volta às do capítulo todo
