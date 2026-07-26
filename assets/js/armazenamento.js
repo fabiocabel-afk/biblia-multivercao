@@ -435,6 +435,29 @@ const Marcadores = {
     return novo;
   },
 
+  /** Exclui um marcador e apaga as marcas que o usavam. Mantem ao menos um,
+   * para o sistema de marcacao nunca ficar sem opcao. */
+  remover(id) {
+    const lista = this.lista();
+    if (lista.length <= 1) return false;              // nao deixa ficar sem nenhum
+    const nova = lista.filter(m => m.id !== id);
+    if (nova.length === lista.length) return false;   // id inexistente
+    Guarda.gravar('marcadores', nova);
+
+    // tira as faixas que apontavam para este marcador
+    const todos = this.marcados();
+    let mudou = false;
+    for (const k of Object.keys(todos)) {
+      const antes = this.normalizar(todos[k]);
+      const depois = antes.filter(fx => fx.m !== id);
+      if (depois.length === antes.length) continue;
+      mudou = true;
+      if (depois.length) todos[k] = depois; else delete todos[k];
+    }
+    if (mudou) Guarda.gravar('marcados', todos);
+    return true;
+  },
+
   /* Chave da marcacao: guarda a versificacao de origem, para que a marca
    * apareca certa mesmo abrindo o versiculo em outra versao. */
   chave(versificacao, code, cap, vers) {

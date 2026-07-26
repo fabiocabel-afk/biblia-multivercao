@@ -25,6 +25,7 @@
   <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16" stroke-linecap="round"/></symbol>
   <symbol id="i-compartilhar" viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4" stroke-linecap="round"/></symbol>
   <symbol id="i-fixar" viewBox="0 0 24 24"><path d="M9 3h6l-1 7 3 3v2H7v-2l3-3z" stroke-linejoin="round"/><path d="M12 15v6" stroke-linecap="round"/></symbol>
+  <symbol id="i-lixeira" viewBox="0 0 24 24"><path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13M10 11v6M14 11v6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="i-fechar" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" stroke-linecap="round"/></symbol>
   <symbol id="i-antes" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="i-depois" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7" stroke-linecap="round" stroke-linejoin="round"/></symbol>
@@ -108,6 +109,18 @@
 </footer>
 
 <div class="veu" id="veu"></div>
+
+<!-- diálogo de confirmação, no tema do app (substitui o confirm() do navegador) -->
+<div class="dialogo-veu" id="dialogo-veu" aria-hidden="true">
+  <div class="dialogo" role="dialog" aria-modal="true" aria-labelledby="dialogo-titulo">
+    <strong id="dialogo-titulo"></strong>
+    <p id="dialogo-mensagem"></p>
+    <div class="dialogo-acoes">
+      <button class="botao secundario" id="dialogo-cancelar">Cancelar</button>
+      <button class="botao" id="dialogo-confirmar">Confirmar</button>
+    </div>
+  </div>
+</div>
 
 <!-- ------------------------------------------------------------- painéis -->
 

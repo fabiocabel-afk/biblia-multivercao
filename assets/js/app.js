@@ -952,9 +952,14 @@ const App = {
     });
 
     corpo.querySelectorAll('[data-remover]').forEach(el => {
-      el.onclick = () => {
+      el.onclick = async () => {
         const e = achar(el.dataset.remover);
-        if (!confirm(`Excluir o estudo "${Estudos.nomeDe(e)}"?`)) return;
+        const ok = await this.confirmar({
+          titulo: 'Excluir estudo',
+          mensagem: `Excluir o estudo "${Estudos.nomeDe(e)}"?`,
+          confirmar: 'Excluir',
+        });
+        if (!ok) return;
         Estudos.remover(el.dataset.remover);
         this.desenharEstudos();
       };
@@ -1243,14 +1248,19 @@ const App = {
         <input type="checkbox" data-tirinha="${v.code}"
           ${p.versoesTirinha.includes(v.code) ? 'checked' : ''}></label>`).join('')}`;
 
+    const listaMarc = Marcadores.lista();
+    const podeExcluirMarc = listaMarc.length > 1;   // sempre resta ao menos um
     const marcadores = `
       <p class="contagem">Trocar a cor aqui recolore de uma vez todos os
       trechos ligados àquele marcador.</p>
-      ${Marcadores.lista().map(m => `<div class="item-marcador" data-item="${m.id}">
+      ${listaMarc.map(m => `<div class="item-marcador" data-item="${m.id}">
         <button class="bolha-cor" data-abrir-cor="${m.id}"
           style="background:${m.cor}" title="Escolher a cor"></button>
         <input type="text" class="campo" value="${Leitura.escapar(m.nome)}" data-nome="${m.id}">
         <span class="sub">${Marcadores.porMarcador(m.id).length}</span>
+        ${podeExcluirMarc ? `<button class="excluir-marcador" data-excluir="${m.id}"
+          aria-label="Excluir marcador" title="Excluir marcador">
+          <svg class="icone"><use href="#i-lixeira"/></svg></button>` : ''}
       </div>
       <div class="caixa-cor fechada" data-caixa="${m.id}"></div>`).join('')}
       <button class="botao secundario add-marcador" id="add-marcador"
@@ -1368,6 +1378,27 @@ const App = {
       this.desenharAjustes();   // redesenha; a seção Marcadores segue aberta
     };
 
+    corpo.querySelectorAll('[data-excluir]').forEach(el => {
+      el.onclick = async () => {
+        const id = +el.dataset.excluir;
+        const m = Marcadores.de(id);
+        const n = Marcadores.porMarcador(id).length;
+        const aviso = n
+          ? ` Ele está em ${n} ${n === 1 ? 'trecho marcado' : 'trechos marcados'}; a cor será removida deles.`
+          : '';
+        const ok = await this.confirmar({
+          titulo: 'Excluir marcador',
+          mensagem: `Excluir \"${m ? m.nome : 'este marcador'}\"?${aviso}`,
+          confirmar: 'Excluir',
+        });
+        if (!ok) return;
+        Marcadores.remover(id);
+        // se um versículo aberto usava a cor, repinta a folha para tirá-la
+        this.desenharAjustes();
+        if (typeof this.repintarMarcasVisiveis === 'function') this.repintarMarcasVisiveis();
+      };
+    });
+
     // roda de cores: abre embaixo do marcador que foi tocado
     corpo.querySelectorAll('[data-abrir-cor]').forEach(el => {
       el.onclick = () => {
@@ -1409,6 +1440,55 @@ const App = {
     const n = el.querySelector('.n');
     const inteiro = el.textContent;
     return n ? inteiro.slice(n.textContent.length) : inteiro;
+  },
+
+  /* Repinta as marcas dos versículos que estão na tela, a partir do estado
+   * atual. Usado após excluir um marcador: a cor some na hora, sem redesenhar
+   * o capítulo inteiro nem pular o scroll. */
+  repintarMarcasVisiveis() {
+    const versificacao = Dados.versificacaoDe(this.versao);
+    document.querySelectorAll('#folha .v').forEach(el => {
+      const vers = +el.dataset.vers;
+      const faixas = Marcadores.faixas(versificacao, this.code, this.cap, vers);
+      Leitura.pintarMarca(vers, this.textoDoVersiculo(el), faixas);
+    });
+  },
+
+  /* Diálogo de confirmação no tema do app, no lugar do confirm() do navegador.
+   * Devolve uma promessa: true se confirmou, false se cancelou. Tocar fora ou
+   * apertar Esc cancela; Enter confirma. */
+  confirmar({ titulo = 'Confirmar', mensagem = '', confirmar: rotuloConf = 'Confirmar',
+              cancelar: rotuloCanc = 'Cancelar' } = {}) {
+    return new Promise(resolve => {
+      const veu = document.getElementById('dialogo-veu');
+      const btConf = document.getElementById('dialogo-confirmar');
+      const btCanc = document.getElementById('dialogo-cancelar');
+      document.getElementById('dialogo-titulo').textContent = titulo;
+      document.getElementById('dialogo-mensagem').textContent = mensagem;
+      btConf.textContent = rotuloConf;
+      btCanc.textContent = rotuloCanc;
+
+      const fechar = valor => {
+        veu.classList.remove('aberto');
+        veu.setAttribute('aria-hidden', 'true');
+        btConf.onclick = btCanc.onclick = veu.onclick = null;
+        document.removeEventListener('keydown', aoTeclar, true);
+        resolve(valor);
+      };
+      const aoTeclar = e => {
+        if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); fechar(false); }
+        else if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); fechar(true); }
+      };
+
+      btConf.onclick = () => fechar(true);
+      btCanc.onclick = () => fechar(false);
+      veu.onclick = e => { if (e.target === veu) fechar(false); };
+      document.addEventListener('keydown', aoTeclar, true);
+
+      veu.setAttribute('aria-hidden', 'false');
+      veu.classList.add('aberto');
+      btConf.focus();
+    });
   },
 
   /** Onde, dentro do texto do versículo, cai um ponto da seleção. */

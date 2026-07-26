@@ -323,6 +323,46 @@ button {
 
 .veu.aberto { opacity: 1; pointer-events: auto; }
 
+/* ==================== diálogo de confirmação (tema do app) ========= */
+
+.dialogo-veu {
+  position: fixed;
+  inset: 0;
+  z-index: 90;                 /* acima de painéis, tirinha e refs fixas */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(12, 10, 8, .5);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .18s ease;
+}
+.dialogo-veu.aberto { opacity: 1; pointer-events: auto; }
+
+.dialogo {
+  width: 100%;
+  max-width: 340px;
+  background: var(--papel);
+  color: var(--tinta);
+  border-radius: 14px;
+  padding: 20px 20px 16px;
+  box-shadow: 0 12px 40px rgb(0 0 0 / .35);
+  transform: translateY(8px) scale(.98);
+  transition: transform .18s ease;
+}
+.dialogo-veu.aberto .dialogo { transform: none; }
+
+.dialogo strong { display: block; font-size: 16px; margin-bottom: 8px; }
+.dialogo p {
+  margin: 0 0 18px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--tinta-fraca);
+}
+.dialogo-acoes { display: flex; gap: 10px; }
+.dialogo-acoes .botao { flex: 1; }
+
 .painel {
   position: fixed;
   inset: 0 0 0 auto;
@@ -1026,6 +1066,20 @@ body.comparando .comparador { display: flex; }
 /* botao de acrescentar um marcador, logo abaixo da lista nos Ajustes */
 .add-marcador { width: 100%; margin-top: 12px; }
 .add-marcador:disabled { opacity: .4; cursor: default; }
+
+/* lixeira de excluir marcador, no fim de cada linha */
+.excluir-marcador {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--raio);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.excluir-marcador .icone { stroke: var(--tinta-fraca); width: 18px; height: 18px; }
+.excluir-marcador:hover { background: color-mix(in srgb, var(--rubrica) 12%, transparent); }
+.excluir-marcador:hover .icone { stroke: var(--rubrica); }
 
 .bolha-cor {
   width: 30px;
