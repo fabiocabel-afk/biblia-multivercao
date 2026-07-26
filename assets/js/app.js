@@ -1940,6 +1940,8 @@ const App = {
 
   async atualizarRefsFixas(vers = null) {
     if (!Prefs.get('refsFixas')) return;
+    const painel = document.getElementById('painel-refs-fixas');
+    if (painel) painel.classList.remove('alto');   // a lista fica na altura normal
     const corpo = document.getElementById('corpo-refs-fixas');
     const titulo = document.getElementById('titulo-refs-fixas');
     const nome = Dados.nomeCurto(this.versao, this.code);
@@ -2000,8 +2002,13 @@ const App = {
   },
 
   async abrirTextoRefFixa(code, cap, vIni, vFim) {
+    const painel = document.getElementById('painel-refs-fixas');
     const corpo = document.getElementById('corpo-refs-fixas');
-    corpo.innerHTML = '<div class="estado">Abrindo…</div>';
+    corpo.innerHTML = '<div class="estado">Abrindo o texto…</div>';
+
+    // ao abrir o texto, o painel cresce e cobre a folha, como a tirinha faz —
+    // a leitura da referência ganha espaço. Volta ao normal ao tocar em Voltar.
+    painel.classList.add('alto');
 
     let capLocal = cap;
     if (Dados.versificacaoDe(this.versao) === 'vulgata') {
@@ -2013,30 +2020,36 @@ const App = {
       const r = await Dados.capitulo(this.versao, code, capLocal);
       if (r) {
         nomeLivro = r.livro.name;
-        versos = r.capitulo.verses.filter(v => v.number >= vIni && v.number <= vFim + 6);
+        const ate = vFim + 8;
+        versos = r.capitulo.verses.filter(v => v.number >= vIni && v.number <= ate);
       }
     } catch { /* ausente */ }
 
     const ref = `${nomeLivro} ${capLocal}:${vIni}` + (vFim !== vIni ? `-${vFim}` : '');
-    const texto = versos.length
+    const corpoTexto = versos.length
       ? versos.map(v => {
           const foco = v.number >= vIni && v.number <= vFim ? ' em-foco' : '';
           return `<p class="verso-ref${foco}"><span class="n">${v.number}</span>${Leitura.escapar(v.text || '')}</p>`;
         }).join('')
       : '<div class="estado">Texto não disponível nesta versão.</div>';
 
+    // mesmos botões da tirinha, lado a lado, para ficar padronizado
+    const nomeCurto = Dados.nomeCurto(this.versao, code);
     corpo.innerHTML = `
-      <div class="cabeca-ref-texto">
-        <button class="voltar-etapa" id="voltar-refs-fixas">← Referências</button>
-        <strong>${ref}</strong>
-      </div>
-      <div class="texto-ref">${texto}</div>
-      <button class="botao" id="ir-ref-fixa" style="width:100%;margin-top:10px">
-        Ir para ${nomeLivro} ${capLocal}</button>`;
+      <div class="cabeca-ref-texto"><strong>${ref}</strong></div>
+      <div class="texto-ref">${corpoTexto}</div>
+      <div class="acoes-ref">
+        <button class="botao secundario" id="voltar-ref-fixa">← Voltar</button>
+        <button class="botao" id="ir-ref-fixa">Ir para ${nomeCurto} ${capLocal}</button>
+      </div>`;
 
-    document.getElementById('voltar-refs-fixas').onclick = () =>
+    // Voltar contrai o painel de volta à altura normal e mostra a lista
+    document.getElementById('voltar-ref-fixa').onclick = () => {
+      painel.classList.remove('alto');
       this.atualizarRefsFixas(this.destaque);
-    document.getElementById('ir-ref-fixa').onclick = () => this.pularParaReferencia(code, capLocal, vIni);
+    };
+    document.getElementById('ir-ref-fixa').onclick = () =>
+      this.pularParaReferencia(code, capLocal, vIni);
   },
 
   abrirTirinha(vers) {

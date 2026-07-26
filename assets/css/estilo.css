@@ -5,6 +5,31 @@
  * Biblia impressa nova e de uma envelhecida.
  */
 
+/* EB Garamond — a versao livre da Garamond classica, embutida para valer
+   offline (o Windows nao traz Garamond de fabrica). So o corpo de leitura e o
+   nome do livro a usam; a interface segue em fonte de sistema. */
+@font-face {
+  font-family: 'EB Garamond';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../fonts/eb-garamond-latin-400-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'EB Garamond';
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../fonts/eb-garamond-latin-400-italic.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'EB Garamond';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('../fonts/eb-garamond-latin-600-normal.woff2') format('woff2');
+}
+
 :root {
   /* temperatura: interpolada em tempo real pelo app (0 a 100) */
   --papel: #ffffff;
@@ -22,7 +47,7 @@
   --rubrica: #8c2f39;
   --rubrica-clara: #b8636b;
 
-  --fonte-texto: 'Iowan Old Style', 'Palatino Linotype', Palatino, 'Book Antiqua', Georgia, serif;
+  --fonte-texto: 'EB Garamond', 'Garamond', 'Adobe Garamond Pro', 'Palatino Linotype', Georgia, serif;
   --fonte-ui: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   --fonte-sigla: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
 
@@ -145,23 +170,23 @@ button {
 }
 
 .folha .titulo-livro {
-  font-size: .78em;
+  font-size: .8em;
   letter-spacing: .18em;
   text-transform: uppercase;
   text-align: center;
   color: var(--tinta-fraca);
-  font-family: var(--fonte-ui);
+  font-family: var(--fonte-texto);
   margin: 0 0 1.6em;
-  font-weight: 500;
+  font-weight: 600;
 }
 
 /* no primeiro capítulo, o nome do livro se anuncia grande e forte, como a
    abertura de um livro numa Bíblia impressa */
 .folha .titulo-livro.abertura {
-  font-size: 1.5em;
-  letter-spacing: .08em;
+  font-size: 1.6em;
+  letter-spacing: .06em;
   color: var(--tinta);
-  font-weight: 800;
+  font-weight: 600;
   margin: .2em 0 1.2em;
 }
 
@@ -1788,6 +1813,15 @@ body.com-refs-fixas .painel-refs-fixas {
   border-top: 1px solid color-mix(in srgb, var(--tinta) 16%, transparent);
   box-shadow: 0 -4px 20px rgb(0 0 0 / .1);
   z-index: 30;
+  transition: height .18s ease, top .18s ease;
+}
+
+/* ao abrir o texto de uma referência, o painel cresce e cobre a folha — igual
+   à tirinha. Volta à altura normal assim que a lista reaparece. */
+body.com-refs-fixas .painel-refs-fixas.alto {
+  top: calc(var(--barra) + 8px);
+  height: auto;
+  box-shadow: 0 -6px 30px rgb(0 0 0 / .22);
 }
 
 .cabeca-refs-fixas {
@@ -1842,10 +1876,11 @@ body.com-refs-fixas .painel-refs-fixas {
 .mini-seta:hover:not(:disabled) { background: color-mix(in srgb, var(--tinta) 10%, transparent); color: var(--tinta); }
 .mini-seta:disabled { opacity: .25; }
 
-/* botão de fechar a comparação, já que ela cobre o rodapé */
+/* botão de fechar a comparação, já que ela cobre o rodapé. Fica na metade de
+   baixo: é ela que some ao fechar (a de cima é a versão principal, que fica) */
 .fechar-comparar {
   position: absolute;
-  top: 8px;
+  bottom: 8px;
   right: 8px;
   z-index: 5;
   width: 34px;
