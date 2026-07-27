@@ -2354,6 +2354,110 @@ body.com-refs-fixas .voltar-origem { bottom: calc(42vh + 14px); z-index: 32; }
 .acoes-anot { display: flex; gap: 10px; margin-top: 14px; }
 .acoes-anot .botao { flex: 1; }
 
+/* Modo de leitura da anotação: folha sempre branca, mesmo no escuro, para
+   bater o olho e reconhecer que é anotação. A formatação do usuário (cores,
+   fontes, negrito…) vem pronta e é preservada. */
+.leitura-anot { display: flex; flex-direction: column; gap: 14px; }
+.folha-anot {
+  background: #ffffff;
+  color: #17140f;
+  border: 1px solid rgba(23, 20, 15, .14);
+  border-radius: 12px;
+  padding: 16px 18px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .12);
+}
+.corpo-nota {
+  font-family: var(--fonte-texto);
+  font-size: 17px;
+  line-height: 1.6;
+  overflow-wrap: break-word;
+}
+.corpo-nota :where(a) { color: #8c2f39; }
+.quando-nota {
+  margin-top: 12px;
+  font-family: var(--fonte-ui);
+  font-size: 12px;
+  color: rgba(23, 20, 15, .5);
+}
+
+/* A área de escrita também é branca sempre, para o que se escreve bater com o
+   que se lê. */
+.editor-nota {
+  background: #ffffff;
+  color: #17140f;
+  border-color: rgba(23, 20, 15, .16);
+}
+.editor-nota:focus { border-color: rgba(140, 47, 57, .55); }
+.editor-nota:empty::before { color: rgba(23, 20, 15, .42); }
+
+/* Editor com rolagem por dentro: a barra de formato fica em cima, o papel rola
+   no meio e o Cancelar/Salvar ficam sempre visíveis embaixo. */
+.corpo.corpo-editor {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding-bottom: 16px;
+}
+.corpo-editor .barra-formato { flex: 0 0 auto; margin-bottom: 12px; }
+.corpo-editor .editor-nota {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+.corpo-editor .acoes-anot { flex: 0 0 auto; margin-top: 12px; }
+
+/* Botão flutuante de seleção múltipla, no canto inferior direito. */
+.mais-selecao {
+  position: fixed;
+  right: 16px;
+  bottom: 84px;
+  z-index: 45;
+  width: 52px; height: 52px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--cromo);
+  color: var(--cromo-texto);
+  border: 1px solid color-mix(in srgb, var(--tinta) 22%, transparent);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, .28);
+  cursor: pointer;
+  transition: transform .15s ease, background .15s ease;
+}
+.mais-selecao[hidden] { display: none; }
+.mais-selecao:hover { transform: translateY(-1px); }
+.mais-selecao .icone { width: 26px; height: 26px; }
+.mais-selecao.ativo {
+  background: var(--rubrica);
+  color: #fff;
+  border-color: var(--rubrica);
+}
+/* enquanto a barra de seleção está aberta embaixo, o botão sobe para não cobri-la */
+body.selecionando .mais-selecao { bottom: 168px; }
+.mais-conta {
+  position: absolute;
+  top: -4px; right: -4px;
+  min-width: 20px; height: 20px;
+  padding: 0 5px;
+  border-radius: 11px;
+  background: var(--rubrica);
+  color: #fff;
+  font-family: var(--fonte-ui);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 20px;
+  text-align: center;
+  display: none;
+}
+.mais-selecao.ativo .mais-conta { background: #fff; color: var(--rubrica); }
+.mais-selecao.tem-conta .mais-conta { display: block; }
+
+/* versículo inteiro marcado na seleção múltipla */
+.v.multi-sel {
+  background: color-mix(in srgb, var(--rubrica) 16%, transparent);
+  border-radius: 6px;
+}
+
 /* ---------------------------------------------- X da comparação no cabeçalho */
 /* Fica no canto direito do nome do livro/capítulo da tradução de baixo. Círculo
    escuro (a tinta, que puxa preto/marrom conforme o papel) e o X na cor da

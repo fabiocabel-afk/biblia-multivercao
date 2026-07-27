@@ -58,7 +58,7 @@
   <button data-menu="historico"><svg class="icone"><use href="#i-historico"/></svg><span>Histórico</span></button>
   <button data-menu="marcadores"><svg class="icone"><use href="#i-marcador"/></svg><span>Marcadores</span></button>
   <button data-menu="estudos"><svg class="icone"><use href="#i-estudo"/></svg><span>Estudos</span></button>
-  <button data-menu="caderno"><svg class="icone"><use href="#i-caderno"/></svg><span>Caderno</span></button>
+  <button data-menu="caderno"><svg class="icone"><use href="#i-caderno"/></svg><span>Anotação</span></button>
   <button data-menu="ajustes"><svg class="icone"><use href="#i-ajustes"/></svg><span>Ajustes</span></button>
   <button data-menu="compartilhar"><svg class="icone"><use href="#i-compartilhar"/></svg><span>Compartilhar</span></button>
 </div>
@@ -89,6 +89,14 @@
   <div class="metade" id="metade-a"></div>
   <div class="metade" id="metade-b"></div>
 </div>
+
+<!-- botão flutuante: liga/desliga a seleção de vários versículos -->
+<button class="mais-selecao" id="mais-selecao" aria-pressed="false"
+  aria-label="Selecionar vários versículos" title="Selecionar vários versículos" hidden>
+  <svg class="icone" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"
+    stroke="currentColor" stroke-width="2.2" stroke-linecap="round" fill="none"/></svg>
+  <span class="mais-conta" id="mais-conta"></span>
+</button>
 
 <div class="barra-selecao" id="barra-selecao" aria-hidden="true">
   <div class="sel-topo">
@@ -194,7 +202,7 @@
 
 <aside class="painel" id="painel-caderno" aria-hidden="true">
   <header>
-    <h2>Caderno</h2>
+    <h2>Anotação</h2>
     <button data-fechar aria-label="Fechar"><svg class="icone"><use href="#i-fechar"/></svg></button>
   </header>
   <div class="corpo" id="corpo-caderno"></div>

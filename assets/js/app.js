@@ -139,6 +139,13 @@ const App = {
     this.cap = cap;
     this.destaque = vers || null;
 
+    // trocar de capítulo zera a seleção de vários versículos e o botão "+"
+    this.resetarMulti();
+    this.pontoAtual = null;
+    this.esconderMais();
+    this.selecao = null;
+    this.renderBarraSelecao();
+
     folha.innerHTML = `<p class="titulo-livro ${cap === 1 ? 'abertura' : ''}">${Leitura.escapar(r.livro.name)}</p>`
       + Leitura.html(this.versao, r.livro, r.capitulo);
 
@@ -1226,7 +1233,7 @@ const App = {
       embaixo. Sem versículo selecionado, mostra as do capítulo todo; ao tocar
       num versículo, filtra pelas dele.</p>
 
-      <label class="interruptor"><span>Sinal de anotação no versículo</span>
+      <label class="interruptor"><span>Exibir anotação no versículo</span>
         <input type="checkbox" id="ctrl-notas" ${p.mostrarNotas ? 'checked' : ''}></label>
       <p class="contagem">Mostra um sinalzinho ao lado do número quando o
       versículo tem anotação no caderno. Toque nele para abrir as anotações.</p>
@@ -1494,15 +1501,51 @@ const App = {
     });
   },
 
-  /** Anotar direto pela barra de seleção: prende a nota ao primeiro versículo. */
+  /** Anotar pela barra de seleção. A nota se prende ao primeiro versículo, mas
+   *  o título mostra a referência do agrupamento inteiro (ex.: João 3:16-18). */
   anotarSelecao() {
     if (!this.selecao) return;
-    const vers = this.selecao.pedacos[0].vers;
-    this.fecharSelecao();
-    this.editarAnotacao(vers, null);
+    const pedacos = this.selecao.pedacos;
+    const vers = pedacos[0].vers;
+    const ref = this.referenciaDaSelecao(pedacos);
+    // seleção simples: fecha a barra como antes. No modo de vários, mantém o
+    // grupo na tela para a pessoa seguir usando depois de fechar a nota.
+    if (!(this.multiAtivo || this.multiSelecao)) this.fecharSelecao();
+    this.editarAnotacao(vers, null, ref);
   },
 
-  /** Abre a lista de anotações de um versículo. */
+  /** Modo de leitura da anotação: mostra o texto já formatado numa folha branca
+   *  (branca mesmo no escuro, para bater o olho e saber que é anotação). Não
+   *  edita — traz um botão "Editar" que leva ao módulo de sempre, com a lista,
+   *  o excluir e o editar. É o que abre ao tocar no sinal do versículo. */
+  verAnotacoes(vers) {
+    this.anotVers = vers;
+    const versificacao = Dados.versificacaoDe(this.versao);
+    const notas = Anotacoes.daPassagem(versificacao, this.code, this.cap, vers);
+
+    // sem nota (p.ex. acabou de ser apagada): cai na lista de sempre
+    if (!notas.length) return this.abrirAnotacoes(vers);
+
+    document.getElementById('titulo-anot').textContent = this.refDaPassagem(vers);
+    const corpo = document.getElementById('corpo-anot');
+    corpo.classList.remove('corpo-editor');
+
+    const folhas = notas.map(a => `<article class="folha-anot">
+        <div class="corpo-nota">${Anotacoes.limpar(a.corpo)}</div>
+        <div class="quando-nota">${Anotacoes.quandoDe(a)}</div>
+      </article>`).join('');
+
+    corpo.innerHTML = `
+      <div class="leitura-anot">${folhas}</div>
+      <div class="acoes-anot">
+        <button class="botao" id="editar-anot">Editar</button>
+      </div>`;
+
+    document.getElementById('editar-anot').onclick = () => this.abrirAnotacoes(vers);
+    this.abrir('painel-anot');
+  },
+
+  /** Abre a lista de anotações de um versículo (com editar e excluir). */
   abrirAnotacoes(vers) {
     this.anotVers = vers;
     this.desenharListaAnotacoes(vers);
@@ -1519,6 +1562,7 @@ const App = {
     const notas = Anotacoes.daPassagem(versificacao, this.code, this.cap, vers);
     document.getElementById('titulo-anot').textContent = this.refDaPassagem(vers);
     const corpo = document.getElementById('corpo-anot');
+    corpo.classList.remove('corpo-editor');
 
     const cartoes = notas.map(a => `<div class="cartao-anot">
         <button class="anot-corpo" data-editar="${a.id}">
@@ -1559,12 +1603,13 @@ const App = {
 
   /* O editor de uma nota: barra de formatação em cima, área de escrita no meio,
    * salvar/cancelar embaixo. `id` nulo cria uma nota nova. */
-  editarAnotacao(vers, id) {
+  editarAnotacao(vers, id, refLabel) {
     this.anotVers = vers;
     this.anotId = id;
     const a = id ? Anotacoes.achar(id) : null;
-    document.getElementById('titulo-anot').textContent = this.refDaPassagem(vers);
+    document.getElementById('titulo-anot').textContent = refLabel || this.refDaPassagem(vers);
     const corpo = document.getElementById('corpo-anot');
+    corpo.classList.add('corpo-editor');   // vira coluna: papel rola, botões fixos
 
     const botao = (cmd, icone, rotulo) =>
       `<button class="fmt" data-cmd="${cmd}" aria-label="${rotulo}" title="${rotulo}">
@@ -1700,7 +1745,7 @@ const App = {
     const todas = Anotacoes.todas();
 
     if (!todas.length) {
-      corpo.innerHTML = `<div class="estado">O caderno está vazio.<br>
+      corpo.innerHTML = `<div class="estado">Você ainda não tem anotações.<br>
         Selecione um versículo e toque em <strong>Anotar</strong>, ou toque no
         sinal de anotação ao lado de um versículo já anotado.</div>`;
       return;
@@ -1854,12 +1899,24 @@ const App = {
     return pedacos.length ? { pedacos, bruto: s.toString() } : null;
   },
 
-  /** "Salmos 23:1-4" ou "Salmos 23:4" */
+  /** "Salmos 23:1-4", "Salmos 23:4" ou, com buracos, "Salmos 23:1-3,5-6".
+   *  Junta os versículos em faixas seguidas para não parecer que vai tudo do
+   *  primeiro ao último quando, no meio, algum foi pulado. */
   referenciaDaSelecao(pedacos) {
     const nome = Dados.nomeCurto(this.versao, this.code);
-    const a = pedacos[0].vers;
-    const b = pedacos[pedacos.length - 1].vers;
-    return `${nome} ${this.cap}:${a}${b !== a ? '-' + b : ''}`;
+    const vs = [...new Set(pedacos.map(p => p.vers))].sort((a, b) => a - b);
+    if (!vs.length) return `${nome} ${this.cap}`;
+
+    const faixas = [];
+    let ini = vs[0], ant = vs[0];
+    for (let k = 1; k < vs.length; k++) {
+      if (vs[k] === ant + 1) { ant = vs[k]; continue; }
+      faixas.push([ini, ant]); ini = ant = vs[k];
+    }
+    faixas.push([ini, ant]);
+
+    const partes = faixas.map(([a, b]) => (a === b ? `${a}` : `${a}-${b}`));
+    return `${nome} ${this.cap}:${partes.join(',')}`;
   },
 
   /** O texto pronto para copiar ou compartilhar, com a referência no fim. */
@@ -1873,19 +1930,27 @@ const App = {
   },
 
   mostrarBarraSelecao() {
-    const sel = this.lerSelecao();
+    // no modo de vários versículos, a barra é comandada pelo próprio módulo;
+    // a seleção nativa de texto não deve mexer nela
+    if (this.multiAtivo || this.multiSelecao) return;
+    this.selecao = this.lerSelecao();
+    this.renderBarraSelecao();
+  },
+
+  /** Desenha (ou fecha) a barra a partir de `this.selecao` — serve tanto para a
+   *  seleção nativa de texto quanto para o grupo de vários versículos. */
+  renderBarraSelecao() {
     const barra = document.getElementById('barra-selecao');
+    const sel = this.selecao;
 
     if (!sel) {
       barra.classList.remove('aberta');
       barra.setAttribute('aria-hidden', 'true');
       document.body.classList.remove('selecionando');
       document.getElementById('sel-cores').classList.add('fechada');
-      this.selecao = null;
       return;
     }
 
-    this.selecao = sel;
     const n = sel.pedacos.length;
     document.getElementById('sel-ref').innerHTML =
       `${this.referenciaDaSelecao(sel.pedacos)}
@@ -1903,7 +1968,103 @@ const App = {
 
   fecharSelecao() {
     window.getSelection()?.removeAllRanges();
-    this.mostrarBarraSelecao();
+    this.resetarMulti();          // o X cancela também a seleção de vários
+    this.selecao = null;
+    this.renderBarraSelecao();
+  },
+
+  /* ------------------------------------ seleção de vários versículos (o "+") */
+
+  mostrarMais() {
+    const fab = document.getElementById('mais-selecao');
+    if (fab) fab.hidden = false;
+  },
+  esconderMais() {
+    const fab = document.getElementById('mais-selecao');
+    if (fab) fab.hidden = true;
+  },
+  atualizarMais() {
+    const fab = document.getElementById('mais-selecao');
+    if (!fab) return;
+    fab.classList.toggle('ativo', !!this.multiAtivo);
+    fab.setAttribute('aria-pressed', this.multiAtivo ? 'true' : 'false');
+    const n = this.multiVers ? this.multiVers.size : 0;
+    const conta = document.getElementById('mais-conta');
+    if (conta) conta.textContent = n > 1 ? n : '';
+    fab.classList.toggle('tem-conta', n > 1);
+  },
+
+  /** Monta `this.selecao` a partir dos versículos escolhidos (inteiros). */
+  construirSelecaoMulti() {
+    const versos = [...(this.multiVers || [])].sort((a, b) => a - b);
+    const pedacos = versos.map(v => {
+      const el = document.querySelector(`#folha .v[data-vers="${v}"]`);
+      const texto = el ? this.textoDoVersiculo(el) : '';
+      return { vers: v, i: 0, f: texto.length, texto };
+    }).filter(p => p.texto.length);
+    this.selecao = pedacos.length
+      ? { pedacos, bruto: pedacos.map(p => p.texto).join(' ') }
+      : null;
+  },
+
+  pintarMultiSel() {
+    document.querySelectorAll('#folha .v.multi-sel')
+      .forEach(el => el.classList.remove('multi-sel'));
+    for (const v of (this.multiVers || [])) {
+      const el = document.querySelector(`#folha .v[data-vers="${v}"]`);
+      if (el) el.classList.add('multi-sel');
+    }
+  },
+
+  atualizarSelecaoMulti() {
+    this.construirSelecaoMulti();
+    this.pintarMultiSel();
+    this.multiSelecao = !!(this.multiVers && this.multiVers.size);
+    this.renderBarraSelecao();
+    this.atualizarMais();
+  },
+
+  /** O toque no "+": liga ou desliga o modo de acumular. Quem manda é o usuário
+   *  — não desliga sozinho depois de uma ação. */
+  alternarMulti() {
+    this.multiVers = this.multiVers || new Set();
+    if (!this.multiAtivo) {
+      window.getSelection()?.removeAllRanges();     // larga a seleção de texto
+      this.multiAtivo = true;
+      if (this.pontoAtual) this.multiVers.add(this.pontoAtual);
+      this.atualizarSelecaoMulti();
+    } else {
+      // desligar mantém o que já está na tela; o próximo toque solto reinicia
+      this.multiAtivo = false;
+      this.atualizarMais();
+    }
+  },
+
+  /** Com o modo ligado, tocar num versículo o adiciona; tocar de novo o tira. */
+  alternarVersiculoMulti(vers) {
+    this.multiVers = this.multiVers || new Set();
+    if (this.multiVers.has(vers)) this.multiVers.delete(vers);
+    else this.multiVers.add(vers);
+    this.atualizarSelecaoMulti();
+  },
+
+  resetarMulti() {
+    this.multiAtivo = false;
+    this.multiSelecao = false;
+    if (this.multiVers) this.multiVers.clear();
+    document.querySelectorAll('#folha .v.multi-sel')
+      .forEach(el => el.classList.remove('multi-sel'));
+    this.atualizarMais();
+  },
+
+  /** Fecha a barra ao concluir uma ação. No modo de vários versículos, mantém o
+   *  grupo e o modo ligados (só recolhe a paleta de cores). */
+  encerrarAcao() {
+    if (this.multiAtivo || this.multiSelecao) {
+      document.getElementById('sel-cores').classList.add('fechada');
+      return;
+    }
+    this.fecharSelecao();
   },
 
   avisoRapido(texto) {
@@ -1940,7 +2101,7 @@ const App = {
     if (!texto) return;
     this.avisoRapido(await this.paraAreaDeTransferencia(texto)
       ? 'Copiado' : 'Não foi possível copiar');
-    this.fecharSelecao();
+    this.encerrarAcao();
   },
 
   async compartilharSelecao() {
@@ -1951,7 +2112,7 @@ const App = {
     if (navigator.share) {
       try { await navigator.share({ title: titulo, text: texto }); }
       catch { /* a pessoa desistiu: não é erro */ }
-      this.fecharSelecao();
+      this.encerrarAcao();
       return;
     }
     // no computador quase nunca existe compartilhamento do sistema
@@ -2013,7 +2174,7 @@ const App = {
     }
 
     this.avisoRapido(marcadorId === 0 ? 'Marca removida' : 'Marcado');
-    this.fecharSelecao();
+    this.encerrarAcao();
   },
 
   /* =========================================================== comparação */
@@ -2021,7 +2182,14 @@ const App = {
   async alternarComparacao() {
     this.comparando = !this.comparando;
     document.body.classList.toggle('comparando', this.comparando);
-    if (this.comparando) await this.desenharComparacao();
+    if (this.comparando) {
+      // a comparação não usa seleção de vários; recolhe tudo
+      this.resetarMulti();
+      this.esconderMais();
+      this.selecao = null;
+      this.renderBarraSelecao();
+      await this.desenharComparacao();
+    }
   },
 
   async desenharComparacao() {
@@ -2254,6 +2422,7 @@ const App = {
     q('sel-estudo').onclick = () => this.abrirSalvarEstudo();
     q('sel-anotar').onclick = () => this.anotarSelecao();
     q('sel-limpar').onclick = () => this.fecharSelecao();
+    q('mais-selecao').onclick = () => this.alternarMulti();
 
     /* Arrastar para os lados vira a pagina, como num livro de verdade.
      *
@@ -2306,9 +2475,9 @@ const App = {
 
     q('folha').onclick = e => {
       const sinal = e.target.closest('.marca-nota');
-      if (sinal) {                       // tocar no sinalzinho abre as anotações
+      if (sinal) {                       // tocar no sinalzinho abre a leitura
         clearTimeout(espera); espera = null;
-        this.abrirAnotacoes(+sinal.dataset.notaVers);
+        this.verAnotacoes(+sinal.dataset.notaVers);
         return;
       }
       const v = e.target.closest('.v');
@@ -2317,13 +2486,25 @@ const App = {
       const vers = +v.dataset.vers;
       espera = setTimeout(() => {
         espera = null;
-        this.marcarPonto(vers);
+        if (this.multiAtivo) {
+          // modo ligado: acumula (ou tira) o versículo do grupo
+          this.alternarVersiculoMulti(vers);
+        } else if (this.multiSelecao) {
+          // grupo ainda na tela, mas o modo desligado: volta ao normal
+          this.resetarMulti();
+          this.selecao = null;
+          this.renderBarraSelecao();
+          this.marcarPonto(vers);
+        } else {
+          this.marcarPonto(vers);
+        }
       }, 230);
     };
 
     q('folha').ondblclick = e => {
       clearTimeout(espera);
       espera = null;
+      if (this.multiAtivo) return;       // no modo de vários, o duplo não abre a tirinha
       const v = e.target.closest('.v');
       if (!v) return;
       this.abrirTirinha(+v.dataset.vers);
@@ -2388,6 +2569,15 @@ const App = {
     if (Prefs.get('refsFixas')) {
       this.destaque = posto ? vers : null;
       this.atualizarRefsFixas(this.destaque);
+    }
+
+    // o "+" (seleção de vários) aparece quando há um versículo em foco
+    if (posto) {
+      this.pontoAtual = vers;
+      this.mostrarMais();
+    } else {
+      this.pontoAtual = null;
+      if (!this.multiAtivo && !this.multiSelecao) this.esconderMais();
     }
   },
 
