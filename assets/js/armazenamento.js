@@ -54,6 +54,7 @@ const Prefs = {
     mostrarCategorias: true,   // painel de livros: com ou sem a camada do meio
     versiculoPorLinha: false,  // false = texto corrido; true = um versiculo por linha
     refsFixas: false,          // painel de referências dividindo a tela; desligado por padrão
+    mostrarNotas: true,        // sinalzinho no versículo quando há anotação no caderno
   },
 
   todas() {
@@ -604,5 +605,144 @@ const RefsPessoais = {
       if (!todas[k].length) delete todas[k];
       Guarda.gravar('refs', todas);
     }
+  },
+};
+
+/* ------------------------------------------------------- caderno de anotações
+ *
+ * Uma anotacao e um texto livre preso a uma passagem — livro, capitulo e
+ * versiculo. Varias podem se acumular no mesmo versiculo. O corpo e HTML rico
+ * (negrito, cor, fundo...), sempre passado pela peneira `limpar` antes de
+ * gravar ou de exibir, para nunca guardar nada perigoso — o que importa quando,
+ * mais adiante, a pessoa importar anotacoes de outra.
+ *
+ * A chave usa a versificacao (como os marcadores), e nao a sigla da versao: uma
+ * nota feita lendo ACF acompanha as demais versoes da mesma familia.
+ */
+
+const Anotacoes = {
+  todas() {
+    return Guarda.ler('anotacoes', []);
+  },
+
+  /** Numeros dos versiculos que tem nota num capitulo — para o sinal na tela. */
+  noCapitulo(versificacao, code, cap) {
+    const s = new Set();
+    for (const a of this.todas()) {
+      if (a.versificacao === versificacao && a.code === code && a.cap === cap) s.add(a.vers);
+    }
+    return s;
+  },
+
+  daPassagem(versificacao, code, cap, vers) {
+    return this.todas().filter(a =>
+      a.versificacao === versificacao && a.code === code && a.cap === cap && a.vers === vers);
+  },
+
+  criar({ versificacao, code, cap, vers, versao, corpo }) {
+    const lista = this.todas();
+    const agora = new Date().toISOString();
+    const a = {
+      id: 'a' + Date.now(),
+      versificacao, code, cap, vers,
+      versao: versao || '',
+      corpo: this.limpar(corpo),
+      criado: agora,
+      modificado: agora,
+    };
+    lista.unshift(a);
+    Guarda.gravar('anotacoes', lista);
+    return a;
+  },
+
+  atualizar(id, corpo) {
+    const lista = this.todas();
+    const a = lista.find(x => x.id === id);
+    if (!a) return;
+    a.corpo = this.limpar(corpo);
+    a.modificado = new Date().toISOString();
+    Guarda.gravar('anotacoes', lista);
+  },
+
+  remover(id) {
+    Guarda.gravar('anotacoes', this.todas().filter(a => a.id !== id));
+  },
+
+  achar(id) {
+    return this.todas().find(a => a.id === id) || null;
+  },
+
+  refDe(a) {
+    const nome = Dados.nomeCurto(a.versao || Prefs.get('versao'), a.code);
+    return `${nome} ${a.cap}:${a.vers}`;
+  },
+
+  quandoDe(a) {
+    const d = new Date(a.modificado || a.criado);
+    return d.toLocaleDateString('pt-BR') + ' às '
+      + d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  },
+
+  /** Texto puro para a prévia na lista (sem nenhuma marcação). */
+  resumo(a, limite = 120) {
+    const cx = document.createElement('div');
+    cx.innerHTML = this.limpar(a.corpo);
+    const txt = (cx.textContent || '').replace(/\s+/g, ' ').trim();
+    return txt.length > limite ? txt.slice(0, limite) + '…' : txt;
+  },
+
+  vazia(a) {
+    return this.resumo(a, 5).length === 0;
+  },
+
+  /* A peneira: deixa passar só um punhado de tags e um punhado de propriedades
+   * de estilo. Qualquer tag estranha e desembrulhada (o texto fica, a tag some);
+   * qualquer atributo que não seja um estilo seguro é descartado. É o que nos
+   * protege de guardar <script>, onclick, javascript: e afins — inclusive em
+   * conteúdo que venha a ser importado de outra pessoa. */
+  limpar(html) {
+    const permitidas = new Set(['B', 'STRONG', 'I', 'EM', 'U', 'S', 'STRIKE',
+      'SPAN', 'FONT', 'BR', 'DIV', 'P', 'UL', 'OL', 'LI']);
+    const props = ['color', 'background-color', 'background', 'font-weight',
+      'font-style', 'text-decoration', 'text-decoration-line', 'font-family'];
+
+    const raiz = document.createElement('div');
+    raiz.innerHTML = html || '';
+
+    const estiloSeguro = el => {
+      const saida = [];
+      for (const p of props) {
+        const v = el.style.getPropertyValue(p);
+        if (v && !/url\(|expression|javascript:/i.test(v)) saida.push(`${p}: ${v}`);
+      }
+      return saida.join('; ');
+    };
+
+    const passar = no => {
+      [...no.childNodes].forEach(f => {
+        if (f.nodeType === 3) return;                 // texto: fica
+        if (f.nodeType !== 1) { f.remove(); return; } // comentário etc: sai
+
+        if (!permitidas.has(f.tagName)) {             // tag estranha: desembrulha
+          passar(f);
+          while (f.firstChild) no.insertBefore(f.firstChild, f);
+          f.remove();
+          return;
+        }
+
+        if (f.tagName === 'FONT') {                   // <font color/face> vira estilo
+          if (f.getAttribute('color')) f.style.color = f.getAttribute('color');
+          if (f.getAttribute('face')) f.style.fontFamily = f.getAttribute('face');
+        }
+
+        const est = estiloSeguro(f);
+        [...f.attributes].forEach(a => f.removeAttribute(a.name));
+        if (est) f.setAttribute('style', est);
+        passar(f);
+      });
+    };
+
+    passar(raiz);
+    return raiz.innerHTML;
   },
 };

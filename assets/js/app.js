@@ -29,6 +29,7 @@ const App = {
     Leitura.aplicarTemperatura(p.temperatura);
     Leitura.aplicarFonte(p.fonte);
     Leitura.aplicarModoVersiculo(p.versiculoPorLinha);
+    Leitura.aplicarModoNotas(p.mostrarNotas);
     this.aplicarRefsFixas(p.refsFixas);
 
     // retoma sempre do último lugar visitado — é onde a pessoa parou de fato.
@@ -1225,6 +1226,11 @@ const App = {
       embaixo. Sem versículo selecionado, mostra as do capítulo todo; ao tocar
       num versículo, filtra pelas dele.</p>
 
+      <label class="interruptor"><span>Sinal de anotação no versículo</span>
+        <input type="checkbox" id="ctrl-notas" ${p.mostrarNotas ? 'checked' : ''}></label>
+      <p class="contagem">Mostra um sinalzinho ao lado do número quando o
+      versículo tem anotação no caderno. Toque nele para abrir as anotações.</p>
+
       <label class="interruptor"><span>Modo escuro</span>
         <input type="checkbox" id="ctrl-escuro" ${p.escuro ? 'checked' : ''}></label>
       ${p.escuro ? '<p class="contagem">A temperatura do papel só vale no modo claro.</p>' : ''}`;
@@ -1335,6 +1341,12 @@ const App = {
       Prefs.set('refsFixas', e.target.checked);
       this.aplicarRefsFixas(e.target.checked);
       this.sincronizarBotaoFixarTirinha();
+    };
+
+    const notas = achar('ctrl-notas');
+    if (notas) notas.onchange = e => {
+      Prefs.set('mostrarNotas', e.target.checked);
+      Leitura.aplicarModoNotas(e.target.checked);
     };
 
     const escuro = achar('ctrl-escuro');
@@ -1451,6 +1463,310 @@ const App = {
       const vers = +el.dataset.vers;
       const faixas = Marcadores.faixas(versificacao, this.code, this.cap, vers);
       Leitura.pintarMarca(vers, this.textoDoVersiculo(el), faixas);
+    });
+  },
+
+  /* ============================================================ caderno
+   *
+   * Anotacoes presas a um versiculo. A tela do versiculo (`painel-anot`) serve
+   * a dois papeis: a lista das notas daquele versiculo e o editor de uma nota.
+   * O caderno (`painel-caderno`) e a visao geral, todas as notas agrupadas por
+   * passagem.
+   */
+
+  /* Poe ou tira o sinalzinho dos versiculos na tela, sem redesenhar o capitulo
+   * — assim a nota aparece/some na hora, sem pulo de rolagem. */
+  repintarNotasVisiveis() {
+    const versificacao = Dados.versificacaoDe(this.versao);
+    const comNota = Anotacoes.noCapitulo(versificacao, this.code, this.cap);
+    document.querySelectorAll('#folha .v').forEach(el => {
+      const vers = +el.dataset.vers;
+      const tem = el.querySelector('.marca-nota');
+      if (comNota.has(vers) && !tem) {
+        const n = el.querySelector('.n');
+        const alvo = n || el.firstChild;
+        if (n) n.insertAdjacentHTML('afterend', Leitura.marcaNotaHTML(vers));
+        else el.insertAdjacentHTML('afterbegin', Leitura.marcaNotaHTML(vers));
+        void alvo;
+      } else if (!comNota.has(vers) && tem) {
+        tem.remove();
+      }
+    });
+  },
+
+  /** Anotar direto pela barra de seleção: prende a nota ao primeiro versículo. */
+  anotarSelecao() {
+    if (!this.selecao) return;
+    const vers = this.selecao.pedacos[0].vers;
+    this.fecharSelecao();
+    this.editarAnotacao(vers, null);
+  },
+
+  /** Abre a lista de anotações de um versículo. */
+  abrirAnotacoes(vers) {
+    this.anotVers = vers;
+    this.desenharListaAnotacoes(vers);
+    this.abrir('painel-anot');
+  },
+
+  refDaPassagem(vers) {
+    const nome = Dados.nomeCurto(this.versao, this.code);
+    return `${nome} ${this.cap}:${vers}`;
+  },
+
+  desenharListaAnotacoes(vers) {
+    const versificacao = Dados.versificacaoDe(this.versao);
+    const notas = Anotacoes.daPassagem(versificacao, this.code, this.cap, vers);
+    document.getElementById('titulo-anot').textContent = this.refDaPassagem(vers);
+    const corpo = document.getElementById('corpo-anot');
+
+    const cartoes = notas.map(a => `<div class="cartao-anot">
+        <button class="anot-corpo" data-editar="${a.id}">
+          <div class="anot-previa">${Leitura.escapar(Anotacoes.resumo(a)) || '<em>(nota vazia)</em>'}</div>
+          <div class="quando">${Anotacoes.quandoDe(a)}</div>
+        </button>
+        <button class="xis" data-excluir-anot="${a.id}" aria-label="Excluir anotação"
+          title="Excluir anotação"><svg class="icone"><use href="#i-lixeira"/></svg></button>
+      </div>`).join('');
+
+    corpo.innerHTML = `
+      <p class="contagem">Anotações ligadas a <strong>${this.refDaPassagem(vers)}</strong>.
+      Elas acompanham esta passagem em todas as versões da mesma numeração.</p>
+      ${cartoes || '<div class="estado">Nenhuma anotação aqui ainda.</div>'}
+      <button class="botao nova-anot" id="nova-anot">+ Nova anotação</button>`;
+
+    document.getElementById('nova-anot').onclick = () => this.editarAnotacao(vers, null);
+
+    corpo.querySelectorAll('[data-editar]').forEach(el => {
+      el.onclick = () => this.editarAnotacao(vers, el.dataset.editar);
+    });
+
+    corpo.querySelectorAll('[data-excluir-anot]').forEach(el => {
+      el.onclick = async e => {
+        e.stopPropagation();
+        const ok = await this.confirmar({
+          titulo: 'Excluir anotação',
+          mensagem: 'Excluir esta anotação? Não dá para desfazer.',
+          confirmar: 'Excluir',
+        });
+        if (!ok) return;
+        Anotacoes.remover(el.dataset.excluirAnot);
+        this.desenharListaAnotacoes(vers);
+        this.repintarNotasVisiveis();
+      };
+    });
+  },
+
+  /* O editor de uma nota: barra de formatação em cima, área de escrita no meio,
+   * salvar/cancelar embaixo. `id` nulo cria uma nota nova. */
+  editarAnotacao(vers, id) {
+    this.anotVers = vers;
+    this.anotId = id;
+    const a = id ? Anotacoes.achar(id) : null;
+    document.getElementById('titulo-anot').textContent = this.refDaPassagem(vers);
+    const corpo = document.getElementById('corpo-anot');
+
+    const botao = (cmd, icone, rotulo) =>
+      `<button class="fmt" data-cmd="${cmd}" aria-label="${rotulo}" title="${rotulo}">
+        <svg class="icone"><use href="#i-${icone}"/></svg></button>`;
+
+    corpo.innerHTML = `
+      <div class="barra-formato">
+        ${botao('bold', 'negrito', 'Negrito')}
+        ${botao('italic', 'italico', 'Itálico')}
+        ${botao('underline', 'sublinhado', 'Sublinhado')}
+        ${botao('strikeThrough', 'tachado', 'Tachado')}
+        <label class="fmt fmt-cor" title="Cor da letra">
+          <span class="rotulo-cor">A</span>
+          <span class="risco-cor" id="amostra-cor"></span>
+          <input type="color" id="cor-letra" value="#8c2f39">
+        </label>
+        <label class="fmt fmt-fundo" title="Cor de fundo">
+          <span class="bloco-fundo" id="amostra-fundo">A</span>
+          <input type="color" id="cor-fundo" value="#f2c94c">
+        </label>
+        <select class="fmt-fonte" id="fmt-fonte" title="Tipo de letra">
+          <option value="">Fonte</option>
+          <option value="var(--fonte-texto)">Serifada</option>
+          <option value="var(--fonte-ui)">Sem serifa</option>
+          <option value="var(--fonte-sigla)">Monoespaçada</option>
+        </select>
+        ${botao('removeFormat', 'limpar-formato', 'Limpar formatação')}
+      </div>
+      <div class="editor-nota" id="editor-nota" contenteditable="true"
+        role="textbox" aria-multiline="true" data-vazio="Escreva sua anotação…">${a ? Anotacoes.limpar(a.corpo) : ''}</div>
+      <div class="acoes-anot">
+        <button class="botao secundario" id="cancelar-anot">Cancelar</button>
+        <button class="botao" id="salvar-anot">Salvar</button>
+      </div>`;
+
+    this.ligarEditorAnotacao(vers, id);
+    this.abrir('painel-anot');
+  },
+
+  ligarEditorAnotacao(vers, id) {
+    const corpo = document.getElementById('corpo-anot');
+    const editor = document.getElementById('editor-nota');
+
+    // Guardamos a última seleção feita dentro do editor. Quando a pessoa abre o
+    // seletor de cor (ou o menu de fonte), o foco sai do texto; ao voltar,
+    // restauramos exatamente o trecho para a formatação pegar onde deve.
+    let rangeSalvo = null;
+    const salvarRange = () => {
+      const s = window.getSelection();
+      if (s && s.rangeCount && editor.contains(s.anchorNode)) {
+        rangeSalvo = s.getRangeAt(0).cloneRange();
+      }
+    };
+    const restaurarRange = () => {
+      editor.focus();
+      if (rangeSalvo) {
+        const s = window.getSelection();
+        s.removeAllRanges();
+        s.addRange(rangeSalvo);
+      }
+    };
+    const css = () => { try { document.execCommand('styleWithCSS', false, true); } catch {} };
+    editor.addEventListener('keyup', salvarRange);
+    editor.addEventListener('mouseup', salvarRange);
+    editor.addEventListener('blur', salvarRange);
+
+    // Negrito/itálico/sublinhado/tachado e limpar: seguram o mousedown para não
+    // perder a seleção, então aplicam direto.
+    corpo.querySelectorAll('[data-cmd]').forEach(el => {
+      el.addEventListener('mousedown', e => e.preventDefault());
+      el.onclick = () => { editor.focus(); css(); document.execCommand(el.dataset.cmd, false, null); };
+    });
+
+    const corLetra = document.getElementById('cor-letra');
+    const corFundo = document.getElementById('cor-fundo');
+    const amostraCor = document.getElementById('amostra-cor');
+    const amostraFundo = document.getElementById('amostra-fundo');
+    amostraCor.style.background = corLetra.value;
+    amostraFundo.style.background = corFundo.value;
+
+    corLetra.onchange = () => {
+      amostraCor.style.background = corLetra.value;
+      restaurarRange(); css();
+      document.execCommand('foreColor', false, corLetra.value);
+    };
+    corFundo.onchange = () => {
+      amostraFundo.style.background = corFundo.value;
+      restaurarRange(); css();
+      // hiliteColor é o nome moderno; backColor é a reserva de alguns navegadores
+      if (!document.execCommand('hiliteColor', false, corFundo.value)) {
+        document.execCommand('backColor', false, corFundo.value);
+      }
+    };
+
+    const fonte = document.getElementById('fmt-fonte');
+    fonte.onchange = () => {
+      if (!fonte.value) return;
+      restaurarRange(); css();
+      document.execCommand('fontName', false, fonte.value);
+      fonte.value = '';
+    };
+
+    document.getElementById('cancelar-anot').onclick = () => this.abrirAnotacoes(vers);
+
+    document.getElementById('salvar-anot').onclick = () => {
+      const html = Anotacoes.limpar(editor.innerHTML);
+      const vazia = !(new DOMParser().parseFromString(html, 'text/html')
+        .body.textContent || '').trim();
+      if (vazia) {                        // nota em branco não vira registro
+        if (id) Anotacoes.remover(id);
+        this.abrirAnotacoes(vers);
+        this.repintarNotasVisiveis();
+        return;
+      }
+      if (id) {
+        Anotacoes.atualizar(id, html);
+      } else {
+        const versificacao = Dados.versificacaoDe(this.versao);
+        Anotacoes.criar({ versificacao, code: this.code, cap: this.cap, vers,
+          versao: this.versao, corpo: html });
+      }
+      this.avisoRapido('Anotação salva');
+      this.abrirAnotacoes(vers);
+      this.repintarNotasVisiveis();
+    };
+
+    setTimeout(() => editor.focus(), 120);
+  },
+
+  /* A visao geral: todas as notas, agrupadas por passagem, na ordem da Biblia. */
+  desenharCaderno() {
+    const corpo = document.getElementById('corpo-caderno');
+    const todas = Anotacoes.todas();
+
+    if (!todas.length) {
+      corpo.innerHTML = `<div class="estado">O caderno está vazio.<br>
+        Selecione um versículo e toque em <strong>Anotar</strong>, ou toque no
+        sinal de anotação ao lado de um versículo já anotado.</div>`;
+      return;
+    }
+
+    // agrupa por passagem (livro|cap|vers), preservando a ordem canônica
+    const grupos = new Map();
+    for (const a of todas) {
+      const k = `${a.code}|${a.cap}|${a.vers}`;
+      if (!grupos.has(k)) grupos.set(k, []);
+      grupos.get(k).push(a);
+    }
+
+    const canone = Dados.livros(this.versao);
+    const posLivro = code => {
+      const i = canone.findIndex(l => l.code === code);
+      return i < 0 ? 999 : i;
+    };
+    const chaves = [...grupos.keys()].sort((x, y) => {
+      const [cx, capx, vx] = x.split('|'); const [cy, capy, vy] = y.split('|');
+      return posLivro(cx) - posLivro(cy) || (+capx - +capy) || (+vx - +vy);
+    });
+
+    corpo.innerHTML = chaves.map(k => {
+      const notas = grupos.get(k);
+      const [code, cap, vers] = k.split('|');
+      const ref = `${Dados.nomeCurto(notas[0].versao || this.versao, code)} ${cap}:${vers}`;
+      const cartoes = notas.map(a => `<div class="cartao-anot">
+          <button class="anot-corpo" data-abrir="${a.id}">
+            <div class="anot-previa">${Leitura.escapar(Anotacoes.resumo(a)) || '<em>(nota vazia)</em>'}</div>
+            <div class="quando">${Anotacoes.quandoDe(a)}</div>
+          </button>
+        </div>`).join('');
+      return `<div class="grupo-caderno">
+        <button class="cab-grupo-caderno" data-ir="${code}|${cap}|${vers}">
+          <span>${ref}</span>
+          <span class="sub">${notas.length}</span>
+        </button>
+        ${cartoes}
+      </div>`;
+    }).join('');
+
+    corpo.querySelectorAll('[data-ir]').forEach(el => {
+      el.onclick = () => {
+        const [code, cap, vers] = el.dataset.ir.split('|');
+        this.fecharPaineis();
+        this.ir(code, +cap, +vers);
+      };
+    });
+
+    corpo.querySelectorAll('[data-abrir]').forEach(el => {
+      el.onclick = () => {
+        const a = Anotacoes.achar(el.dataset.abrir);
+        if (!a) return;
+        this.fecharPaineis();
+        const irEditar = () => {
+          this.anotVers = a.vers;
+          this.editarAnotacao(a.vers, a.id);
+          this.abrir('painel-anot');
+        };
+        if (a.code !== this.code || a.cap !== this.cap) {
+          this.ir(a.code, a.cap, a.vers).then(irEditar);
+        } else {
+          irEditar();
+        }
+      };
     });
   },
 
@@ -1724,9 +2040,15 @@ const App = {
         title="Trocar a versão desta metade">${versaoCode}</button>`;
 
     const montar = async (alvo, versaoCode, capitulo, nota, qual) => {
+      // o X de fechar a comparação mora no cabeçalho da metade de baixo,
+      // no canto direito do nome do livro/capítulo daquela tradução
+      const fecharBotao = qual === 'baixo'
+        ? `<button class="fechar-comparar-inline" data-fechar-comparar
+            aria-label="Fechar comparação"><svg class="icone"><use href="#i-fechar"/></svg></button>`
+        : '';
       if (!Dados.temLivro(versaoCode, this.code)) {
-        alvo.innerHTML = `<div class="cabeca-metade">${sigla(versaoCode, qual)}</div>
-          <div class="estado">${Dados.nomeCurto(this.versao, this.code)} não existe nesta versão.</div>`;
+        alvo.innerHTML = `<div class="cabeca-metade">${sigla(versaoCode, qual)}
+          <span>${Dados.nomeCurto(this.versao, this.code)} não existe nesta versão.</span>${fecharBotao}</div>`;
         return;
       }
 
@@ -1737,21 +2059,21 @@ const App = {
       try {
         r = await Dados.capitulo(versaoCode, this.code, capitulo);
       } catch {
-        alvo.innerHTML = `<div class="cabeca-metade">${sigla(versaoCode, qual)}</div>
-          <div class="estado">Não foi possível abrir este livro na versão
-          ${versaoCode}. Confira se os arquivos dela estão completos.</div>`;
+        alvo.innerHTML = `<div class="cabeca-metade">${sigla(versaoCode, qual)}
+          <span>Não foi possível abrir este livro na versão ${versaoCode}.</span>${fecharBotao}</div>`;
         return;
       }
 
       if (!r) {
-        alvo.innerHTML = `<div class="cabeca-metade">${sigla(versaoCode, qual)}</div>
-          <div class="estado">Capítulo não encontrado.</div>`;
+        alvo.innerHTML = `<div class="cabeca-metade">${sigla(versaoCode, qual)}
+          <span>Capítulo não encontrado.</span>${fecharBotao}</div>`;
         return;
       }
       alvo.innerHTML = `<div class="cabeca-metade">
           ${sigla(versaoCode, qual)}
           <span>${Leitura.escapar(r.livro.name)} ${capitulo}</span>
           ${nota ? `<span style="color:var(--rubrica)">${nota}</span>` : ''}
+          ${fecharBotao}
         </div>` + Leitura.html(versaoCode, r.livro, r.capitulo, { comCapitular: false });
     };
 
@@ -1768,6 +2090,10 @@ const App = {
         this.desenharVersoes();
         this.abrir('painel-versao');
       };
+    });
+
+    document.querySelectorAll('[data-fechar-comparar]').forEach(el => {
+      el.onclick = ev => { ev.stopPropagation(); this.alternarComparacao(); };
     });
 
     // Tocar num versículo de qualquer metade realça o MESMO número nas duas,
@@ -1884,6 +2210,7 @@ const App = {
       historico: () => { this.desenharHistorico(); this.abrir('painel-historico'); },
       marcadores: () => { this.desenharMarcadores(); this.abrir('painel-marcadores'); },
       estudos: () => { this.desenharEstudos(); this.abrir('painel-estudos'); },
+      caderno: () => { this.desenharCaderno(); this.abrir('painel-caderno'); },
       ajustes: () => { this.desenharAjustes(); this.abrir('painel-ajustes'); },
       compartilhar: () => { this.desenharCompartilhar(); this.abrir('painel-compartilhar'); },
     };
@@ -1900,7 +2227,6 @@ const App = {
     };
 
     q('btn-atalho-fixado').onclick = () => this.irParaPrimeiroFixado();
-    q('fechar-comparar').onclick = () => this.alternarComparacao();
     q('voltar-origem').onclick = () => this.voltarParaOrigem();
 
     menu.querySelectorAll('[data-menu]').forEach(el => {
@@ -1926,6 +2252,7 @@ const App = {
     q('sel-compartilhar').onclick = () => this.compartilharSelecao();
     q('sel-marcar').onclick = () => this.abrirCoresDaSelecao();
     q('sel-estudo').onclick = () => this.abrirSalvarEstudo();
+    q('sel-anotar').onclick = () => this.anotarSelecao();
     q('sel-limpar').onclick = () => this.fecharSelecao();
 
     /* Arrastar para os lados vira a pagina, como num livro de verdade.
@@ -1978,6 +2305,12 @@ const App = {
     let espera = null;
 
     q('folha').onclick = e => {
+      const sinal = e.target.closest('.marca-nota');
+      if (sinal) {                       // tocar no sinalzinho abre as anotações
+        clearTimeout(espera); espera = null;
+        this.abrirAnotacoes(+sinal.dataset.notaVers);
+        return;
+      }
       const v = e.target.closest('.v');
       if (!v) return;
       if (espera) { clearTimeout(espera); espera = null; return; } // e duplo
@@ -1996,7 +2329,7 @@ const App = {
       this.abrirTirinha(+v.dataset.vers);
     };
 
-    q('tirinha-marcar').onclick = () => this.escolherMarcador();
+    q('tirinha-acoes').onclick = () => this.abrirAcoesTirinha();
     q('tirinha-fixar').onclick = () => this.alternarFixarPelaTirinha();
     q('desfixar-refs').onclick = () => this.desligarRefsFixas();
     document.querySelectorAll('.aba-tirinha').forEach(el => {
@@ -2203,9 +2536,9 @@ const App = {
     this.abaTirinha = aba;
     document.querySelectorAll('.aba-tirinha').forEach(el =>
       el.classList.toggle('ativa', el.dataset.aba === aba));
-    // "Marcar" só vale para o versículo em si (aba Versões);
+    // "Ações" só vale para o versículo em si (aba Versões);
     // o fixar só faz sentido na aba Referências, que é o que se fixa na tela
-    document.getElementById('tirinha-marcar').style.display =
+    document.getElementById('tirinha-acoes').style.display =
       aba === 'versoes' ? '' : 'none';
     document.getElementById('tirinha-fixar').hidden = aba !== 'refs';
     if (aba === 'refs') this.sincronizarBotaoFixarTirinha();
@@ -2355,6 +2688,25 @@ const App = {
       this.fecharTirinha();
       this.pularParaReferencia(code, capLocal, vIni);
     };
+  },
+
+  /* O botão "Ações" da tirinha reaproveita a MESMA barra de ações que aparece
+   * quando a pessoa seleciona um trecho no texto (Copiar, Compartilhar, Salvar
+   * estudo, Anotar, Marcar). Para isso, seleciona o versículo inteiro no texto
+   * e deixa a barra de sempre surgir — nada novo é criado. */
+  abrirAcoesTirinha() {
+    const vers = this.destaque;
+    const el = document.querySelector(`#folha .v[data-vers="${vers}"]`);
+    this.fecharTirinha();
+    if (!el) return;
+
+    const r = document.createRange();
+    r.selectNodeContents(el);
+    const s = window.getSelection();
+    s.removeAllRanges();
+    s.addRange(r);
+
+    this.mostrarBarraSelecao();
   },
 
   escolherMarcador() {

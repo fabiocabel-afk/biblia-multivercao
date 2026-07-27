@@ -59,6 +59,10 @@ const Leitura = {
     document.documentElement.dataset.modoVersiculo = porLinha ? 'linha' : 'corrido';
   },
 
+  aplicarModoNotas(mostrar) {
+    document.documentElement.dataset.notas = mostrar ? 'sim' : 'nao';
+  },
+
   aplicarFonte(px) {
     document.documentElement.style.setProperty('--corpo', px + 'px');
   },
@@ -83,6 +87,8 @@ const Leitura = {
     // o numero do primeiro continua, porque ali cada linha comeca pelo numero.
     const porLinha = Prefs.get('versiculoPorLinha');
     const versificacao = Dados.versificacaoDe(versaoCode);
+    // versiculos que tem anotacao neste capitulo, para o sinalzinho na tela
+    const comNota = Anotacoes.noCapitulo(versificacao, livro.code, capitulo.number);
     const partes = [];
     let lacunas = 0;
 
@@ -108,7 +114,8 @@ const Leitura = {
         ? this.comMarcas(v.text, faixas)
         : '(este versículo não veio no texto de origem)';
 
-      const verso = `<span ${attrs}>${numero}${texto}</span>`;
+      const nota = comNota.has(v.number) ? this.marcaNotaHTML(v.number) : '';
+      const verso = `<span ${attrs}>${numero}${nota}${texto}</span>`;
 
       // No "um por linha" a capitular vai numa coluna própria à esquerda, fora da
       // caixa do versiculo — assim a marcacao (e o "onde parei") pegam so o texto,
@@ -175,11 +182,19 @@ const Leitura = {
    * coisa forcava a tela a se refazer. Aqui a marca entra no exato instante do
    * toque, direto no elemento que ja esta na tela.
    */
+  /** O sinalzinho discreto de "tem anotação aqui", logo após o número. */
+  marcaNotaHTML(vers) {
+    return `<span class="marca-nota" role="button" tabindex="0" data-nota-vers="${vers}"`
+      + ` aria-label="Ver anotações" title="Anotações"><svg><use href="#i-nota"/></svg></span>`;
+  },
+
   pintarMarca(vers, texto, faixas) {
     document.querySelectorAll(`#folha .v[data-vers="${vers}"]`).forEach(el => {
       const n = el.querySelector('.n');
+      const nota = el.querySelector('.marca-nota');   // preserva o sinal ao repintar
       const capitular = el.previousElementSibling;
-      el.innerHTML = (n ? n.outerHTML : '') + this.comMarcas(texto, faixas);
+      el.innerHTML = (n ? n.outerHTML : '') + (nota ? nota.outerHTML : '')
+        + this.comMarcas(texto, faixas);
       void capitular; // a capitular fica fora do versiculo, nao se mexe nela
     });
   },

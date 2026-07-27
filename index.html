@@ -29,6 +29,13 @@
   <symbol id="i-fechar" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" stroke-linecap="round"/></symbol>
   <symbol id="i-antes" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="i-depois" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-nota" viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z" stroke-linejoin="round"/><path d="M14 3v4h4" stroke-linejoin="round"/><path d="M9 12h6M9 16h4" stroke-linecap="round"/></symbol>
+  <symbol id="i-caderno" viewBox="0 0 24 24"><path d="M6 4h12a1 1 0 0 1 1 1v15l-3-2-3 2-3-2-3 2V5a1 1 0 0 1 1-1z" stroke-linejoin="round"/><path d="M9 8h6M9 12h6" stroke-linecap="round"/></symbol>
+  <symbol id="i-negrito" viewBox="0 0 24 24"><path d="M7 5h6a3.5 3.5 0 0 1 0 7H7zM7 12h7a3.5 3.5 0 0 1 0 7H7z" stroke-linejoin="round"/></symbol>
+  <symbol id="i-italico" viewBox="0 0 24 24"><path d="M10 5h8M6 19h8M14 5l-4 14" stroke-linecap="round"/></symbol>
+  <symbol id="i-sublinhado" viewBox="0 0 24 24"><path d="M7 4v7a5 5 0 0 0 10 0V4M5 21h14" stroke-linecap="round"/></symbol>
+  <symbol id="i-tachado" viewBox="0 0 24 24"><path d="M5 12h14" stroke-linecap="round"/><path d="M8 7a4 3 0 0 1 8 0M8 16a4 3 0 0 0 8 0" stroke-linecap="round"/></symbol>
+  <symbol id="i-limpar-formato" viewBox="0 0 24 24"><path d="M8 6h11M9 6l-2 12M13 6l-1 6" stroke-linecap="round"/><path d="M14 16l6 5M20 16l-6 5" stroke-linecap="round"/></symbol>
 </svg>
 
 <header class="topo">
@@ -51,6 +58,7 @@
   <button data-menu="historico"><svg class="icone"><use href="#i-historico"/></svg><span>Histórico</span></button>
   <button data-menu="marcadores"><svg class="icone"><use href="#i-marcador"/></svg><span>Marcadores</span></button>
   <button data-menu="estudos"><svg class="icone"><use href="#i-estudo"/></svg><span>Estudos</span></button>
+  <button data-menu="caderno"><svg class="icone"><use href="#i-caderno"/></svg><span>Caderno</span></button>
   <button data-menu="ajustes"><svg class="icone"><use href="#i-ajustes"/></svg><span>Ajustes</span></button>
   <button data-menu="compartilhar"><svg class="icone"><use href="#i-compartilhar"/></svg><span>Compartilhar</span></button>
 </div>
@@ -78,9 +86,6 @@
 
 <!-- comparação lado a lado -->
 <div class="comparador" id="comparador">
-  <button class="fechar-comparar" id="fechar-comparar" aria-label="Fechar comparação">
-    <svg class="icone"><use href="#i-fechar"/></svg>
-  </button>
   <div class="metade" id="metade-a"></div>
   <div class="metade" id="metade-b"></div>
 </div>
@@ -95,6 +100,7 @@
     <button class="botao secundario" id="sel-copiar">Copiar</button>
     <button class="botao secundario" id="sel-compartilhar">Compartilhar</button>
     <button class="botao secundario" id="sel-estudo">Salvar estudo</button>
+    <button class="botao secundario" id="sel-anotar">Anotar</button>
     <button class="botao" id="sel-marcar">Marcar</button>
   </div>
   <div class="sel-cores fechada" id="sel-cores"></div>
@@ -186,6 +192,22 @@
   <div class="corpo" id="corpo-salvar-estudo"></div>
 </aside>
 
+<aside class="painel" id="painel-caderno" aria-hidden="true">
+  <header>
+    <h2>Caderno</h2>
+    <button data-fechar aria-label="Fechar"><svg class="icone"><use href="#i-fechar"/></svg></button>
+  </header>
+  <div class="corpo" id="corpo-caderno"></div>
+</aside>
+
+<aside class="painel" id="painel-anot" aria-hidden="true">
+  <header>
+    <h2 id="titulo-anot">Anotações</h2>
+    <button data-fechar aria-label="Fechar"><svg class="icone"><use href="#i-fechar"/></svg></button>
+  </header>
+  <div class="corpo" id="corpo-anot"></div>
+</aside>
+
 <aside class="painel" id="painel-ajustes" aria-hidden="true">
   <header>
     <h2>Ajustes</h2>
@@ -206,7 +228,7 @@
 <section class="tirinha" id="tirinha" aria-hidden="true">
   <header>
     <strong id="tirinha-ref">—</strong>
-    <button class="botao secundario" id="tirinha-marcar" style="margin-left:auto;padding:7px 12px;font-size:13px">Marcar</button>
+    <button class="botao secundario" id="tirinha-acoes" style="margin-left:auto;padding:7px 12px;font-size:13px">Ações</button>
     <button id="tirinha-fixar" class="botao-cab-tirinha" aria-label="Fixar referências na tela" title="Fixar referências na tela" hidden><svg class="icone"><use href="#i-fixar"/></svg></button>
     <button data-fechar-tirinha class="botao-cab-tirinha" aria-label="Fechar"><svg class="icone" style="stroke:var(--tinta)"><use href="#i-fechar"/></svg></button>
   </header>
