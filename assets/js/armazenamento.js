@@ -210,19 +210,35 @@ const Historico = {
  * diante o estudo pode ser renomeado, copiado e compartilhado.
  */
 
+/* Lista de numeros de versiculo -> faixas compactas.
+ * [1,2,3,5,6,7] vira "1-3,5-7". Numeros repetidos e fora de ordem sao
+ * normalizados. Usado nas referencias de Estudos e Anotacoes. */
+const compactarVersiculos = (nums) => {
+  const vs = [...new Set(nums)].filter(n => Number.isFinite(n)).sort((a, b) => a - b);
+  if (!vs.length) return '';
+  const faixas = [];
+  let ini = vs[0], ant = vs[0];
+  for (let k = 1; k < vs.length; k++) {
+    if (vs[k] === ant + 1) { ant = vs[k]; continue; }
+    faixas.push([ini, ant]); ini = ant = vs[k];
+  }
+  faixas.push([ini, ant]);
+  return faixas.map(([a, b]) => (a === b ? `${a}` : `${a}-${b}`)).join(',');
+};
+
 const Estudos = {
   todos() {
     return Guarda.ler('estudos', []);
   },
 
-  /* Um estudo reune um ou mais trechos. Cada trecho e um intervalo de um livro:
-   * {code, capInicio, versInicio, capFim, versFim}. Guardar uma lista permite
-   * juntar passagens de lugares diferentes sob o mesmo estudo — por exemplo,
-   * reunir todos os versiculos sobre um tema.
+  /* Um estudo reune um ou mais trechos. Cada trecho e um recorte de um capitulo:
+   * {code, versao, cap, versiculos:[...]} — a lista de versiculos pode pular
+   * numeros (ex.: [1,2,3,5,6,7]). Guardar uma lista de trechos permite juntar
+   * passagens de lugares diferentes sob o mesmo estudo.
    *
-   * O formato antigo tinha os campos do intervalo direto no estudo. `trechosDe`
-   * le os dois: se houver a lista nova, usa; senao, monta uma a partir dos
-   * campos soltos. Ninguem perde o que ja tinha. */
+   * Formatos antigos ainda sao lidos: o intervalo continuo
+   * {capInicio,versInicio,capFim,versFim} e o estudo de trecho unico com esses
+   * campos soltos. `trechosDe` normaliza tudo; ninguem perde o que ja tinha. */
   trechosDe(e) {
     if (Array.isArray(e.trechos)) return e.trechos;
     return [{
@@ -286,6 +302,11 @@ const Estudos = {
   /** Referencia de um trecho isolado. */
   refDoTrecho(t) {
     const nome = Dados.nomeCurto(t.versao, t.code);
+    // formato novo: capitulo + lista de versiculos (pode pular numeros)
+    if (Array.isArray(t.versiculos)) {
+      return `${nome} ${t.cap}:${compactarVersiculos(t.versiculos)}`;
+    }
+    // formato antigo: intervalo continuo, as vezes cruzando capitulos
     const inicio = `${t.capInicio}:${t.versInicio}`;
     if (t.capInicio === t.capFim) {
       return t.versInicio === t.versFim
@@ -323,17 +344,29 @@ const Estudos = {
 
         // o livro e o capítulo já aparecem no cabeçalho do trecho, então cada
         // linha leva só o número do versículo — sem repetir "cap:vers".
-        // Quando o trecho cruza capítulos, um marco "Capítulo N" separa a virada,
-        // para não haver dois versículos com o mesmo número seguidos sem contexto.
-        const varios = t.capInicio !== t.capFim;
-        for (let cap = t.capInicio; cap <= t.capFim; cap++) {
-          const r = await Dados.capitulo(t.versao, t.code, cap);
-          if (!r) continue;
-          if (varios) linhas.push(`[Capítulo ${cap}]`);
-          for (const v of r.capitulo.verses) {
-            if (cap === t.capInicio && v.number < t.versInicio) continue;
-            if (cap === t.capFim && v.number > t.versFim) continue;
-            if (v.text) linhas.push(`${v.number}  ${v.text}`);
+        if (Array.isArray(t.versiculos)) {
+          // formato novo: um capítulo, só os versículos escolhidos (pode pular)
+          const alvo = new Set(t.versiculos);
+          const r = await Dados.capitulo(t.versao, t.code, t.cap);
+          if (r) {
+            for (const v of r.capitulo.verses) {
+              if (alvo.has(v.number) && v.text) linhas.push(`${v.number}  ${v.text}`);
+            }
+          }
+        } else {
+          // formato antigo: intervalo contínuo. Quando cruza capítulos, um marco
+          // "Capítulo N" separa a virada, para não haver dois versículos com o
+          // mesmo número seguidos sem contexto.
+          const varios = t.capInicio !== t.capFim;
+          for (let cap = t.capInicio; cap <= t.capFim; cap++) {
+            const r = await Dados.capitulo(t.versao, t.code, cap);
+            if (!r) continue;
+            if (varios) linhas.push(`[Capítulo ${cap}]`);
+            for (const v of r.capitulo.verses) {
+              if (cap === t.capInicio && v.number < t.versInicio) continue;
+              if (cap === t.capFim && v.number > t.versFim) continue;
+              if (v.text) linhas.push(`${v.number}  ${v.text}`);
+            }
           }
         }
         if (trechos.length > 1) linhas.push('');
@@ -627,26 +660,41 @@ const Anotacoes = {
     return Guarda.ler('anotacoes', []);
   },
 
-  /** Numeros dos versiculos que tem nota num capitulo — para o sinal na tela. */
+  /* Numeros dos versiculos que tem nota num capitulo — para o sinal na tela.
+   * Uma nota pode cobrir varios versiculos (formato novo `versiculos`); o sinal
+   * aparece em cada um deles. Notas antigas tem so `vers`. */
   noCapitulo(versificacao, code, cap) {
     const s = new Set();
     for (const a of this.todas()) {
-      if (a.versificacao === versificacao && a.code === code && a.cap === cap) s.add(a.vers);
+      if (a.versificacao === versificacao && a.code === code && a.cap === cap) {
+        const vs = Array.isArray(a.versiculos) ? a.versiculos : [a.vers];
+        vs.forEach(v => s.add(v));
+      }
     }
     return s;
   },
 
+  /* Notas que cobrem um versiculo — tocar em qualquer versiculo do conjunto
+   * abre a mesma nota. */
   daPassagem(versificacao, code, cap, vers) {
-    return this.todas().filter(a =>
-      a.versificacao === versificacao && a.code === code && a.cap === cap && a.vers === vers);
+    return this.todas().filter(a => {
+      if (!(a.versificacao === versificacao && a.code === code && a.cap === cap)) return false;
+      const vs = Array.isArray(a.versiculos) ? a.versiculos : [a.vers];
+      return vs.includes(vers);
+    });
   },
 
-  criar({ versificacao, code, cap, vers, versao, corpo }) {
+  criar({ versificacao, code, cap, vers, versiculos, versao, corpo }) {
     const lista = this.todas();
     const agora = new Date().toISOString();
+    const vs = (Array.isArray(versiculos) && versiculos.length)
+      ? [...new Set(versiculos)].filter(n => Number.isFinite(n)).sort((a, b) => a - b)
+      : [vers];
     const a = {
       id: 'a' + Date.now(),
-      versificacao, code, cap, vers,
+      versificacao, code, cap,
+      vers: vs[0],          // versiculo-ancora: mantem compatibilidade
+      versiculos: vs,       // conjunto completo (pode pular numeros)
       versao: versao || '',
       corpo: this.limpar(corpo),
       criado: agora,
@@ -676,7 +724,8 @@ const Anotacoes = {
 
   refDe(a) {
     const nome = Dados.nomeCurto(a.versao || Prefs.get('versao'), a.code);
-    return `${nome} ${a.cap}:${a.vers}`;
+    const vs = Array.isArray(a.versiculos) ? a.versiculos : [a.vers];
+    return `${nome} ${a.cap}:${compactarVersiculos(vs)}`;
   },
 
   quandoDe(a) {

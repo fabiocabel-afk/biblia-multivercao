@@ -341,8 +341,11 @@ button {
 .dialogo-veu.aberto { opacity: 1; pointer-events: auto; }
 
 .dialogo {
+  display: flex;
+  flex-direction: column;
   width: 100%;
   max-width: 340px;
+  max-height: calc(100dvh - 48px);
   background: var(--papel);
   color: var(--tinta);
   border-radius: 14px;
@@ -353,14 +356,24 @@ button {
 }
 .dialogo-veu.aberto .dialogo { transform: none; }
 
-.dialogo strong { display: block; font-size: 16px; margin-bottom: 8px; }
+/* variante informativa: fundo mais claro que o app, para ler como um aviso */
+.dialogo-veu.aviso .dialogo {
+  background: color-mix(in srgb, var(--papel) 74%, #ffffff 26%);
+  border: 1px solid color-mix(in srgb, var(--tinta) 16%, transparent);
+}
+
+.dialogo strong { flex: none; display: block; font-size: 16px; margin-bottom: 8px; }
 .dialogo p {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   margin: 0 0 18px;
   font-size: 14px;
   line-height: 1.5;
   color: var(--tinta-fraca);
 }
-.dialogo-acoes { display: flex; gap: 10px; }
+.dialogo-acoes { flex: none; display: flex; gap: 10px; }
 .dialogo-acoes .botao { flex: 1; }
 
 .painel {
@@ -606,6 +619,22 @@ button {
 }
 
 .botao:hover { filter: brightness(1.08); }
+
+/* Botão discreto de ajuda (texto + ícone), usado na seção Ouvir dos Ajustes. */
+.link-ajuda {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  margin-top: 14px;
+  padding: 4px 0;
+  color: var(--tinta-fraca);
+  font-size: 13px;
+  line-height: 1.4;
+  text-align: left;
+}
+.link-ajuda .icone { width: 18px; height: 18px; stroke: var(--rubrica); flex: none; }
+.link-ajuda:hover { color: var(--tinta); }
 
 .interruptor {
   display: flex;
@@ -2232,6 +2261,13 @@ body.com-refs-fixas .voltar-origem { bottom: calc(42vh + 14px); z-index: 32; }
   min-width: 0;
 }
 .anot-corpo:hover { background: color-mix(in srgb, var(--tinta) 5%, transparent); }
+.anot-ref {
+  font-family: var(--fonte-sigla);
+  font-size: 11px;
+  letter-spacing: .02em;
+  color: var(--tinta-numero);
+  margin-bottom: 3px;
+}
 .anot-previa {
   font-family: var(--fonte-texto);
   font-size: 15px;

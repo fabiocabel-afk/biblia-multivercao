@@ -919,7 +919,10 @@ const App = {
         const t = Estudos.trechosDe(e)[+el.dataset.tr];
         this.fecharPaineis();
         if (t.versao !== this.versao) { this.versao = t.versao; Prefs.set('versao', t.versao); }
-        this.ir(t.code, t.capInicio, t.versInicio);
+        // formato novo (cap + lista) ou antigo (intervalo contínuo)
+        const cap = t.cap != null ? t.cap : t.capInicio;
+        const vers = Array.isArray(t.versiculos) ? t.versiculos[0] : t.versInicio;
+        this.ir(t.code, cap, vers);
       };
     });
 
@@ -983,101 +986,32 @@ const App = {
   /* Monta o trecho a partir da seleção, perguntando até onde vai. Devolve o
    * trecho pronto, ou null se a pessoa cancelou ou errou o formato. */
 
+  /** Números dos versículos de uma seleção, sem repetir e em ordem.
+   *  A seleção (simples ou do "+") é sempre dentro do capítulo aberto. */
+  versiculosDaSelecao(selecao) {
+    if (!selecao || !selecao.pedacos) return [];
+    return [...new Set(selecao.pedacos.map(p => p.vers))].sort((a, b) => a - b);
+  },
+
   /* Ao tocar em "Salvar estudo", abre um painel próprio — mesma largura e fundo
    * claro dos outros — com a opção de estudo novo e a lista dos que já existem.
-   * A seleção fica guardada enquanto a pessoa escolhe. */
+   * O trecho é exatamente a seleção feita na tela (com o "+", pode pular
+   * versículos), então não há mais etapa de "até que capítulo/versículo". */
   abrirSalvarEstudo() {
     if (!this.selecao) return;
     this.selecaoGuardada = this.selecao;
     document.getElementById('barra-selecao').classList.remove('aberta');
     document.body.classList.remove('selecionando');
 
-    // primeiro escolhe até onde vai o trecho; só depois decide onde salvar
     this.estudoParcial = {
       versao: this.versao,
       code: this.code,
-      capInicio: this.cap,
-      versInicio: this.selecaoGuardada.pedacos[0].vers,
-      capFim: this.cap,
-      versFim: this.selecaoGuardada.pedacos[this.selecaoGuardada.pedacos.length - 1].vers,
+      cap: this.cap,
+      versiculos: this.versiculosDaSelecao(this.selecaoGuardada),
     };
 
-    this.escolherFimCapitulo();
+    this.desenharSalvarEstudo();
     this.abrir('painel-salvar-estudo');
-  },
-
-  /* Escolha do capítulo final, em grade, mostrando só os capítulos que o livro
-   * realmente tem. Começa no capítulo de início — não há como terminar antes de
-   * onde a seleção começou. */
-  escolherFimCapitulo() {
-    const corpo = document.getElementById('corpo-salvar-estudo');
-    document.getElementById('titulo-salvar').textContent = 'Até que capítulo?';
-
-    const e = this.estudoParcial;
-    const info = Dados.infoLivro(e.versao, e.code);
-    const total = info ? info.chapters : e.capInicio;
-    const nome = Dados.nomeCurto(e.versao, e.code);
-
-    const grade = [];
-    for (let c = e.capInicio; c <= total; c++) {
-      grade.push(`<button class="cel-num ${c === e.capFim ? 'ativa' : ''}"
-        data-cap="${c}">${c}</button>`);
-    }
-
-    corpo.innerHTML = `
-      <p class="contagem" style="margin-bottom:14px">O trecho começa em
-        <strong>${nome} ${e.capInicio}:${e.versInicio}</strong>.
-        Até que capítulo ele vai?</p>
-      <div class="grade-num">${grade.join('')}</div>`;
-
-    corpo.querySelectorAll('[data-cap]').forEach(el => {
-      el.onclick = () => {
-        e.capFim = +el.dataset.cap;
-        // se mudou de capítulo, o versículo final precisa ser reescolhido
-        this.escolherFimVersiculo();
-      };
-    });
-  },
-
-  /* Escolha do versículo final, mostrando só os versículos que o capítulo tem.
-   * Se o fim é o mesmo capítulo do início, não deixa escolher antes do começo. */
-  async escolherFimVersiculo() {
-    const corpo = document.getElementById('corpo-salvar-estudo');
-    document.getElementById('titulo-salvar').textContent = 'Até que versículo?';
-    corpo.innerHTML = '<div class="estado">Carregando…</div>';
-
-    const e = this.estudoParcial;
-    const nome = Dados.nomeCurto(e.versao, e.code);
-
-    let totalVers = 0;
-    try {
-      const r = await Dados.capitulo(e.versao, e.code, e.capFim);
-      totalVers = r ? r.capitulo.verses.length : 0;
-    } catch { totalVers = 0; }
-
-    const minimo = e.capFim === e.capInicio ? e.versInicio : 1;
-    if (e.versFim < minimo || e.versFim > totalVers) e.versFim = Math.min(minimo, totalVers) || minimo;
-
-    const grade = [];
-    for (let v = minimo; v <= totalVers; v++) {
-      grade.push(`<button class="cel-num ${v === e.versFim ? 'ativa' : ''}"
-        data-vers="${v}">${v}</button>`);
-    }
-
-    corpo.innerHTML = `
-      <button class="voltar-etapa" id="voltar-cap">← Trocar o capítulo (${e.capFim})</button>
-      <p class="contagem" style="margin:10px 0 14px">Termina em
-        <strong>${nome} ${e.capFim}</strong>, versículo:</p>
-      <div class="grade-num">${grade.join('')}</div>`;
-
-    document.getElementById('voltar-cap').onclick = () => this.escolherFimCapitulo();
-
-    corpo.querySelectorAll('[data-vers]').forEach(el => {
-      el.onclick = () => {
-        e.versFim = +el.dataset.vers;
-        this.desenharSalvarEstudo();   // agora sim: onde salvar
-      };
-    });
   },
 
   desenharSalvarEstudo() {
@@ -1088,8 +1022,7 @@ const App = {
     const refTrecho = Estudos.refDoTrecho(e);
 
     corpo.innerHTML = `
-      <button class="voltar-etapa" id="voltar-vers">← Trocar até onde vai</button>
-      <p class="contagem" style="margin:10px 0 14px">Guardando
+      <p class="contagem" style="margin:2px 0 14px">Guardando
         <strong>${refTrecho}</strong> · ${e.versao}</p>
 
       <button class="opcao-estudo-grande novo" id="estudo-novo">
@@ -1109,12 +1042,12 @@ const App = {
         }).join('')}
       </div>` : ''}`;
 
-    document.getElementById('voltar-vers').onclick = () => this.escolherFimVersiculo();
+    const trechoAtual = () => ({ ...e, versiculos: [...(e.versiculos || [])] });
 
     document.getElementById('estudo-novo').onclick = () => {
       const nome = prompt('Nome do novo estudo (opcional):', '');
       if (nome === null) return;
-      Estudos.criar({ nome: nome.trim(), trecho: { ...e } });
+      Estudos.criar({ nome: nome.trim(), trecho: trechoAtual() });
       this.fecharPaineis();
       this.fecharSelecao();
       this.avisoRapido('Estudo criado');
@@ -1122,7 +1055,7 @@ const App = {
 
     corpo.querySelectorAll('[data-juntar]').forEach(el => {
       el.onclick = () => {
-        Estudos.acrescentar(el.dataset.juntar, { ...e });
+        Estudos.acrescentar(el.dataset.juntar, trechoAtual());
         this.fecharPaineis();
         this.fecharSelecao();
         this.avisoRapido('Adicionado ao estudo');
@@ -1306,7 +1239,12 @@ const App = {
         <span id="rot-vel">${(+p.vozVel || 1).toFixed(1)}×</span></div>
       <input class="deslizador" type="range" id="ctrl-vel" min="0.5" max="2" step="0.1" value="${+p.vozVel || 1}">
 
-      <button class="botao secundario" id="ouvir-amostra" style="margin-top:18px">Ouvir a voz</button>`
+      <button class="botao secundario" id="ouvir-amostra" style="margin-top:18px">Ouvir a voz</button>
+
+      <button class="link-ajuda" id="voz-ajuda">
+        <svg class="icone"><use href="#i-info"/></svg>
+        <span>Trazer vozes novas para o aparelho</span>
+      </button>`
       : `<p class="contagem">Este navegador não oferece leitura em voz. Tente
         pelo Chrome ou pelo aplicativo instalado na tela inicial.</p>`;
 
@@ -1409,6 +1347,9 @@ const App = {
 
     const amostra = achar('ouvir-amostra');
     if (amostra) amostra.onclick = () => this.ouvirAmostra();
+
+    const ajudaVoz = achar('voz-ajuda');
+    if (ajudaVoz) ajudaVoz.onclick = () => this.ajudaVozes();
 
     const cats = achar('ctrl-categorias');
     if (cats) cats.onchange = e => {
@@ -1553,12 +1494,13 @@ const App = {
   anotarSelecao() {
     if (!this.selecao) return;
     const pedacos = this.selecao.pedacos;
-    const vers = pedacos[0].vers;
+    const versiculos = this.versiculosDaSelecao(this.selecao);
+    const vers = versiculos[0];
     const ref = this.referenciaDaSelecao(pedacos);
     // seleção simples: fecha a barra como antes. No modo de vários, mantém o
     // grupo na tela para a pessoa seguir usando depois de fechar a nota.
     if (!(this.multiAtivo || this.multiSelecao)) this.fecharSelecao();
-    this.editarAnotacao(vers, null, ref);
+    this.editarAnotacao(vers, null, ref, versiculos);
   },
 
   /** Leitura da anotação numa folha flutuante limpa — sem painel e sem barra.
@@ -1662,6 +1604,7 @@ const App = {
 
     const cartoes = notas.map(a => `<div class="cartao-anot">
         <button class="anot-corpo" data-editar="${a.id}">
+          <div class="anot-ref">${Anotacoes.refDe(a)}</div>
           <div class="anot-previa">${Leitura.escapar(Anotacoes.resumo(a)) || '<em>(nota vazia)</em>'}</div>
           <div class="quando">${Anotacoes.quandoDe(a)}</div>
         </button>
@@ -1699,11 +1642,15 @@ const App = {
 
   /* O editor de uma nota: barra de formatação em cima, área de escrita no meio,
    * salvar/cancelar embaixo. `id` nulo cria uma nota nova. */
-  editarAnotacao(vers, id, refLabel) {
+  editarAnotacao(vers, id, refLabel, versiculos) {
     this.anotVers = vers;
     this.anotId = id;
+    // conjunto de versículos da nota nova (do "+", pode pular). Ao editar uma
+    // nota que já existe, o conjunto vem dela e não muda aqui.
+    this.anotVersiculos = (versiculos && versiculos.length) ? versiculos.slice() : [vers];
     const a = id ? Anotacoes.achar(id) : null;
-    document.getElementById('titulo-anot').textContent = refLabel || this.refDaPassagem(vers);
+    document.getElementById('titulo-anot').textContent =
+      refLabel || (a ? Anotacoes.refDe(a) : this.refDaPassagem(vers));
     const corpo = document.getElementById('corpo-anot');
     corpo.classList.add('corpo-editor');   // vira coluna: papel rola, botões fixos
 
@@ -1825,7 +1772,7 @@ const App = {
       } else {
         const versificacao = Dados.versificacaoDe(this.versao);
         Anotacoes.criar({ versificacao, code: this.code, cap: this.cap, vers,
-          versao: this.versao, corpo: html });
+          versiculos: this.anotVersiculos, versao: this.versao, corpo: html });
       }
       this.avisoRapido('Anotação salva');
       this.abrirAnotacoes(vers);
@@ -1911,6 +1858,66 @@ const App = {
     });
   },
 
+  /* Aviso só de leitura: reusa o diálogo do tema, mas com um único botão.
+   * A mensagem aceita HTML (para destacar os passos). Devolve uma promessa que
+   * resolve quando a pessoa fecha. */
+  avisar({ titulo = 'Aviso', html = '' } = {}) {
+    return new Promise(resolve => {
+      const veu = document.getElementById('dialogo-veu');
+      const btConf = document.getElementById('dialogo-confirmar');
+      const btCanc = document.getElementById('dialogo-cancelar');
+      document.getElementById('dialogo-titulo').textContent = titulo;
+      document.getElementById('dialogo-mensagem').innerHTML = html;
+      btConf.textContent = 'Entendi';
+      btCanc.style.display = 'none';
+      veu.classList.add('aviso');
+
+      const fechar = () => {
+        veu.classList.remove('aberto');
+        veu.classList.remove('aviso');
+        veu.setAttribute('aria-hidden', 'true');
+        btConf.onclick = veu.onclick = null;
+        btCanc.style.display = '';
+        document.removeEventListener('keydown', aoTeclar, true);
+        resolve();
+      };
+      const aoTeclar = e => {
+        if (e.key === 'Escape' || e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); fechar(); }
+      };
+
+      btConf.onclick = fechar;
+      veu.onclick = e => { if (e.target === veu) fechar(); };
+      document.addEventListener('keydown', aoTeclar, true);
+
+      veu.setAttribute('aria-hidden', 'false');
+      veu.classList.add('aberto');
+      btConf.focus();
+    });
+  },
+
+  /* Explica que as vozes são do aparelho e ensina a instalar vozes melhores.
+   * O app não baixa nem instala vozes — é uma trava de segurança do navegador. */
+  ajudaVozes() {
+    return this.avisar({
+      titulo: 'Trazer vozes novas',
+      html:
+        'As vozes da leitura vêm do seu aparelho, não do app. Por isso a lista ' +
+        'muda de um aparelho para outro — e o app não consegue baixar nem instalar ' +
+        'vozes sozinho, por uma trava de segurança do navegador.<br><br>' +
+        'Mas você mesmo pode instalar vozes melhores. No Android:<br><br>' +
+        '1. Abra as <strong>Configurações</strong> do celular.<br>' +
+        '2. Entre em <strong>Sistema</strong> › <strong>Idiomas</strong> ' +
+        '(em alguns aparelhos fica em <strong>Acessibilidade</strong>).<br>' +
+        '3. Toque em <strong>Saída de conversão de texto em voz</strong>.<br>' +
+        '4. No motor, escolha <strong>Speech Services da Google</strong>.<br>' +
+        '5. Toque em <strong>Instalar dados de voz</strong> e baixe ' +
+        '<strong>Português do Brasil</strong>.<br><br>' +
+        'Depois volte aqui, abra os Ajustes e use <strong>Ouvir a voz</strong> para ' +
+        'escolher a que mais te agrada. Prefira as marcadas como <strong>pt-BR</strong>; ' +
+        'as <strong>pt-PT</strong> têm sotaque de Portugal.'
+    });
+  },
+
   /* Diálogo de confirmação no tema do app, no lugar do confirm() do navegador.
    * Devolve uma promessa: true se confirmou, false se cancelou. Tocar fora ou
    * apertar Esc cancela; Enter confirma. */
@@ -1924,6 +1931,8 @@ const App = {
       document.getElementById('dialogo-mensagem').textContent = mensagem;
       btConf.textContent = rotuloConf;
       btCanc.textContent = rotuloCanc;
+      btCanc.style.display = '';
+      veu.classList.remove('aviso');
 
       const fechar = valor => {
         veu.classList.remove('aberto');
