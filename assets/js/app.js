@@ -252,6 +252,11 @@ const App = {
       p.classList.remove('aberto');
       p.setAttribute('aria-hidden', 'true');
     });
+    const visor = document.getElementById('visor-nota');
+    if (visor) {
+      visor.classList.remove('aberto');
+      visor.setAttribute('aria-hidden', 'true');
+    }
     document.getElementById('veu').classList.remove('aberto');
     this.fecharTirinha();
   },
@@ -1514,11 +1519,60 @@ const App = {
     this.editarAnotacao(vers, null, ref);
   },
 
-  /** Modo de leitura da anotação: mostra o texto já formatado numa folha branca
-   *  (branca mesmo no escuro, para bater o olho e saber que é anotação). Não
-   *  edita — traz um botão "Editar" que leva ao módulo de sempre, com a lista,
-   *  o excluir e o editar. É o que abre ao tocar no sinal do versículo. */
+  /** Leitura da anotação numa folha flutuante limpa — sem painel e sem barra.
+   *  É o que abre ao tocar no sinal do versículo. A folha rola por dentro; o X
+   *  (canto superior direito) e o lápis (canto inferior direito) ficam fixos. O
+   *  lápis leva ao editor; a folha só mostra, nunca edita direto. */
   verAnotacoes(vers) {
+    this.anotVers = vers;
+    const versificacao = Dados.versificacaoDe(this.versao);
+    const notas = Anotacoes.daPassagem(versificacao, this.code, this.cap, vers);
+
+    // sem nota (p.ex. acabou de ser apagada): cai na lista de sempre
+    if (!notas.length) return this.abrirAnotacoes(vers);
+
+    const folhas = notas.map(a => `<article class="folha-anot">
+        <div class="corpo-nota">${Anotacoes.limpar(a.corpo)}</div>
+        <div class="quando-nota">${Anotacoes.quandoDe(a)}</div>
+      </article>`).join('');
+    document.getElementById('visor-rolo').innerHTML =
+      `<div class="leitura-anot">${folhas}</div>`;
+
+    // o lápis edita: uma nota só vai direto ao editor; várias abrem a lista
+    document.getElementById('visor-editar').onclick = () => {
+      this.fecharVisorNota();
+      if (notas.length === 1) {
+        this.editarAnotacao(vers, notas[0].id);
+        this.abrir('painel-anot');
+      } else {
+        this.abrirAnotacoes(vers);
+      }
+    };
+    document.getElementById('visor-fechar').onclick = () => this.fecharVisorNota();
+
+    this.abrirVisorNota();
+  },
+
+  abrirVisorNota() {
+    this.fecharPaineis();                       // fecha painéis/tirinha e reusa o véu
+    document.getElementById('veu').classList.add('aberto');
+    const v = document.getElementById('visor-nota');
+    v.classList.add('aberto');
+    v.setAttribute('aria-hidden', 'false');
+    document.getElementById('visor-rolo').scrollTop = 0;
+  },
+
+  fecharVisorNota() {
+    const v = document.getElementById('visor-nota');
+    v.classList.remove('aberto');
+    v.setAttribute('aria-hidden', 'true');
+    document.getElementById('veu').classList.remove('aberto');
+  },
+
+  /** Leitura da anotação dentro do painel (aberta pelo menu Anotação): mesma
+   *  folha branca, mas com o X no cabeçalho do painel e um botão "Editar"
+   *  comum embaixo, para ficar padronizado com o restante do menu. */
+  verAnotacaoPainel(vers) {
     this.anotVers = vers;
     const versificacao = Dados.versificacaoDe(this.versao);
     const notas = Anotacoes.daPassagem(versificacao, this.code, this.cap, vers);
@@ -1801,15 +1855,15 @@ const App = {
         const a = Anotacoes.achar(el.dataset.abrir);
         if (!a) return;
         this.fecharPaineis();
-        const irEditar = () => {
+        // abre a leitura primeiro; o editor só entra se a pessoa tocar em Editar
+        const irVer = () => {
           this.anotVers = a.vers;
-          this.editarAnotacao(a.vers, a.id);
-          this.abrir('painel-anot');
+          this.verAnotacaoPainel(a.vers);
         };
         if (a.code !== this.code || a.cap !== this.cap) {
-          this.ir(a.code, a.cap, a.vers).then(irEditar);
+          this.ir(a.code, a.cap, a.vers).then(irVer);
         } else {
-          irEditar();
+          irVer();
         }
       };
     });

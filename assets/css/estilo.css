@@ -2433,6 +2433,12 @@ body.com-refs-fixas .voltar-origem { bottom: calc(42vh + 14px); z-index: 32; }
   border-color: var(--rubrica);
 }
 /* enquanto a barra de seleção está aberta embaixo, o botão sobe para não cobri-la */
+/* Enquanto a barra de seleção está aberta embaixo, sobra espaço no fim da
+   página para os últimos versículos poderem rolar para cima da barra — sem
+   ficarem escondidos atrás dela. Some quando a barra fecha. */
+body.selecionando .folha { padding-bottom: 260px; }
+body.selecionando:has(#sel-cores:not(.fechada)) .folha { padding-bottom: 340px; }
+
 body.selecionando .mais-selecao { bottom: 168px; }
 .mais-conta {
   position: absolute;
@@ -2482,3 +2488,100 @@ body.selecionando .mais-selecao { bottom: 168px; }
 }
 .fechar-comparar-inline:hover { filter: brightness(1.15); }
 
+/* ============= folha flutuante da anotação (leitura pelo sinal) ========= */
+/* O overlay em si não intercepta cliques: o toque fora do papel atravessa e
+   chega no véu (atrás), que fecha. Só o papel recebe toque. */
+.visor-nota {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px calc(24px + env(safe-area-inset-bottom));
+  pointer-events: none;
+}
+.visor-nota.aberto { display: flex; }
+
+.folha-visor {
+  position: relative;
+  pointer-events: auto;
+  width: min(560px, 100%);
+  max-height: min(82vh, 760px);
+  background: #ffffff;
+  color: #17140f;
+  border-radius: 16px;
+  box-shadow: 0 14px 44px rgba(0, 0, 0, .38);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: sobe-visor .18s ease;
+}
+@keyframes sobe-visor {
+  from { opacity: 0; transform: translateY(10px) scale(.99); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* o papel rola por dentro; sobra embaixo para o lápis não cobrir o texto */
+.visor-rolo {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 34px 22px 84px;
+}
+
+/* dentro da folha flutuante a nota não precisa do cartão branco de novo:
+   a própria folha já é o papel */
+.visor-rolo .leitura-anot { gap: 20px; }
+.visor-rolo .folha-anot {
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 0;
+}
+.visor-rolo .folha-anot + .folha-anot {
+  border-top: 1px solid rgba(23, 20, 15, .12);
+  padding-top: 18px;
+}
+
+/* X fixo no canto superior direito */
+.visor-fechar {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 2;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(23, 20, 15, .06);
+  color: #17140f;
+  border: 1px solid rgba(23, 20, 15, .12);
+  cursor: pointer;
+}
+.visor-fechar:hover { background: rgba(23, 20, 15, .12); }
+.visor-fechar .icone { width: 20px; height: 20px; stroke: #17140f; }
+
+/* lápis flutuante fixo no canto inferior direito */
+.visor-lapis {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  z-index: 2;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--rubrica);
+  color: #fff;
+  border: none;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, .3);
+  cursor: pointer;
+  transition: transform .15s ease;
+}
+.visor-lapis:hover { transform: translateY(-1px); }
+.visor-lapis .icone { width: 24px; height: 24px; stroke: #fff; }

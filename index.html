@@ -36,6 +36,7 @@
   <symbol id="i-sublinhado" viewBox="0 0 24 24"><path d="M7 4v7a5 5 0 0 0 10 0V4M5 21h14" stroke-linecap="round"/></symbol>
   <symbol id="i-tachado" viewBox="0 0 24 24"><path d="M5 12h14" stroke-linecap="round"/><path d="M8 7a4 3 0 0 1 8 0M8 16a4 3 0 0 0 8 0" stroke-linecap="round"/></symbol>
   <symbol id="i-limpar-formato" viewBox="0 0 24 24"><path d="M8 6h11M9 6l-2 12M13 6l-1 6" stroke-linecap="round"/><path d="M14 16l6 5M20 16l-6 5" stroke-linecap="round"/></symbol>
+  <symbol id="i-lapis" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z" stroke-linejoin="round"/><path d="M14 6l4 4" stroke-linecap="round"/></symbol>
 </svg>
 
 <header class="topo">
@@ -133,6 +134,22 @@
       <button class="botao secundario" id="dialogo-cancelar">Cancelar</button>
       <button class="botao" id="dialogo-confirmar">Confirmar</button>
     </div>
+  </div>
+</div>
+
+<!-- folha flutuante de leitura da anotação (abre pelo sinal no versículo).
+     A folha rola por dentro; o X (canto superior direito) e o lápis (canto
+     inferior direito) ficam fixos, sempre visíveis. O véu atrás escurece e,
+     tocado, fecha. -->
+<div class="visor-nota" id="visor-nota" aria-hidden="true">
+  <div class="folha-visor" role="dialog" aria-modal="true" aria-label="Anotação">
+    <button class="visor-fechar" id="visor-fechar" aria-label="Fechar">
+      <svg class="icone"><use href="#i-fechar"/></svg>
+    </button>
+    <div class="visor-rolo" id="visor-rolo"></div>
+    <button class="visor-lapis" id="visor-editar" aria-label="Editar anotação" title="Editar">
+      <svg class="icone"><use href="#i-lapis"/></svg>
+    </button>
   </div>
 </div>
 
