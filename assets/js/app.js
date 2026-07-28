@@ -3249,22 +3249,64 @@ const App = {
    * passagens relacionadas (Treasury of Scripture Knowledge). O primeiro nível
    * abre junto; o segundo abre ao tocar no ENDEREÇO. Tocar no TEXTO abre o
    * versículo inteiro — um por vez, fechando o anterior. Qualquer nó pode
-   * virar nova raiz (botão fixo), e uma pilha guarda as raízes para voltar. */
+   * virar nova raiz (botão fixo). Um histórico guarda as raízes visitadas —
+   * persistente e limitado a 30 — para o "Voltar" andar etapa por etapa e para
+   * a tela retomar a última abertura quando nada estiver selecionado. */
+
+  _RAIZ_PADRAO: { code: 'MAT', cap: 5, vIni: 1, vFim: 1 },
+  _LIMITE_HIST_REFS: 30,
+
+  _carregarHistRefs() {
+    const h = Guarda.ler('refsHist', []);
+    this.refsHist = Array.isArray(h) ? h : [];
+  },
+
+  _salvarHistRefs() {
+    if (this.refsHist.length > this._LIMITE_HIST_REFS) {
+      this.refsHist = this.refsHist.slice(-this._LIMITE_HIST_REFS);
+    }
+    Guarda.gravar('refsHist', this.refsHist);
+  },
+
+  _mesmoNo(a, b) {
+    return !!a && !!b && a.code === b.code && a.cap === b.cap
+      && a.vIni === b.vIni && (a.vFim || a.vIni) === (b.vFim || b.vIni);
+  },
+
+  /* Empilha uma nova raiz no histórico (evitando repetir a do topo) e a torna
+   * a raiz atual. É por aqui que passam a abertura, o "tornar raiz" e a troca. */
+  _empilharRaizRef(no) {
+    const limpo = { code: no.code, cap: no.cap, vIni: no.vIni, vFim: no.vFim || no.vIni };
+    const topo = this.refsHist[this.refsHist.length - 1];
+    if (this._mesmoNo(topo, limpo)) { this.refsRaiz = topo; return; }
+    this.refsHist.push(limpo);
+    this.refsRaiz = limpo;
+    this._salvarHistRefs();
+  },
 
   abrirReferenciasCruzadas() {
-    // raiz inicial: versículo destacado na leitura; senão, Mateus 5:1
-    let code = this.code, cap = this.cap, vers = this.destaque;
-    if (!vers) { code = 'MAT'; cap = 5; vers = 1; }
-    if (Dados.versificacaoDe(this.versao) === 'vulgata') {
-      try { cap = Dados.converter(code, cap, 'vulgata', 'hebraica').capitulo; } catch {}
+    this._carregarHistRefs();
+
+    // versículo tocado na leitura (o "ponto"); só cai no padrão se não houver
+    const ativo = this.pontoAtual || this.destaque;
+    if (ativo) {
+      let cap = this.cap;
+      if (Dados.versificacaoDe(this.versao) === 'vulgata') {
+        try { cap = Dados.converter(this.code, this.cap, 'vulgata', 'hebraica').capitulo; } catch {}
+      }
+      this._empilharRaizRef({ code: this.code, cap, vIni: ativo, vFim: ativo });
+    } else if (this.refsHist.length) {
+      this.refsRaiz = this.refsHist[this.refsHist.length - 1];   // retoma a última
+    } else {
+      this._empilharRaizRef(this._RAIZ_PADRAO);                  // 1ª vez: Mateus 5:1
     }
-    this.refsRaiz = { code, cap, vIni: vers, vFim: vers };
-    this.refsPilha = [];
+
     if (!this.refsFiltro) this.refsFiltro = 'tudo';
     this.refsSelecionado = null;
     this.refsTextoAberto = null;
 
-    document.getElementById('refs-raiz').onclick = () => this.abrirTrocaRefs();
+    document.getElementById('refs-raiz-end').onclick = () => this.abrirTrocaRefs();
+    document.getElementById('refs-raiz-amostra').onclick = () => this._tocarTextoRaiz();
     document.getElementById('refs-voltar').onclick = () => this.voltarRaizRefs();
     document.getElementById('refs-tornar-raiz').onclick = () => this.tornarRaizRefs();
     document.getElementById('troca-cancelar').onclick = () => this.fecharTrocaRefs();
@@ -3333,10 +3375,18 @@ const App = {
   },
 
   _pintarRaizRef() {
-    document.getElementById('refs-raiz').textContent = this._rotuloRef(this.refsRaiz);
+    const end = document.getElementById('refs-raiz-end');
+    const am = document.getElementById('refs-raiz-amostra');
+    end.textContent = this._rotuloRef(this.refsRaiz);
+    am.dataset.trecho = `${this.refsRaiz.code}|${this.refsRaiz.cap}|${this.refsRaiz.vIni}`;
+    am.dataset.pronto = '';
+    am.classList.remove('aberto');
+    am.textContent = '…';
+    this._preencherAmostrasRef(document.getElementById('refs-raiz'));
   },
 
   async desenharArvoreRefs() {
+    this.refsTextoAberto = null;   // a árvore é remontada; nada fica aberto
     this._pintarRaizRef();
     this._refsSeq = 0;
     this._refsNos = {};
@@ -3423,27 +3473,41 @@ const App = {
     this._preencherAmostrasRef(cont);
   },
 
+  /* Fecha o texto que estiver aberto — seja de um nó da árvore, seja o da raiz
+   * — restaurando a amostra. Garante o "um texto por vez" nas duas pontas. */
+  _fecharTextoRefAberto() {
+    const aberto = this.refsTextoAberto;
+    if (!aberto) return;
+    const bt = aberto === 'raiz'
+      ? document.getElementById('refs-raiz-amostra')
+      : document.querySelector(`[data-texto="${aberto}"]`);
+    if (bt) { bt.classList.remove('aberto'); bt.textContent = bt.dataset.amostra || '…'; }
+    this.refsTextoAberto = null;
+  },
+
   async _tocarTextoRef(id) {
     const reg = this._refsNos[id];
     if (!reg) return;
     this._selecionarRef(id);
-
-    // um texto por vez: fecha o que estiver aberto
-    if (this.refsTextoAberto && this.refsTextoAberto !== id) {
-      const antes = document.querySelector(`[data-texto="${this.refsTextoAberto}"]`);
-      if (antes) { antes.classList.remove('aberto'); antes.textContent = antes.dataset.amostra || '…'; }
-    }
+    if (this.refsTextoAberto === id) { this._fecharTextoRefAberto(); return; }
+    this._fecharTextoRefAberto();          // fecha qualquer outro (nó ou raiz)
     const bt = document.querySelector(`[data-texto="${id}"]`);
-    if (this.refsTextoAberto === id) {           // toca de novo: fecha
-      bt.classList.remove('aberto');
-      bt.textContent = bt.dataset.amostra || '…';
-      this.refsTextoAberto = null;
-      return;
-    }
     bt.classList.add('aberto');
     bt.textContent = 'abrindo…';
     bt.innerHTML = await this._textoCompletoRef(reg.no);
     this.refsTextoAberto = id;
+  },
+
+  /* Toque no trecho da RAIZ: abre/fecha o texto inteiro dela, respeitando o
+   * mesmo "um por vez" da árvore. Não seleciona (a raiz já é a raiz). */
+  async _tocarTextoRaiz() {
+    const bt = document.getElementById('refs-raiz-amostra');
+    if (this.refsTextoAberto === 'raiz') { this._fecharTextoRefAberto(); return; }
+    this._fecharTextoRefAberto();
+    bt.classList.add('aberto');
+    bt.textContent = 'abrindo…';
+    bt.innerHTML = await this._textoCompletoRef(this.refsRaiz);
+    this.refsTextoAberto = 'raiz';
   },
 
   async _textoCompletoRef(no) {
@@ -3509,29 +3573,34 @@ const App = {
   _atualizarBotoesRefs() {
     const bTornar = document.getElementById('refs-tornar-raiz');
     const bVoltar = document.getElementById('refs-voltar');
+    const alvoTornar = document.getElementById('refs-tornar-alvo');
+    const alvoVoltar = document.getElementById('refs-voltar-alvo');
     const reg = this.refsSelecionado ? this._refsNos[this.refsSelecionado] : null;
-    if (bTornar) {
-      bTornar.disabled = !reg;
-      bTornar.textContent = reg ? `Tornar ${this._rotuloRef(reg.no)} raiz` : 'Tornar raiz';
-    }
-    if (bVoltar) bVoltar.disabled = !(this.refsPilha && this.refsPilha.length);
+
+    if (bTornar) bTornar.disabled = !reg;
+    if (alvoTornar) alvoTornar.textContent = reg ? this._rotuloRef(reg.no) : '';
+
+    // "Voltar" anda pelo histórico; a 2ª linha antecipa para onde vai
+    const anterior = (this.refsHist && this.refsHist.length > 1)
+      ? this.refsHist[this.refsHist.length - 2] : null;
+    if (bVoltar) bVoltar.disabled = !anterior;
+    if (alvoVoltar) alvoVoltar.textContent = anterior ? this._rotuloRef(anterior) : '';
   },
 
   tornarRaizRefs() {
     const reg = this.refsSelecionado ? this._refsNos[this.refsSelecionado] : null;
     if (!reg) return;
-    this.refsPilha.push(this.refsRaiz);
-    this.refsRaiz = { code: reg.no.code, cap: reg.no.cap, vIni: reg.no.vIni, vFim: reg.no.vFim };
+    this._empilharRaizRef(reg.no);
     this.refsSelecionado = null;
-    this.refsTextoAberto = null;
     this.desenharArvoreRefs();
   },
 
   voltarRaizRefs() {
-    if (!this.refsPilha || !this.refsPilha.length) return;
-    this.refsRaiz = this.refsPilha.pop();
+    if (!this.refsHist || this.refsHist.length <= 1) return;
+    this.refsHist.pop();
+    this._salvarHistRefs();
+    this.refsRaiz = this.refsHist[this.refsHist.length - 1];
     this.refsSelecionado = null;
-    this.refsTextoAberto = null;
     this.desenharArvoreRefs();
   },
 
@@ -3614,10 +3683,8 @@ const App = {
     const cap = +document.getElementById('troca-cap').value;
     const vers = +document.getElementById('troca-vers').value;
     if (!code || !cap || !vers) { this.fecharTrocaRefs(); return; }
-    this.refsPilha.push(this.refsRaiz);
-    this.refsRaiz = { code, cap, vIni: vers, vFim: vers };
+    this._empilharRaizRef({ code, cap, vIni: vers, vFim: vers });
     this.refsSelecionado = null;
-    this.refsTextoAberto = null;
     this.fecharTrocaRefs();
     this.desenharArvoreRefs();
   },

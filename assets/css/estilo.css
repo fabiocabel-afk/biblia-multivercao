@@ -2721,26 +2721,62 @@ body.ouvindo .folha { padding-bottom: 200px; }
 
 
 /* ===================================================== Referências cruzadas */
+/* a raiz agora parece o topo da árvore: alinhada à esquerda, logo acima dos
+   filhos, com endereço (toque = trocar) e o trecho (toque = abrir/fechar) */
 .painel-refs .refs-raiz {
   flex: none;
-  width: 100%;
-  padding: 12px 16px 14px;
-  text-align: center;
-  font-family: var(--fonte-titulo, var(--fonte-ui));
-  font-size: 21px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  padding: 12px 16px 4px;
+}
+.refs-raiz-end {
+  text-align: left;
+  font-family: var(--fonte-sigla);
+  font-size: 17px;
   font-weight: 700;
   letter-spacing: .01em;
   color: var(--tinta);
   background: none;
-  border: none;
-  border-bottom: 1px solid color-mix(in srgb, var(--tinta) 12%, transparent);
+  padding: 2px 4px;
+  border-radius: 5px;
 }
-.painel-refs .refs-raiz:hover { background: color-mix(in srgb, var(--tinta) 5%, transparent); }
-.painel-refs .refs-raiz::after {
-  content: '⌄';
-  margin-left: 8px;
-  font-size: 15px;
+.refs-raiz-end::after {
+  content: ' ⌄';
+  font-size: 13px;
   color: var(--tinta-fraca);
+}
+.refs-raiz-end:hover { background: color-mix(in srgb, var(--tinta) 6%, transparent); }
+.refs-raiz-amostra {
+  text-align: left;
+  font-family: var(--fonte-texto);
+  font-size: 13.5px;
+  line-height: 1.4;
+  color: var(--tinta-fraca);
+  background: none;
+  padding: 0 4px 2px;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.refs-raiz-amostra.aberto {
+  white-space: normal;
+  overflow: visible;
+  color: var(--tinta);
+  padding: 4px 8px 8px;
+  margin: 2px 0 2px;
+  border-left: 2px solid color-mix(in srgb, var(--rubrica) 40%, transparent);
+  background: color-mix(in srgb, var(--tinta) 4%, transparent);
+  border-radius: 0 6px 6px 0;
+}
+.refs-raiz-amostra .rc-vn {
+  font-family: var(--fonte-sigla);
+  font-size: 10px;
+  color: var(--tinta-numero);
+  vertical-align: super;
+  margin-right: 3px;
 }
 
 .refs-filtro {
@@ -2766,7 +2802,7 @@ body.ouvindo .folha { padding-bottom: 200px; }
   font-weight: 600;
 }
 
-.refs-corpo { padding-top: 10px; }
+.refs-corpo { padding-top: 2px; }
 
 /* árvore: conectores em fonte monoespaçada para os │ ├── └── alinharem */
 .arv { font-size: 14px; }
@@ -2850,11 +2886,27 @@ body.ouvindo .folha { padding-bottom: 200px; }
 }
 .refs-rodape .botao { flex: 1; }
 .refs-rodape .botao:disabled { opacity: .45; }
-#refs-tornar-raiz {
+.refs-bt2 {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  min-width: 0;
+  line-height: 1.15;
+  padding: 7px 10px;
+  text-align: center;
+}
+.refs-bt2 .bt-l1 { font-size: 13px; font-weight: 600; }
+.refs-bt2 .bt-l2 {
+  font-size: 11px;
+  font-weight: 400;
+  opacity: .82;
+  max-width: 100%;
+  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
 }
+.refs-bt2:disabled .bt-l2 { display: none; }
 
 /* janela flutuante de troca */
 .refs-troca-veu {

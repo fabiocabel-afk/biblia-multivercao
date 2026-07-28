@@ -284,12 +284,21 @@
     <h2>Referências cruzadas</h2>
     <button data-fechar aria-label="Fechar"><svg class="icone"><use href="#i-fechar"/></svg></button>
   </header>
-  <button class="refs-raiz" id="refs-raiz" title="Trocar referência">Mateus 5:1</button>
   <div class="refs-filtro" id="refs-filtro" role="tablist"></div>
+  <div class="refs-raiz" id="refs-raiz">
+    <button class="refs-raiz-end" id="refs-raiz-end" title="Trocar referência">Mateus 5:1</button>
+    <button class="refs-raiz-amostra" id="refs-raiz-amostra" data-trecho="MAT|5|1">…</button>
+  </div>
   <div class="corpo refs-corpo" id="corpo-refs"></div>
   <footer class="refs-rodape">
-    <button class="botao secundario" id="refs-voltar" disabled>← Voltar</button>
-    <button class="botao" id="refs-tornar-raiz" disabled>Tornar raiz</button>
+    <button class="botao secundario refs-bt2" id="refs-voltar" disabled>
+      <span class="bt-l1">← Voltar</span>
+      <span class="bt-l2" id="refs-voltar-alvo"></span>
+    </button>
+    <button class="botao refs-bt2" id="refs-tornar-raiz" disabled>
+      <span class="bt-l1">Tornar raiz →</span>
+      <span class="bt-l2" id="refs-tornar-alvo"></span>
+    </button>
   </footer>
 </aside>
 
