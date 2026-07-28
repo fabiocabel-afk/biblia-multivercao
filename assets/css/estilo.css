@@ -2719,3 +2719,190 @@ body.ouvindo .folha { padding-bottom: 200px; }
 .player-bt.player-grande .icone { width: 28px; height: 28px; stroke: #fff; }
 
 
+
+/* ===================================================== Referências cruzadas */
+.painel-refs .refs-raiz {
+  flex: none;
+  width: 100%;
+  padding: 12px 16px 14px;
+  text-align: center;
+  font-family: var(--fonte-titulo, var(--fonte-ui));
+  font-size: 21px;
+  font-weight: 700;
+  letter-spacing: .01em;
+  color: var(--tinta);
+  background: none;
+  border: none;
+  border-bottom: 1px solid color-mix(in srgb, var(--tinta) 12%, transparent);
+}
+.painel-refs .refs-raiz:hover { background: color-mix(in srgb, var(--tinta) 5%, transparent); }
+.painel-refs .refs-raiz::after {
+  content: '⌄';
+  margin-left: 8px;
+  font-size: 15px;
+  color: var(--tinta-fraca);
+}
+
+.refs-filtro {
+  flex: none;
+  display: flex;
+  gap: 6px;
+  padding: 10px 16px;
+  border-bottom: 1px solid color-mix(in srgb, var(--tinta) 10%, transparent);
+}
+.refs-filtro-bt {
+  flex: 1;
+  padding: 7px 6px;
+  font-size: 12.5px;
+  font-family: var(--fonte-ui);
+  color: var(--tinta-fraca);
+  background: color-mix(in srgb, var(--tinta) 5%, transparent);
+  border: 1px solid transparent;
+  border-radius: 999px;
+}
+.refs-filtro-bt.ativo {
+  color: var(--papel);
+  background: var(--tinta);
+  font-weight: 600;
+}
+
+.refs-corpo { padding-top: 10px; }
+
+/* árvore: conectores em fonte monoespaçada para os │ ├── └── alinharem */
+.arv { font-size: 14px; }
+.arv-guia {
+  flex: none;
+  white-space: pre;
+  font-family: var(--fonte-sigla);
+  color: color-mix(in srgb, var(--tinta) 38%, transparent);
+  user-select: none;
+}
+.arv-linha, .arv-amostra-linha { display: flex; align-items: baseline; }
+.arv-no { margin-bottom: 2px; }
+.arv-end {
+  padding: 2px 4px;
+  text-align: left;
+  font-family: var(--fonte-sigla);
+  font-weight: 700;
+  font-size: 13.5px;
+  color: var(--tinta);
+  background: none;
+  border-radius: 5px;
+}
+.arv-end.expansivel { cursor: pointer; }
+.arv-end.expansivel::after {
+  content: ' ▸';
+  color: var(--tinta-numero);
+  font-weight: 400;
+}
+.arv-end.expandido::after { content: ' ▾'; }
+.arv-end.sel {
+  background: color-mix(in srgb, var(--rubrica) 16%, transparent);
+  color: var(--rubrica);
+}
+.arv-amostra {
+  padding: 0 4px 6px;
+  text-align: left;
+  font-family: var(--fonte-texto);
+  font-size: 13.5px;
+  line-height: 1.4;
+  color: var(--tinta-fraca);
+  background: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: calc(100% - 2.5em);
+}
+.arv-amostra.aberto {
+  white-space: normal;
+  overflow: visible;
+  color: var(--tinta);
+  padding: 4px 8px 8px;
+  margin: 2px 0 4px;
+  border-left: 2px solid color-mix(in srgb, var(--rubrica) 40%, transparent);
+  background: color-mix(in srgb, var(--tinta) 4%, transparent);
+  border-radius: 0 6px 6px 0;
+}
+.arv-amostra .rc-vn {
+  font-family: var(--fonte-sigla);
+  font-size: 10px;
+  color: var(--tinta-numero);
+  vertical-align: super;
+  margin-right: 3px;
+}
+.arv-vazio {
+  display: flex;
+  align-items: baseline;
+  font-size: 12px;
+  color: var(--tinta-fraca);
+  font-style: italic;
+  padding-bottom: 4px;
+}
+.estado.peq { padding: 4px 8px; font-size: 12px; }
+
+.refs-rodape {
+  flex: none;
+  display: flex;
+  gap: 10px;
+  padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+  border-top: 1px solid color-mix(in srgb, var(--tinta) 12%, transparent);
+  background: var(--papel);
+}
+.refs-rodape .botao { flex: 1; }
+.refs-rodape .botao:disabled { opacity: .45; }
+#refs-tornar-raiz {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* janela flutuante de troca */
+.refs-troca-veu {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: color-mix(in srgb, #000 44%, transparent);
+}
+.refs-troca-veu.aberto { display: flex; }
+.refs-troca {
+  width: min(24rem, 100%);
+  background: var(--papel);
+  color: var(--tinta);
+  border-radius: 14px;
+  padding: 20px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, .35);
+}
+.refs-troca h3 {
+  margin: 0 0 14px;
+  font-size: 17px;
+  text-align: center;
+}
+.refs-campo {
+  display: block;
+  font-size: 12.5px;
+  color: var(--tinta-fraca);
+  margin-bottom: 12px;
+}
+.refs-campo select {
+  display: block;
+  width: 100%;
+  margin-top: 5px;
+  padding: 10px;
+  font-size: 15px;
+  font-family: var(--fonte-ui);
+  color: var(--tinta);
+  background: color-mix(in srgb, var(--tinta) 5%, transparent);
+  border: 1px solid color-mix(in srgb, var(--tinta) 18%, transparent);
+  border-radius: 8px;
+}
+.refs-campo select:disabled { opacity: .5; }
+.refs-troca-acoes {
+  display: flex;
+  gap: 10px;
+  margin-top: 6px;
+}
+.refs-troca-acoes .botao { flex: 1; }
