@@ -41,6 +41,7 @@ const App = {
       this.cap = ultimo.cap;
     }
 
+    Locutor.preparar();   // já pede a lista de vozes do aparelho (chega assíncrona)
     this.ligarEventos();
     // registra também a abertura: reabrir no mesmo lugar não duplica, porque o
     // Histórico traz a visita repetida para o topo em vez de acrescentar outra.
@@ -1287,6 +1288,28 @@ const App = {
         ? ''
         : `<p class="contagem">Limite de ${Marcadores.limite()} marcadores atingido.</p>`}`;
 
+    const vozes = Locutor.vozes();
+    const ouvir = Locutor.disponivel() ? `
+      <p class="contagem">Escolha a voz e a velocidade da leitura em voz alta.
+      Toque em <strong>Ouvir a voz</strong> para experimentar. Para ouvir a
+      Bíblia, use <strong>Ouvir</strong> no menu.</p>
+
+      <div class="rotulo-controle"><span>Voz</span></div>
+      <select class="campo" id="ctrl-voz">
+        ${vozes.length
+          ? vozes.map(v => `<option value="${Leitura.escapar(v.voiceURI)}"
+              ${v.voiceURI === p.vozURI ? 'selected' : ''}>${Leitura.escapar(v.name)} — ${Leitura.escapar(v.lang)}</option>`).join('')
+          : '<option value="">carregando as vozes do aparelho…</option>'}
+      </select>
+
+      <div class="rotulo-controle" style="margin-top:16px"><span>Velocidade</span>
+        <span id="rot-vel">${(+p.vozVel || 1).toFixed(1)}×</span></div>
+      <input class="deslizador" type="range" id="ctrl-vel" min="0.5" max="2" step="0.1" value="${+p.vozVel || 1}">
+
+      <button class="botao secundario" id="ouvir-amostra" style="margin-top:18px">Ouvir a voz</button>`
+      : `<p class="contagem">Este navegador não oferece leitura em voz. Tente
+        pelo Chrome ou pelo aplicativo instalado na tela inicial.</p>`;
+
     const guarda = `<p class="contagem">${Guarda.persistente()
       ? 'O histórico e os marcadores estão sendo gravados neste dispositivo.'
       : 'Atenção: este navegador não está permitindo gravar. O histórico vai durar só até fechar o aplicativo.'}</p>`;
@@ -1296,6 +1319,7 @@ const App = {
       this.secao('livros', 'Painel de livros', livros) +
       this.secao('comparar', 'Comparar', comparar) +
       this.secao('tirinha', 'Versões empilhadas', tirinha) +
+      this.secao('ouvir', 'Ouvir', ouvir) +
       this.secao('marcadores', 'Marcadores', marcadores) +
       this.secao('guarda', 'Armazenamento', guarda);
 
@@ -1367,6 +1391,24 @@ const App = {
       Leitura.aplicarEscuro(e.target.checked);
       this.desenharAjustes();
     };
+
+    const voz = achar('ctrl-voz');
+    if (voz) {
+      voz.onchange = () => { Prefs.set('vozURI', voz.value || null); this.ouvirAmostra(); };
+      // as vozes chegam depois no Chrome: quando chegarem, redesenha a lista
+      if (!Locutor.vozes().length) Locutor.aoCarregarVozes(() => {
+        if (document.getElementById('painel-ajustes').classList.contains('aberto')) this.desenharAjustes();
+      });
+    }
+
+    const vel = achar('ctrl-vel');
+    if (vel) {
+      vel.oninput = () => { achar('rot-vel').textContent = (+vel.value).toFixed(1) + '×'; };
+      vel.onchange = () => Prefs.set('vozVel', +vel.value);
+    }
+
+    const amostra = achar('ouvir-amostra');
+    if (amostra) amostra.onclick = () => this.ouvirAmostra();
 
     const cats = achar('ctrl-categorias');
     if (cats) cats.onchange = e => {
@@ -2433,6 +2475,7 @@ const App = {
       marcadores: () => { this.desenharMarcadores(); this.abrir('painel-marcadores'); },
       estudos: () => { this.desenharEstudos(); this.abrir('painel-estudos'); },
       caderno: () => { this.desenharCaderno(); this.abrir('painel-caderno'); },
+      ouvir: () => this.iniciarOuvir(),
       ajustes: () => { this.desenharAjustes(); this.abrir('painel-ajustes'); },
       compartilhar: () => { this.desenharCompartilhar(); this.abrir('painel-compartilhar'); },
     };
@@ -2528,6 +2571,11 @@ const App = {
     let espera = null;
 
     q('folha').onclick = e => {
+      if (this.ouvindo) {                // modo player: o toque só reposiciona a leitura
+        const v = e.target.closest('.v');
+        if (v) this.lerVersiculo(+v.dataset.vers);
+        return;
+      }
       const sinal = e.target.closest('.marca-nota');
       if (sinal) {                       // tocar no sinalzinho abre a leitura
         clearTimeout(espera); espera = null;
@@ -2555,7 +2603,13 @@ const App = {
       }, 230);
     };
 
+    q('player-anterior').onclick = () => this.pularVers(-1);
+    q('player-play').onclick = () => this.alternarPausa();
+    q('player-proximo').onclick = () => this.pularVers(1);
+    q('player-fechar').onclick = () => this.pararOuvir();
+
     q('folha').ondblclick = e => {
+      if (this.ouvindo) return;          // no modo player, o duplo não faz nada
       clearTimeout(espera);
       espera = null;
       if (this.multiAtivo) return;       // no modo de vários, o duplo não abre a tirinha
@@ -2633,6 +2687,251 @@ const App = {
       this.pontoAtual = null;
       if (!this.multiAtivo && !this.multiSelecao) this.esconderMais();
     }
+  },
+
+  /* ============================================== leitura em voz (modo ouvir)
+   *
+   * Liga pelos Ajustes ("Ouvir este capítulo"). Enquanto está ligado, o app
+   * vira um player: ilumina o versículo que está sendo lido, rola a tela para
+   * mantê-lo à vista, e o toque no versículo só reposiciona a leitura. Lê o
+   * capítulo inteiro e vira a página sozinho até o fim do livro. A cada troca
+   * de capítulo, anuncia "Capítulo N"; os números de versículo não são falados.
+   *
+   * A leitura é feita versículo a versículo (uma fala por versículo). O
+   * `leituraGen` é um selo de geração: sempre que a gente para, pula ou
+   * reposiciona, ele é incrementado, de modo que a fala anterior — que pode
+   * disparar seu "terminou" ao ser cancelada — seja reconhecida como obsoleta
+   * e ignorada, sem avançar duas vezes. */
+  ouvindo: false,
+  pausado: false,
+  lendoVers: null,
+  leituraGen: 0,
+
+  /** Os números de versículo do capítulo na tela, em ordem. */
+  versiculosNaTela() {
+    return [...document.querySelectorAll('#folha .v[data-vers]')]
+      .map(el => +el.dataset.vers)
+      .filter(n => !Number.isNaN(n));
+  },
+
+  iniciarOuvir() {
+    if (!Locutor.disponivel()) {
+      return this.confirmar({
+        titulo: 'Ouvir a Bíblia',
+        mensagem: 'Este navegador não oferece leitura em voz. Tente pelo Chrome '
+          + 'ou pelo aplicativo instalado na tela inicial.',
+        confirmar: 'Entendi', cancelar: 'Fechar',
+      });
+    }
+    this.fecharPaineis();
+    this.resetarMulti();
+    this.pontoAtual = null;
+    this.esconderMais();
+    this.selecao = null;
+    this.renderBarraSelecao();
+
+    this.ouvindo = true;
+    this.pausado = false;
+    document.body.classList.add('ouvindo');
+    const player = document.getElementById('player-voz');
+    player.classList.add('aberto');
+    player.setAttribute('aria-hidden', 'false');
+    this.manterTelaAcesa();
+
+    const lista = this.versiculosNaTela();
+    this.lerVersiculo(lista[0] || 1, { anunciarCap: true });
+  },
+
+  /** Sai do modo ouvir e devolve o app ao normal. */
+  pararOuvir() {
+    this.leituraGen++;
+    Locutor.parar();
+    this.ouvindo = false;
+    this.pausado = false;
+    this.lendoVers = null;
+    document.body.classList.remove('ouvindo');
+    const player = document.getElementById('player-voz');
+    player.classList.remove('aberto');
+    player.setAttribute('aria-hidden', 'true');
+    this.despintarLendo();
+    this.liberarTela();
+  },
+
+  /** Lê um versículo e, ao terminar, avança sozinho para o próximo. */
+  lerVersiculo(vers, { anunciarCap = false } = {}) {
+    const lista = this.versiculosNaTela();
+    if (!lista.includes(vers)) return;
+
+    this.lendoVers = vers;
+    this.pausado = false;
+    this.pintarLendo(vers);
+    this.rolarAteVersiculo(vers);
+    this.atualizarPlayer();
+
+    const el = document.querySelector(`#folha .v[data-vers="${vers}"]`);
+    const texto = el ? this.textoDoVersiculo(el).trim() : '';
+    const prefixo = anunciarCap ? `Capítulo ${this.cap}. ` : '';
+
+    const gen = ++this.leituraGen;
+    Locutor.parar();
+    // uma batidinha depois do cancelar: alguns motores engasgam se a gente
+    // manda falar no mesmo instante em que cancelou a fala anterior
+    setTimeout(() => {
+      if (gen !== this.leituraGen) return;   // já pularam/pararam nesse meio-tempo
+      Locutor.falar(prefixo + texto, {
+        aoFim: () => { if (gen === this.leituraGen) this.avancarLeitura(); },
+        aoErro: () => { if (gen === this.leituraGen) this.avancarLeitura(); },
+      });
+    }, 60);
+  },
+
+  /** Passou o último versículo: vira a página; no fim do livro, encerra. */
+  avancarLeitura() {
+    const lista = this.versiculosNaTela();
+    const i = lista.indexOf(this.lendoVers);
+    if (i >= 0 && i < lista.length - 1) {
+      this.lerVersiculo(lista[i + 1]);
+      return;
+    }
+    const info = Dados.infoLivro(this.versao, this.code);
+    if (info && this.cap < info.chapters) {
+      this.ir(this.code, this.cap + 1).then(() => {
+        if (!this.ouvindo) return;
+        const nova = this.versiculosNaTela();
+        this.lerVersiculo(nova[0] || 1, { anunciarCap: true });
+      });
+      return;
+    }
+    this.finalizarLeitura();   // fim do livro
+  },
+
+  /** Chegou ao fim do livro: para, mas mantém o player para recomeçar. */
+  finalizarLeitura() {
+    this.leituraGen++;
+    Locutor.parar();
+    this.pausado = true;
+    this.despintarLendo();
+    this.lendoVers = null;
+    this.atualizarPlayer();
+  },
+
+  /** Play/pausa. Retomar re-lê o versículo atual do começo — é o jeito que
+   *  funciona igual em todos os navegadores (o pause/resume nativo falha em
+   *  vários aparelhos). Como o versículo é curto, mal se nota. */
+  alternarPausa() {
+    if (!this.ouvindo) return;
+    if (this.lendoVers == null) {            // parado (fim do livro): recomeça o capítulo
+      const lista = this.versiculosNaTela();
+      this.lerVersiculo(lista[0] || 1, { anunciarCap: true });
+      return;
+    }
+    if (this.pausado) {
+      this.pausado = false;
+      this.lerVersiculo(this.lendoVers);
+    } else {
+      this.leituraGen++;
+      Locutor.parar();
+      this.pausado = true;
+      this.atualizarPlayer();
+    }
+  },
+
+  /** Pular para o versículo anterior/seguinte (atravessa capítulos do mesmo
+   *  livro; para nas bordas do livro). */
+  pularVers(dir) {
+    if (!this.ouvindo) return;
+    const lista = this.versiculosNaTela();
+    const i = lista.indexOf(this.lendoVers);
+    if (i < 0) { this.lerVersiculo(lista[0] || 1); return; }
+
+    const j = i + dir;
+    if (j >= 0 && j < lista.length) { this.lerVersiculo(lista[j]); return; }
+
+    if (dir > 0) {
+      const info = Dados.infoLivro(this.versao, this.code);
+      if (info && this.cap < info.chapters) {
+        this.ir(this.code, this.cap + 1).then(() => {
+          if (!this.ouvindo) return;
+          const nova = this.versiculosNaTela();
+          this.lerVersiculo(nova[0] || 1, { anunciarCap: true });
+        });
+      }
+    } else if (this.cap > 1) {
+      this.ir(this.code, this.cap - 1).then(() => {
+        if (!this.ouvindo) return;
+        const nova = this.versiculosNaTela();
+        this.lerVersiculo(nova[nova.length - 1] || 1);
+      });
+    }
+  },
+
+  pintarLendo(vers) {
+    this.despintarLendo();
+    document.querySelectorAll(`#folha .v[data-vers="${vers}"]`)
+      .forEach(el => el.classList.add('lendo'));
+  },
+
+  despintarLendo() {
+    document.querySelectorAll('#folha .v.lendo').forEach(el => el.classList.remove('lendo'));
+  },
+
+  rolarAteVersiculo(vers) {
+    const el = document.querySelector(`#folha .v[data-vers="${vers}"]`);
+    if (el) el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  },
+
+  /** Atualiza o rótulo e o ícone (play vs pausa) da barra do player. */
+  atualizarPlayer() {
+    const btn = document.getElementById('player-play');
+    if (btn) {
+      const tocando = this.ouvindo && this.lendoVers != null && !this.pausado;
+      btn.querySelector('use').setAttribute('href', tocando ? '#i-pausar' : '#i-play');
+      const rotulo = tocando ? 'Pausar' : 'Tocar';
+      btn.setAttribute('aria-label', rotulo);
+      btn.title = rotulo;
+    }
+    const ref = document.getElementById('player-ref');
+    if (ref) {
+      ref.textContent = this.lendoVers != null
+        ? `${Dados.nomeCurto(this.versao, this.code)} ${this.cap}:${this.lendoVers}`
+        : Dados.referencia(this.versao, this.code, this.cap);
+    }
+  },
+
+  /* Mantém a tela acesa enquanto ouve (nem todo aparelho deixa; quando não
+   * deixa, apenas não faz nada). Se a tela apagar e voltar, refaz o pedido. */
+  async manterTelaAcesa() {
+    try {
+      if ('wakeLock' in navigator) {
+        this._wake = await navigator.wakeLock.request('screen');
+        if (!this._revalidarWake) {
+          this._revalidarWake = () => {
+            if (document.visibilityState === 'visible' && this.ouvindo) this.manterTelaAcesa();
+          };
+          document.addEventListener('visibilitychange', this._revalidarWake);
+        }
+      }
+    } catch (e) { /* sem trava de tela; segue a leitura mesmo assim */ }
+  },
+
+  liberarTela() {
+    try { if (this._wake) { this._wake.release(); this._wake = null; } } catch (e) {}
+  },
+
+  /** Amostra da voz nos Ajustes: fala um versículo (o primeiro do capítulo
+   *  aberto) para a pessoa ouvir como a voz escolhida soa, sem entrar no modo
+   *  player. Não mexe na leitura em andamento nem no estado do app. */
+  ouvirAmostra() {
+    if (!Locutor.disponivel()) return;
+    const lista = this.versiculosNaTela();
+    let texto = '';
+    if (lista.length) {
+      const el = document.querySelector(`#folha .v[data-vers="${lista[0]}"]`);
+      texto = el ? this.textoDoVersiculo(el).trim() : '';
+    }
+    if (!texto) texto = 'Esta é a voz escolhida para a leitura da Bíblia.';
+    Locutor.parar();
+    Locutor.falar(texto);
   },
 
   /* ==================================================== referências fixas

@@ -55,6 +55,8 @@ const Prefs = {
     versiculoPorLinha: false,  // false = texto corrido; true = um versiculo por linha
     refsFixas: false,          // painel de referências dividindo a tela; desligado por padrão
     mostrarNotas: true,        // sinalzinho no versículo quando há anotação no caderno
+    vozURI: null,              // voz escolhida para a leitura em voz alta (null = automática)
+    vozVel: 1,                 // velocidade da leitura em voz (1 = normal)
   },
 
   todas() {

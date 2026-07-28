@@ -2585,3 +2585,101 @@ body.selecionando .mais-selecao { bottom: 168px; }
 }
 .visor-lapis:hover { transform: translateY(-1px); }
 .visor-lapis .icone { width: 24px; height: 24px; stroke: #fff; }
+
+/* ==================== modo ouvir (leitura em voz alta) ================== */
+
+/* o versículo que está sendo lido agora: um realce quente, discreto, que a
+   tela acompanha rolando. */
+.v.lendo {
+  background: color-mix(in srgb, var(--rubrica) 15%, transparent);
+  border-radius: 6px;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--rubrica) 22%, transparent);
+}
+
+/* enquanto ouve, sobra espaço no fim para o último versículo subir acima da
+   barra do player. */
+body.ouvindo .folha { padding-bottom: 200px; }
+
+/* a barra do player, ancorada no rodapé como a de seleção */
+.player-voz {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 46;
+  background: var(--cromo);
+  color: var(--cromo-texto);
+  padding: 16px 16px calc(14px + env(safe-area-inset-bottom));
+  transform: translateY(120%);
+  transition: transform .22s ease;
+  box-shadow: 0 -6px 24px rgb(0 0 0 / .26);
+}
+.player-voz.aberto { transform: none; }
+
+/* o X de fechar: pequeno, discreto, no canto superior direito e um tico acima */
+.player-x {
+  position: absolute;
+  top: 6px;
+  right: 10px;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  color: var(--cromo-fraco);
+  border: none;
+  cursor: pointer;
+  opacity: .75;
+  transition: opacity .15s ease;
+}
+.player-x:hover { opacity: 1; }
+.player-x .icone { width: 16px; height: 16px; stroke: var(--cromo-fraco); }
+
+.player-ref {
+  text-align: center;
+  font-family: var(--fonte-sigla, var(--fonte-ui));
+  font-size: 13px;
+  letter-spacing: .3px;
+  color: var(--cromo-fraco);
+  margin-bottom: 10px;
+  min-height: 16px;
+}
+
+.player-botoes {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+}
+
+.player-bt {
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  color: var(--cromo-texto);
+  border: 1px solid color-mix(in srgb, var(--cromo-texto) 26%, transparent);
+  cursor: pointer;
+  transition: background .15s ease, transform .15s ease;
+}
+.player-bt:hover { background: color-mix(in srgb, var(--cromo-texto) 12%, transparent); }
+.player-bt:active { transform: scale(.94); }
+.player-bt .icone { width: 22px; height: 22px; stroke: var(--cromo-texto); }
+
+/* o play/pausa no centro, maior e destacado */
+.player-bt.player-grande {
+  width: 60px;
+  height: 60px;
+  background: var(--rubrica);
+  border-color: var(--rubrica);
+  color: #fff;
+}
+.player-bt.player-grande:hover { background: var(--rubrica); filter: brightness(1.06); }
+.player-bt.player-grande .icone { width: 28px; height: 28px; stroke: #fff; }
+
+

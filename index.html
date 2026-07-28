@@ -37,6 +37,11 @@
   <symbol id="i-tachado" viewBox="0 0 24 24"><path d="M5 12h14" stroke-linecap="round"/><path d="M8 7a4 3 0 0 1 8 0M8 16a4 3 0 0 0 8 0" stroke-linecap="round"/></symbol>
   <symbol id="i-limpar-formato" viewBox="0 0 24 24"><path d="M8 6h11M9 6l-2 12M13 6l-1 6" stroke-linecap="round"/><path d="M14 16l6 5M20 16l-6 5" stroke-linecap="round"/></symbol>
   <symbol id="i-lapis" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z" stroke-linejoin="round"/><path d="M14 6l4 4" stroke-linecap="round"/></symbol>
+  <symbol id="i-ouvir" viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9z" stroke-linejoin="round"/><path d="M16.5 8.5a5 5 0 0 1 0 7" stroke-linecap="round"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 5l12 7-12 7z" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="i-pausar" viewBox="0 0 24 24"><rect x="6" y="5" width="4" height="14" rx="1" fill="currentColor" stroke="none"/><rect x="14" y="5" width="4" height="14" rx="1" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="i-vers-antes" viewBox="0 0 24 24"><rect x="5" y="5" width="2.4" height="14" rx="1" fill="currentColor" stroke="none"/><path d="M20 5l-10 7 10 7z" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="i-vers-depois" viewBox="0 0 24 24"><path d="M4 5l10 7-10 7z" fill="currentColor" stroke="none"/><rect x="16.6" y="5" width="2.4" height="14" rx="1" fill="currentColor" stroke="none"/></symbol>
 </svg>
 
 <header class="topo">
@@ -60,6 +65,7 @@
   <button data-menu="marcadores"><svg class="icone"><use href="#i-marcador"/></svg><span>Marcadores</span></button>
   <button data-menu="estudos"><svg class="icone"><use href="#i-estudo"/></svg><span>Estudos</span></button>
   <button data-menu="caderno"><svg class="icone"><use href="#i-caderno"/></svg><span>Anotação</span></button>
+  <button data-menu="ouvir"><svg class="icone"><use href="#i-ouvir"/></svg><span>Ouvir</span></button>
   <button data-menu="ajustes"><svg class="icone"><use href="#i-ajustes"/></svg><span>Ajustes</span></button>
   <button data-menu="compartilhar"><svg class="icone"><use href="#i-compartilhar"/></svg><span>Compartilhar</span></button>
 </div>
@@ -113,6 +119,27 @@
     <button class="botao" id="sel-marcar">Marcar</button>
   </div>
   <div class="sel-cores fechada" id="sel-cores"></div>
+</div>
+
+<!-- barra do player de leitura em voz (modo ouvir). Aparece quando o modo
+     está ligado; enquanto isso, o app vira um player e o toque no versículo só
+     reposiciona a leitura. -->
+<div class="player-voz" id="player-voz" aria-hidden="true">
+  <button class="player-x" id="player-fechar" aria-label="Fechar leitura" title="Fechar">
+    <svg class="icone"><use href="#i-fechar"/></svg>
+  </button>
+  <div class="player-ref" id="player-ref"></div>
+  <div class="player-botoes">
+    <button class="player-bt" id="player-anterior" aria-label="Versículo anterior" title="Anterior">
+      <svg class="icone"><use href="#i-vers-antes"/></svg>
+    </button>
+    <button class="player-bt player-grande" id="player-play" aria-label="Tocar" title="Tocar">
+      <svg class="icone"><use href="#i-play"/></svg>
+    </button>
+    <button class="player-bt" id="player-proximo" aria-label="Próximo versículo" title="Próximo">
+      <svg class="icone"><use href="#i-vers-depois"/></svg>
+    </button>
+  </div>
 </div>
 
 <footer class="rodape">
@@ -269,6 +296,7 @@
 <script src="assets/js/cores.js"></script>
   <script src="assets/js/leitura.js"></script>
 <script src="assets/js/busca.js"></script>
+<script src="assets/js/voz.js"></script>
 <script src="assets/js/app.js"></script>
 </body>
 </html>
