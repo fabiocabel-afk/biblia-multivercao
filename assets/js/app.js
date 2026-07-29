@@ -701,6 +701,108 @@ const App = {
     this.ir(f.code, f.cap || 1, f.vers);
   },
 
+  /* ===================== MODO FLUTUANTE =====================
+   * O app inteiro (o #quadro) vira uma janelinha ancorada embaixo, ocupando a
+   * largura toda e uma fatia da altura (40–90%, padrão 70%). O topo fica livre,
+   * então dá para deixar a Bíblia sobreposta enquanto se acompanha uma live.
+   * Uma esfera com o ícone do app flutua por cima: arraste para reposicioná-la;
+   * um toque abre/oculta a janela. O ícone de expandir na barra volta à tela
+   * cheia. Observação: por ser página web, a janela flutua sobre o próprio fundo
+   * do app — sobre um outro aplicativo só se o sistema/navegador permitir. */
+
+  _flutClamp(p) { return Math.max(40, Math.min(90, Math.round(p / 10) * 10)); },
+
+  aplicarAlturaFlutuante(pct, gravar) {
+    const v = this._flutClamp(pct);
+    document.documentElement.style.setProperty('--flut-altura', v + '%');
+    if (gravar) Prefs.set('flutuanteAltura', v);
+    return v;
+  },
+
+  entrarModoFlutuante() {
+    this.flutuante = true;
+    this.aplicarAlturaFlutuante(Prefs.get('flutuanteAltura') || 70, false);
+    document.documentElement.classList.add('modo-flutuante');
+    document.getElementById('quadro').classList.remove('janela-oculta');
+    document.getElementById('btn-esfera-flutuante').hidden = false;
+    document.getElementById('btn-sair-flutuante').hidden = false;
+    this.flutuanteVisivel = true;
+    this._posicionarEsferaInicial();
+  },
+
+  sairModoFlutuante() {
+    this.flutuante = false;
+    this.flutuanteVisivel = false;
+    document.documentElement.classList.remove('modo-flutuante');
+    document.getElementById('quadro').classList.remove('janela-oculta');
+    document.getElementById('btn-esfera-flutuante').hidden = true;
+    document.getElementById('btn-sair-flutuante').hidden = true;
+  },
+
+  /* Toque na esfera: mostra ou oculta a janela, deixando só a esfera na tela. */
+  alternarJanelaFlutuante() {
+    if (!this.flutuante) return;
+    this.flutuanteVisivel = !this.flutuanteVisivel;
+    document.getElementById('quadro')
+      .classList.toggle('janela-oculta', !this.flutuanteVisivel);
+  },
+
+  _posicionarEsferaInicial() {
+    const esfera = document.getElementById('btn-esfera-flutuante');
+    let x = Prefs.get('flutuanteX'), y = Prefs.get('flutuanteY');
+    const larg = esfera.offsetWidth || 54, alt = esfera.offsetHeight || 54;
+    const maxX = window.innerWidth - larg - 6, maxY = window.innerHeight - alt - 6;
+    if (x == null || y == null) { x = maxX; y = 12; }        // canto superior direito
+    esfera.style.left = Math.max(6, Math.min(x, maxX)) + 'px';
+    esfera.style.top = Math.max(6, Math.min(y, maxY)) + 'px';
+  },
+
+  /* Arrastar a esfera. Distingue toque de arrasto por um limiar pequeno, para o
+   * toque continuar abrindo/ocultando sem mover. Guarda a posição nas prefs. */
+  _ligarEsferaFlutuante() {
+    const esfera = document.getElementById('btn-esfera-flutuante');
+    if (!esfera) return;
+    let arrastando = false, moveu = false, dx = 0, dy = 0, x0 = 0, y0 = 0;
+    const LIMIAR = 5;   // px: abaixo disso é toque, não arrasto
+
+    const mover = e => {
+      const p = e.touches ? e.touches[0] : e;
+      if (Math.abs(p.clientX - x0) > LIMIAR || Math.abs(p.clientY - y0) > LIMIAR) moveu = true;
+      const larg = esfera.offsetWidth, alt = esfera.offsetHeight;
+      let x = Math.max(6, Math.min(p.clientX - dx, window.innerWidth - larg - 6));
+      let y = Math.max(6, Math.min(p.clientY - dy, window.innerHeight - alt - 6));
+      esfera.style.left = x + 'px';
+      esfera.style.top = y + 'px';
+      if (e.cancelable) e.preventDefault();
+    };
+    const soltar = () => {
+      if (!arrastando) return;
+      arrastando = false;
+      document.removeEventListener('pointermove', mover);
+      document.removeEventListener('pointerup', soltar);
+      document.removeEventListener('touchmove', mover);
+      document.removeEventListener('touchend', soltar);
+      if (moveu) {
+        Prefs.set('flutuanteX', parseInt(esfera.style.left, 10));
+        Prefs.set('flutuanteY', parseInt(esfera.style.top, 10));
+        // engole o clique disparado logo após o arrasto (senão a janela alternaria)
+        esfera.addEventListener('click', ev => ev.stopImmediatePropagation(), { once: true, capture: true });
+      }
+    };
+    const pegar = e => {
+      const p = e.touches ? e.touches[0] : e;
+      const r = esfera.getBoundingClientRect();
+      dx = p.clientX - r.left; dy = p.clientY - r.top;
+      x0 = p.clientX; y0 = p.clientY;
+      arrastando = true; moveu = false;
+      document.addEventListener('pointermove', mover, { passive: false });
+      document.addEventListener('pointerup', soltar);
+      document.addEventListener('touchmove', mover, { passive: false });
+      document.addEventListener('touchend', soltar);
+    };
+    esfera.addEventListener('pointerdown', pegar);
+  },
+
   /* Ao pular para uma referência, guarda de onde a pessoa veio e mostra embaixo
    * um botão de volta rápida. É temporário: some assim que ela usa, ou quando
    * navega para qualquer outro lugar por conta própria. */
@@ -1193,6 +1295,16 @@ const App = {
       comparação, tocar na sigla de cada metade também troca por ali mesmo.</p>
       ${this.htmlListaVersoes(p.versaoComparar, 'data-comparar')}`;
 
+    const flutuante = `
+      <p class="contagem">A janela flutuante ocupa a largura toda e esta fatia da
+      altura da tela, ancorada embaixo — o topo fica livre para acompanhar uma
+      live. Ligue pelo menu, em <strong>Modo flutuante</strong>; a esferinha com o
+      ícone do app abre e oculta a janela e pode ser arrastada para qualquer canto.</p>
+      <div class="rotulo-controle"><span>Altura da janela</span>
+        <span id="rot-flut">${p.flutuanteAltura || 70}%</span></div>
+      <input class="deslizador" type="range" id="ctrl-flut" min="40" max="90" step="10"
+        value="${p.flutuanteAltura || 70}">`;
+
     const tirinha = `
       <p class="contagem">Ao abrir um versículo, ele aparece empilhado nestas versões.</p>
       ${Dados.versoes.map(v => `<label class="interruptor">
@@ -1255,6 +1367,7 @@ const App = {
     corpo.innerHTML =
       this.secao('folha', 'Página', folha) +
       this.secao('livros', 'Painel de livros', livros) +
+      this.secao('flutuante', 'Modo flutuante', flutuante) +
       this.secao('comparar', 'Comparar', comparar) +
       this.secao('tirinha', 'Versões empilhadas', tirinha) +
       this.secao('ouvir', 'Ouvir', ouvir) +
@@ -1299,6 +1412,15 @@ const App = {
         Leitura.aplicarFonte(+fonte.value);
       };
       fonte.onchange = () => Prefs.set('fonte', +fonte.value);
+    }
+
+    const flut = achar('ctrl-flut');
+    if (flut) {
+      flut.oninput = () => {
+        achar('rot-flut').textContent = flut.value + '%';
+        this.aplicarAlturaFlutuante(+flut.value, false);   // ajusta ao vivo se estiver flutuando
+      };
+      flut.onchange = () => this.aplicarAlturaFlutuante(+flut.value, true);
     }
 
     corpo.querySelectorAll('input[name="modo-versiculo"]').forEach(el => {
@@ -2478,6 +2600,7 @@ const App = {
      * do botão e fecha ao escolher um item ou ao tocar fora. */
     const menu = q('menu-flutuante');
     const abrirItem = {
+      flutuante: () => this.entrarModoFlutuante(),
       busca: () => { this.desenharFiltros(); this.abrir('painel-busca');
                      setTimeout(() => q('campo-busca').focus(), 220); },
       historico: () => { this.desenharHistorico(); this.abrir('painel-historico'); },
@@ -2502,6 +2625,9 @@ const App = {
     };
 
     q('btn-atalho-fixado').onclick = () => this.irParaPrimeiroFixado();
+    q('btn-sair-flutuante').onclick = () => this.sairModoFlutuante();
+    q('btn-esfera-flutuante').onclick = () => this.alternarJanelaFlutuante();
+    this._ligarEsferaFlutuante();
     q('voltar-origem').onclick = () => this.voltarParaOrigem();
 
     menu.querySelectorAll('[data-menu]').forEach(el => {
@@ -3404,30 +3530,25 @@ const App = {
       return;
     }
 
-    const html = filhos.map((n, i) =>
-      this._noRefHTML(n, '', i === filhos.length - 1, 1)).join('');
+    const html = filhos.map(n => this._noRefHTML(n, 1)).join('');
     corpo.innerHTML = `<div class="arv">${html}</div>`;
     this._ligarNosRef(corpo);
     this._preencherAmostrasRef(corpo);
   },
 
-  /* Monta o HTML de um nó. `prefixo` é a continuação (│   /espaços) herdada dos
-   * ancestrais, para os conectores da árvore alinharem. Registra o nó num mapa
-   * para os toques saberem a que endereço se referem. */
-  _noRefHTML(no, prefixo, ultimo, nivel) {
+  /* Monta o HTML de um nó. A hierarquia (recuo e linhas-guia) é desenhada por
+   * CSS a partir do aninhamento real em .arv-filhos — sem caracteres de árvore.
+   * Registra o nó num mapa para os toques saberem a que endereço se referem. */
+  _noRefHTML(no, nivel) {
     const id = 'n' + (this._refsSeq++);
-    const contin = prefixo + (ultimo ? '    ' : '│   ');
-    this._refsNos[id] = { no, nivel, contin };
-    const conector = prefixo + (ultimo ? '└── ' : '├── ');
+    this._refsNos[id] = { no, nivel };
     const podeExpandir = nivel < 2;
     const sel = this.refsSelecionado === id ? ' sel' : '';
     return `<div class="arv-no" data-no="${id}">
         <div class="arv-linha">
-          <span class="arv-guia">${conector}</span>
           <button class="arv-end${sel}${podeExpandir ? ' expansivel' : ''}" data-end="${id}">${Leitura.escapar(this._rotuloRef(no))}</button>
         </div>
         <div class="arv-amostra-linha">
-          <span class="arv-guia">${contin}</span>
           <button class="arv-amostra" data-texto="${id}"
             data-trecho="${no.code}|${no.cap}|${no.vIni}">…</button>
         </div>
@@ -3461,12 +3582,10 @@ const App = {
     cont.innerHTML = '<div class="estado peq">…</div>';
     const filhos = (await this._filhosRef(reg.no)).filter(n => this._passaFiltroRef(n));
     if (!filhos.length) {
-      cont.innerHTML = '<div class="arv-vazio"><span class="arv-guia">'
-        + reg.contin + '</span>sem referências aqui</div>';
+      cont.innerHTML = '<div class="arv-vazio">sem referências aqui</div>';
       return;
     }
-    cont.innerHTML = filhos.map((n, i) =>
-      this._noRefHTML(n, reg.contin, i === filhos.length - 1, reg.nivel + 1)).join('');
+    cont.innerHTML = filhos.map(n => this._noRefHTML(n, reg.nivel + 1)).join('');
     cont.dataset.aberto = '1';
     if (endBt) endBt.classList.add('expandido');
     this._ligarNosRef(cont);

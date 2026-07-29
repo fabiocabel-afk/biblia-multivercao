@@ -2026,8 +2026,55 @@ body.com-refs-fixas .painel-refs-fixas.alto .acoes-ref {
   color: var(--cromo-texto);
 }
 
-.atalho-fixado .icone { stroke: var(--rubrica); width: 20px; height: 20px; }
+.atalho-fixado .icone { stroke: var(--cromo-texto); width: 20px; height: 20px; }
 .atalho-fixado[hidden] { display: none; }
+
+/* ======================================================= modo flutuante */
+:root { --flut-altura: 70%; }
+
+/* o app inteiro vira uma janela ancorada embaixo; o transform faz os painéis
+   (que são position:fixed) ficarem contidos aqui dentro, e não na tela toda */
+html.modo-flutuante { background: transparent; }
+html.modo-flutuante body { background: transparent; }
+html.modo-flutuante #quadro {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: var(--flut-altura);
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  transform: translateZ(0);
+  background: var(--papel);
+  border-radius: 16px 16px 0 0;
+  box-shadow: 0 -10px 40px rgba(0, 0, 0, .45);
+  z-index: 100;
+}
+html.modo-flutuante #quadro.janela-oculta { display: none; }
+
+/* esferinha arrastável com o ícone do app; fica por cima da janela */
+.esfera-flutuante {
+  position: fixed;
+  z-index: 120;
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--cromo);
+  color: var(--cromo-texto);
+  border: 1.5px solid color-mix(in srgb, var(--cromo-texto) 22%, transparent);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, .38);
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.esfera-flutuante .icone { width: 26px; height: 26px; }
+.esfera-flutuante:active { transform: scale(.94); }
+.esfera-flutuante[hidden] { display: none; }
 
 /* ==================== reordenar fixados ============================ */
 
@@ -2804,17 +2851,38 @@ body.ouvindo .folha { padding-bottom: 200px; }
 
 .refs-corpo { padding-top: 2px; }
 
-/* árvore: conectores em fonte monoespaçada para os │ ├── └── alinharem */
+/* árvore: recuo e linhas-guia desenhados por CSS a partir do aninhamento real
+   (nada de caracteres │ ├── └──). Cada nível recua; uma linha vertical corre à
+   esquerda dos irmãos e um tracinho curto liga no endereço. O último irmão corta
+   a vertical na altura do tracinho — o equivalente ao antigo └── . */
 .arv { font-size: 14px; }
-.arv-guia {
-  flex: none;
-  white-space: pre;
-  font-family: var(--fonte-sigla);
-  color: color-mix(in srgb, var(--tinta) 38%, transparent);
-  user-select: none;
+:root { --arv-recuo: 16px; --arv-tique: 10px; }
+
+.arv, .arv-filhos { position: relative; padding-left: var(--arv-recuo); }
+.arv-no { position: relative; margin-bottom: 2px; }
+
+/* linha vertical (corre por toda a altura do nó, seguindo os descendentes) */
+.arv-no::before {
+  content: '';
+  position: absolute;
+  left: calc(var(--arv-recuo) / -2);
+  top: 0;
+  bottom: 0;
+  border-left: 1.5px solid color-mix(in srgb, var(--tinta) 30%, transparent);
 }
+/* último irmão: a vertical para no tracinho (canto └) */
+.arv-no:last-child::before { bottom: auto; height: var(--arv-tique); }
+/* tracinho horizontal até o endereço */
+.arv-no::after {
+  content: '';
+  position: absolute;
+  left: calc(var(--arv-recuo) / -2);
+  top: var(--arv-tique);
+  width: calc(var(--arv-recuo) / 2);
+  border-top: 1.5px solid color-mix(in srgb, var(--tinta) 30%, transparent);
+}
+
 .arv-linha, .arv-amostra-linha { display: flex; align-items: baseline; }
-.arv-no { margin-bottom: 2px; }
 .arv-end {
   padding: 2px 4px;
   text-align: left;
@@ -2867,8 +2935,6 @@ body.ouvindo .folha { padding-bottom: 200px; }
   margin-right: 3px;
 }
 .arv-vazio {
-  display: flex;
-  align-items: baseline;
   font-size: 12px;
   color: var(--tinta-fraca);
   font-style: italic;
