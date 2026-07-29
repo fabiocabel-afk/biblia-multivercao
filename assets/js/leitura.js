@@ -262,6 +262,8 @@ const Leitura = {
       const igual = !ehPrincipal && d.texto != null && chave(d.texto) === chavePrincipal;
       return this.fita(d, ehPrincipal, igual);
     }).join('');
+
+    this.ligarSiglasTirinha(alvo);
   },
 
   fita(dado, ehPrincipal, igual) {
@@ -293,14 +295,72 @@ const Leitura = {
       ? `<p>${this.escapar(texto)}</p>`
       : `<p class="fita-erro">${this.escapar(erro || '')}</p>`;
 
+    // nome por extenso guardado na própria sigla; ao tocar, a caixinha se
+    // expande e a abreviação dá lugar ao nome, ali mesmo (orienta quem não
+    // conhece a sigla). Um por vez; tocar de novo recolhe.
+    const vinfo = Dados.versao(code);
+    const nomeCompleto = vinfo && vinfo.name ? vinfo.name : '';
+
     return `<div class="${classe}">
       <div class="cabeca">
-        <span class="sigla">${code}</span>
+        <button class="sigla${nomeCompleto ? ' sigla-toque' : ''}" data-sigla="${code}"
+          ${nomeCompleto ? `data-abrir-nome="${code}" data-nome="${this.escapar(nomeCompleto)}"
+          aria-expanded="false" title="Ver o nome da versão"` : ''}>${code}</button>
         ${ref ? `<span class="ref-fita">${ref}</span>` : ''}
         ${selo}
       </div>
       ${corpo}
       ${nota}
     </div>`;
+  },
+
+  /* Toque na sigla da tirinha: a caixinha se expande e a abreviação vira o nome
+   * completo no mesmo lugar (largura animada). Abre uma por vez; tocar na mesma
+   * recolhe. Reabrir a tirinha remonta tudo, então volta fechado por padrão. */
+  ligarSiglasTirinha(alvo) {
+    const medir = (btn, texto) => {           // largura que a caixinha teria com esse texto
+      const antes = btn.textContent, larguraInline = btn.style.width;
+      btn.textContent = texto;
+      btn.style.width = 'auto';
+      const w = btn.offsetWidth;
+      btn.textContent = antes;
+      btn.style.width = larguraInline;
+      return w;
+    };
+
+    const abrir = btn => {
+      const w0 = btn.offsetWidth;
+      const w1 = medir(btn, btn.dataset.nome);
+      btn.textContent = btn.dataset.nome;
+      btn.classList.add('aberto');
+      btn.setAttribute('aria-expanded', 'true');
+      btn.style.width = w0 + 'px';
+      void btn.offsetWidth;                   // reflow para a transição pegar
+      btn.style.width = w1 + 'px';
+      const fim = () => { btn.style.width = 'auto'; btn.removeEventListener('transitionend', fim); };
+      btn.addEventListener('transitionend', fim);
+    };
+
+    const fechar = (btn, instantaneo) => {
+      const code = btn.dataset.sigla;
+      btn.classList.remove('aberto');
+      btn.setAttribute('aria-expanded', 'false');
+      if (instantaneo) { btn.textContent = code; btn.style.width = ''; return; }
+      const w0 = btn.offsetWidth;             // largura atual (nome)
+      const wCode = medir(btn, code);
+      btn.style.width = w0 + 'px';            // mantém o nome e encolhe, clipando
+      void btn.offsetWidth;
+      btn.style.width = wCode + 'px';
+      const fim = () => { btn.textContent = code; btn.style.width = ''; btn.removeEventListener('transitionend', fim); };
+      btn.addEventListener('transitionend', fim);
+    };
+
+    alvo.querySelectorAll('[data-abrir-nome]').forEach(btn => {
+      btn.onclick = () => {
+        const estaAberto = btn.classList.contains('aberto');
+        alvo.querySelectorAll('.sigla-toque.aberto').forEach(b => { if (b !== btn) fechar(b, true); });
+        if (estaAberto) fechar(btn, false); else abrir(btn);
+      };
+    });
   },
 };

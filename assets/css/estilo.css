@@ -845,6 +845,17 @@ button {
 
 .fita .cabeca .ref-fita { font-size: 12px; color: var(--tinta-fraca); }
 
+/* sigla clicável: expande no próprio lugar, virando o nome completo da versão.
+   A largura é animada por JS; aqui só preparamos o clip e a transição. */
+.fita .cabeca .sigla-toque {
+  cursor: pointer;
+  box-sizing: border-box;
+  overflow: hidden;
+  white-space: nowrap;
+  vertical-align: middle;
+  transition: width .3s cubic-bezier(.22, .61, .36, 1);
+}
+
 /* selo à direita: comunica de relance a relação com a versão principal */
 .selo-cmp {
   margin-left: auto;
