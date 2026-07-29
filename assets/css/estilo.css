@@ -2026,55 +2026,8 @@ body.com-refs-fixas .painel-refs-fixas.alto .acoes-ref {
   color: var(--cromo-texto);
 }
 
-.atalho-fixado .icone { stroke: var(--cromo-texto); width: 20px; height: 20px; }
+.atalho-fixado .icone { stroke: var(--rubrica); width: 20px; height: 20px; }
 .atalho-fixado[hidden] { display: none; }
-
-/* ======================================================= modo flutuante */
-:root { --flut-altura: 70%; }
-
-/* o app inteiro vira uma janela ancorada embaixo; o transform faz os painéis
-   (que são position:fixed) ficarem contidos aqui dentro, e não na tela toda */
-html.modo-flutuante { background: transparent; }
-html.modo-flutuante body { background: transparent; }
-html.modo-flutuante #quadro {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: var(--flut-altura);
-  overflow-y: auto;
-  overflow-x: hidden;
-  -webkit-overflow-scrolling: touch;
-  overscroll-behavior: contain;
-  transform: translateZ(0);
-  background: var(--papel);
-  border-radius: 16px 16px 0 0;
-  box-shadow: 0 -10px 40px rgba(0, 0, 0, .45);
-  z-index: 100;
-}
-html.modo-flutuante #quadro.janela-oculta { display: none; }
-
-/* esferinha arrastável com o ícone do app; fica por cima da janela */
-.esfera-flutuante {
-  position: fixed;
-  z-index: 120;
-  width: 54px;
-  height: 54px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--cromo);
-  color: var(--cromo-texto);
-  border: 1.5px solid color-mix(in srgb, var(--cromo-texto) 22%, transparent);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, .38);
-  touch-action: none;
-  user-select: none;
-  -webkit-user-select: none;
-}
-.esfera-flutuante .icone { width: 26px; height: 26px; }
-.esfera-flutuante:active { transform: scale(.94); }
-.esfera-flutuante[hidden] { display: none; }
 
 /* ==================== reordenar fixados ============================ */
 

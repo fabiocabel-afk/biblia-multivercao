@@ -57,9 +57,6 @@ const Prefs = {
     mostrarNotas: true,        // sinalzinho no versículo quando há anotação no caderno
     vozURI: null,              // voz escolhida para a leitura em voz alta (null = automática)
     vozVel: 1,                 // velocidade da leitura em voz (1 = normal)
-    flutuanteAltura: 70,       // % da altura da tela ocupada pela janela flutuante (40–90)
-    flutuanteX: null,          // posição do botão-esfera (px); null = canto padrão
-    flutuanteY: null,
   },
 
   todas() {
