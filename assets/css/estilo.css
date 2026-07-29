@@ -1541,6 +1541,22 @@ body.selecionando .rodape { transform: translateY(110%); }
 
 .fixado-linha, .hist-linha { display: flex; align-items: stretch; gap: 4px; }
 
+/* livro já fixado, mostrado na lista de últimos acessos: apagado e inerte */
+.hist-linha.fixado-inerte .item-hist { opacity: .45; pointer-events: none; }
+.hist-linha.fixado-inerte .item-hist:hover { background: none; }
+.selo-fixado {
+  align-self: center;
+  flex: none;
+  font-family: var(--fonte-sigla);
+  font-size: 10px;
+  letter-spacing: .04em;
+  color: var(--rubrica);
+  border: 1px solid color-mix(in srgb, var(--rubrica) 45%, transparent);
+  border-radius: 999px;
+  padding: 2px 9px;
+  white-space: nowrap;
+}
+
 .hist-linha .item-hist { flex: 1; min-width: 0; }
 
 .xis {

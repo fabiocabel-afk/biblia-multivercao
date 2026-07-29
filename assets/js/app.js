@@ -161,14 +161,12 @@ const App = {
       }
     }
 
-    if (registrar) {
-      const primeiro = r.capitulo.verses.find(v => v.text);
-      Historico.registrar({
-        versao: this.versao,
-        code, cap, vers: vers || null,
-        trecho: (primeiro ? primeiro.text : '').slice(0, 90),
-      });
-    }
+    // NAVEGAR não mexe no histórico nem no alfinete. Virar página, abrir um
+    // capítulo ou pular para uma referência não registra nada: o que conta como
+    // "estive aqui" é TOCAR num versículo (marcarPonto). Assim o alfinete não
+    // "escorrega" de capítulo sozinho ao folhear, e a lista não enche de linhas
+    // que a pessoa só passou por cima. (registrar fica só por compatibilidade
+    // com chamadas antigas; o registro de verdade nasce do toque no versículo.)
 
     if (this.comparando) this.desenharComparacao();
 
@@ -783,16 +781,36 @@ const App = {
       partes.push(lista.map((it, i) => {
         const ref = `${Dados.nomeCurto(it.versao, it.code)} ${it.cap}` +
           (it.vers ? ':' + it.vers : '');
-        const fixavel = !Historico.ehFixado(it.code);
+        const fx = fixados.find(f => f.code === it.code);   // alfinete deste livro, se houver
+        const ehAlfineteAtual = fx && (fx.cap || 1) === it.cap;
+
+        // a linha que É a posição atual do alfinete aparece APAGADA e inerte,
+        // com o selo "Fixado" — é a mesma coisa que já está lá em cima. Só uma
+        // linha fica assim; se o alfinete mudar de capítulo, a antiga volta ao
+        // normal e a nova é que passa a ser marcada.
+        if (ehAlfineteAtual) {
+          return `<div class="hist-linha fixado-inerte">
+            <div class="item-hist" aria-disabled="true">
+              <span class="ref-hist">${ref}</span>
+              <span class="sigla" style="font-size:10px;padding:1px 4px">${it.versao}</span>
+              <span class="trecho-hist">${Leitura.escapar(it.trecho || '')}</span>
+            </div>
+            <span class="selo-fixado" title="Este é o ponto fixado deste livro">Fixado</span>
+          </div>`;
+        }
+
+        // demais linhas: clicáveis normalmente. O botão de fixar só aparece
+        // quando o livro NÃO está fixado (o alfinete é um por livro — outros
+        // capítulos de um livro já fixado não ganham um segundo alfinete).
         return `<div class="hist-linha">
           <button class="item-hist" data-i="${i}">
             <span class="ref-hist">${ref}</span>
             <span class="sigla" style="font-size:10px;padding:1px 4px">${it.versao}</span>
             <span class="trecho-hist">${Leitura.escapar(it.trecho || '')}</span>
           </button>
-          ${fixavel ? `<button class="xis fixar-item" data-fixar="${i}"
+          ${fx ? '' : `<button class="xis fixar-item" data-fixar="${i}"
             aria-label="Fixar este livro" title="Fixar este livro">
-            <svg class="icone"><use href="#i-fixar"/></svg></button>` : ''}
+            <svg class="icone"><use href="#i-fixar"/></svg></button>`}
           <button class="xis remover-item" data-rem="${i}"
             aria-label="Remover" title="Remover">
             <svg class="icone"><use href="#i-fechar"/></svg></button>
