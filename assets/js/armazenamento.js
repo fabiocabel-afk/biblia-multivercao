@@ -240,6 +240,11 @@ const Estudos = {
    * {capInicio,versInicio,capFim,versFim} e o estudo de trecho unico com esses
    * campos soltos. `trechosDe` normaliza tudo; ninguem perde o que ja tinha. */
   trechosDe(e) {
+    // quando o estudo ja tem blocos (foi editado), eles sao a fonte: os
+    // trechos sao os blocos de versiculos, na ordem em que aparecem
+    if (Array.isArray(e.blocos)) {
+      return e.blocos.filter(b => b.tipo === 'versos').map(b => b.trecho);
+    }
     if (Array.isArray(e.trechos)) return e.trechos;
     return [{
       code: e.code, versao: e.versao,
@@ -277,12 +282,16 @@ const Estudos = {
     const lista = this.todos();
     const e = lista.find(x => x.id === id);
     if (!e) return;
-    const trechos = this.trechosDe(e);
-    trechos.push(trecho);
-    e.trechos = trechos;
-    delete e.code; delete e.versao;       // some com o formato antigo
-    delete e.capInicio; delete e.versInicio;
-    delete e.capFim; delete e.versFim;
+    if (Array.isArray(e.blocos)) {
+      e.blocos.push({ tipo: 'versos', trecho });   // vira mais um bloco de versiculos
+    } else {
+      const trechos = this.trechosDe(e);
+      trechos.push(trecho);
+      e.trechos = trechos;
+      delete e.code; delete e.versao;       // some com o formato antigo
+      delete e.capInicio; delete e.versInicio;
+      delete e.capFim; delete e.versFim;
+    }
     Guarda.gravar('estudos', lista);
   },
 
@@ -290,6 +299,20 @@ const Estudos = {
     const lista = this.todos();
     const e = lista.find(x => x.id === id);
     if (!e) return;
+
+    if (Array.isArray(e.blocos)) {
+      // remove o N-esimo bloco de versiculos (na ordem em que a lista os mostra)
+      let vistos = -1;
+      e.blocos = e.blocos.filter(b => {
+        if (b.tipo !== 'versos') return true;
+        vistos++;
+        return vistos !== indice;
+      });
+      if (!e.blocos.some(b => b.tipo === 'versos')) { this.remover(id); return; }
+      Guarda.gravar('estudos', lista);
+      return;
+    }
+
     const trechos = this.trechosDe(e);
     trechos.splice(indice, 1);
     if (!trechos.length) {               // estudo vazio se apaga
@@ -297,6 +320,26 @@ const Estudos = {
       return;
     }
     e.trechos = trechos;
+    Guarda.gravar('estudos', lista);
+  },
+
+  /** Grava a sequencia ordenada de blocos (versiculos + textos do usuario).
+   * A partir daqui `blocos` e a fonte unica; o formato antigo e descartado. */
+  salvarBlocos(id, blocos) {
+    const lista = this.todos();
+    const e = lista.find(x => x.id === id);
+    if (!e) return;
+    // texto em branco (sem conteudo real) nao vira bloco
+    const vazio = html => (html || '').replace(/<[^>]*>/g, '').replace(/&nbsp;/gi, ' ').trim() === '';
+    e.blocos = blocos
+      .filter(b => b.tipo !== 'texto' || !vazio(b.html))
+      .map(b => b.tipo === 'texto'
+        ? { tipo: 'texto', html: b.html || '' }
+        : { tipo: 'versos', trecho: b.trecho });
+    delete e.trechos;                       // blocos manda agora
+    delete e.code; delete e.versao;
+    delete e.capInicio; delete e.versInicio;
+    delete e.capFim; delete e.versFim;
     Guarda.gravar('estudos', lista);
   },
 

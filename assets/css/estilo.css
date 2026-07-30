@@ -1832,6 +1832,79 @@ body.selecionando .rodape { transform: translateY(110%); }
 .pilula-lapis .icone { width: 17px; height: 17px; }
 .pilula-lapis:active { transform: scale(.97); }
 
+/* -------------------------------------------- MODO EDIÇÃO DO ESTUDO */
+.corpo-estudo-ver.editando { padding: 0; }
+.estudo-edit-barra {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  padding: 8px 10px;
+  border-bottom: 1px solid color-mix(in srgb, var(--tinta) 10%, transparent);
+  overflow-x: auto;
+}
+.corpo-estudo-ver.editando .caixa-cor { flex: 0 0 auto; }
+.estudo-edit-blocos {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 8px 14px 16px;
+}
+
+/* slot de inserção entre os blocos */
+.estudo-inserir {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  margin: 4px 0;
+  padding: 7px;
+  border: 1px dashed color-mix(in srgb, var(--tinta) 22%, transparent);
+  border-radius: 8px;
+  background: none;
+  cursor: pointer;
+  color: var(--tinta-fraca);
+  font-family: var(--fonte-ui);
+  font-size: 12px;
+  letter-spacing: .02em;
+}
+.estudo-inserir .icone { width: 14px; height: 14px; }
+.estudo-inserir:active { background: color-mix(in srgb, var(--tinta) 5%, transparent); }
+
+.estudo-bloco-edit { position: relative; }
+
+/* bloco de texto editável (mesmo visual de anotação da visão) */
+.estudo-texto-edit {
+  min-height: 40px;
+  outline: none;
+  padding: 10px 40px 10px 14px;   /* espaço à direita para o lixo */
+}
+.estudo-texto-edit:focus {
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--rubrica) 45%, transparent);
+}
+.estudo-texto-edit[data-ph]:empty::before {
+  content: attr(data-ph);
+  color: var(--tinta-fraca);
+  font-style: italic;
+}
+.estudo-remover-bloco {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 26px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  background: none;
+  cursor: pointer;
+  color: var(--tinta-fraca);
+}
+.estudo-remover-bloco .icone { width: 15px; height: 15px; }
+.estudo-remover-bloco:active { background: color-mix(in srgb, var(--tinta) 8%, transparent); }
+
 .trechos-lista { padding: 0 6px; }
 
 .trecho-estudo { display: flex; align-items: stretch; gap: 4px; margin-bottom: 3px; }

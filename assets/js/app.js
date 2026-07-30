@@ -1106,11 +1106,169 @@ const App = {
     </div>`;
   },
 
-  editarEstudo(id) {
-    // A edição (inserir blocos de texto entre os versículos, com a mesma
-    // formatação das notas) é a próxima etapa. Por ora, avisa.
+  /* ============================================ MODO EDIÇÃO DO ESTUDO
+   * Mostra a mesma sequência de blocos, mas: entre/antes/depois de cada bloco
+   * há um "+ Inserir texto"; os blocos de texto viram editáveis, com a mesma
+   * formatação das notas (negrito, itálico, sublinhado e a roda de cores). Uma
+   * barra de formato única age sobre o bloco de texto que estiver em foco.
+   * Tudo é guardado como e.blocos (a sequência ordenada). */
+  async editarEstudo(id) {
+    const e = Estudos.todos().find(x => x.id === id);
+    if (!e) return;
     this._estudoAtual = id;
-    this.avisoRapido('A edição do estudo chega na próxima etapa');
+
+    // cópia de trabalho da sequência
+    const blocos = Estudos.blocosDe(e).map(b => b.tipo === 'texto'
+      ? { tipo: 'texto', html: b.html || '' }
+      : { tipo: 'versos', trecho: b.trecho });
+
+    document.getElementById('titulo-estudo-ver').textContent = Estudos.nomeDe(e) || 'Estudo';
+    const corpo = document.getElementById('corpo-estudo-ver');
+    corpo.classList.add('editando');
+    corpo.innerHTML = `
+      <div class="estudo-edit-barra" id="estudo-edit-barra">
+        <button class="fmt" data-cmd="bold" title="Negrito"><svg class="icone"><use href="#i-negrito"/></svg></button>
+        <button class="fmt" data-cmd="italic" title="Itálico"><svg class="icone"><use href="#i-italico"/></svg></button>
+        <button class="fmt" data-cmd="underline" title="Sublinhado"><svg class="icone"><use href="#i-sublinhado"/></svg></button>
+        <button class="fmt fmt-cor" id="est-cor-letra" title="Cor da letra">
+          <span class="rotulo-cor">A</span><span class="risco-cor" id="est-amostra-cor"></span></button>
+        <button class="fmt fmt-fundo" id="est-cor-fundo" title="Cor de fundo">
+          <span class="bloco-fundo" id="est-amostra-fundo">A</span></button>
+        <button class="fmt" data-cmd="removeFormat" title="Limpar formatação"><svg class="icone"><use href="#i-limpar-formato"/></svg></button>
+      </div>
+      <div class="caixa-cor fechada" id="caixa-cor-estudo"></div>
+      <div class="estudo-edit-blocos" id="estudo-edit-blocos"></div>
+      <div class="estudo-ver-rodape">
+        <button class="pilula-lapis" id="estudo-edit-concluir">Concluir</button>
+      </div>`;
+    this.abrir('painel-estudo-ver');
+
+    // voltar/concluir gravam e voltam para a visão
+    const sairEditando = () => { corpo.classList.remove('editando'); };
+    document.getElementById('estudo-ver-voltar').onclick = () => {
+      Estudos.salvarBlocos(id, blocos); sairEditando(); this.verEstudo(id);
+    };
+    document.getElementById('estudo-edit-concluir').onclick = () => {
+      Estudos.salvarBlocos(id, blocos); sairEditando(); this.verEstudo(id);
+    };
+
+    const area = document.getElementById('estudo-edit-blocos');
+
+    // ---- seleção ativa: a barra age sobre o bloco de texto em foco ----
+    let ativo = null, range = null;
+    const salvarRange = () => {
+      const s = window.getSelection();
+      if (s && s.rangeCount && ativo && ativo.contains(s.anchorNode)) range = s.getRangeAt(0).cloneRange();
+    };
+    const restaurar = () => {
+      if (ativo) ativo.focus();
+      if (range) { const s = window.getSelection(); s.removeAllRanges(); s.addRange(range); }
+    };
+    const css = () => { try { document.execCommand('styleWithCSS', false, true); } catch { /* jsdom */ } };
+    const sincronizar = () => {
+      if (ativo && ativo.dataset.edit != null) blocos[+ativo.dataset.edit].html = ativo.innerHTML;
+    };
+
+    // ---- montar a lista de blocos com os slots de inserção ----
+    const slot = i => `<button class="estudo-inserir" data-slot="${i}">
+        <svg class="icone"><use href="#i-nota"/></svg> Inserir texto</button>`;
+
+    const montar = async () => {
+      const partes = [slot(0)];
+      for (let i = 0; i < blocos.length; i++) {
+        const b = blocos[i];
+        if (b.tipo === 'texto') {
+          partes.push(`<div class="estudo-bloco-edit">
+            <div class="estudo-texto estudo-texto-edit" contenteditable="true"
+              data-edit="${i}" data-ph="Escreva seu comentário…">${b.html || ''}</div>
+            <button class="estudo-remover-bloco" data-rem="${i}" aria-label="Remover este texto">
+              <svg class="icone"><use href="#i-lixeira"/></svg></button>
+          </div>`);
+        } else {
+          partes.push(`<div class="estudo-bloco-edit">${await this._containerVersos(b.trecho)}</div>`);
+        }
+        partes.push(slot(i + 1));
+      }
+      area.innerHTML = partes.join('');
+      ligar();
+    };
+
+    const ligar = () => {
+      area.querySelectorAll('[data-slot]').forEach(el => {
+        el.onclick = async () => {
+          const i = +el.dataset.slot;
+          blocos.splice(i, 0, { tipo: 'texto', html: '' });
+          Estudos.salvarBlocos(id, blocos);
+          await montar();
+          const novo = area.querySelector(`[data-edit="${i}"]`);
+          if (novo) { novo.focus(); ativo = novo; }
+        };
+      });
+      area.querySelectorAll('[data-rem]').forEach(el => {
+        el.onclick = async () => {
+          blocos.splice(+el.dataset.rem, 1);
+          Estudos.salvarBlocos(id, blocos);
+          if (ativo && ativo.dataset.edit === el.dataset.rem) { ativo = null; range = null; }
+          await montar();
+        };
+      });
+      area.querySelectorAll('[data-edit]').forEach(div => {
+        const i = +div.dataset.edit;
+        div.addEventListener('input', () => { blocos[i].html = div.innerHTML; });
+        div.addEventListener('focus', () => { ativo = div; });
+        div.addEventListener('keyup', salvarRange);
+        div.addEventListener('mouseup', salvarRange);
+        div.addEventListener('blur', () => { blocos[i].html = div.innerHTML; Estudos.salvarBlocos(id, blocos); });
+      });
+    };
+
+    await montar();
+
+    // ---- barra de formato (negrito/itálico/sublinhado/limpar) ----
+    const barra = document.getElementById('estudo-edit-barra');
+    barra.querySelectorAll('[data-cmd]').forEach(b => {
+      b.addEventListener('mousedown', ev => ev.preventDefault());
+      b.onclick = () => { restaurar(); css(); document.execCommand(b.dataset.cmd, false, null); sincronizar(); };
+    });
+
+    // ---- cor da letra e de fundo: a mesma roda de cores, com Aplicar ----
+    const amostraCor = document.getElementById('est-amostra-cor');
+    const amostraFundo = document.getElementById('est-amostra-fundo');
+    const caixaCor = document.getElementById('caixa-cor-estudo');
+    const corAtual = { letra: '#8c2f39', fundo: '#f2c94c' };
+    amostraCor.style.background = corAtual.letra;
+    amostraFundo.style.background = corAtual.fundo;
+    amostraFundo.style.color = Cores.contraste(corAtual.fundo);
+    let modoCor = null;
+    const btnLetra = document.getElementById('est-cor-letra');
+    const btnFundo = document.getElementById('est-cor-fundo');
+
+    const aplicarCor = (modo, cor) => {
+      restaurar(); css();
+      if (modo === 'letra') document.execCommand('foreColor', false, cor);
+      else if (!document.execCommand('hiliteColor', false, cor)) document.execCommand('backColor', false, cor);
+      salvarRange(); sincronizar();
+    };
+    const fecharCaixaCor = () => {
+      caixaCor.classList.add('fechada'); caixaCor.innerHTML = ''; modoCor = null;
+      btnLetra.classList.remove('ativa'); btnFundo.classList.remove('ativa');
+    };
+    const abrirCaixaCor = modo => {
+      if (modoCor === modo) { fecharCaixaCor(); return; }
+      modoCor = modo;
+      caixaCor.classList.remove('fechada');
+      btnLetra.classList.toggle('ativa', modo === 'letra');
+      btnFundo.classList.toggle('ativa', modo === 'fundo');
+      RodaDeCores.montar(caixaCor, corAtual[modo], cor => {
+        corAtual[modo] = cor;
+        if (modo === 'letra') amostraCor.style.background = cor;
+        else { amostraFundo.style.background = cor; amostraFundo.style.color = Cores.contraste(cor); }
+        aplicarCor(modo, cor);
+      });
+    };
+    [btnLetra, btnFundo].forEach(b => b.addEventListener('mousedown', ev => ev.preventDefault()));
+    btnLetra.onclick = () => abrirCaixaCor('letra');
+    btnFundo.onclick = () => abrirCaixaCor('fundo');
   },
 
   /* Monta o trecho a partir da seleção, perguntando até onde vai. Devolve o
