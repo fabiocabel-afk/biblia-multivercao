@@ -1682,15 +1682,15 @@ const App = {
         ${botao('italic', 'italico', 'Itálico')}
         ${botao('underline', 'sublinhado', 'Sublinhado')}
         ${botao('strikeThrough', 'tachado', 'Tachado')}
-        <label class="fmt fmt-cor" title="Cor da letra">
+        <button type="button" class="fmt fmt-cor" id="btn-cor-letra"
+          title="Cor da letra" aria-label="Cor da letra">
           <span class="rotulo-cor">A</span>
           <span class="risco-cor" id="amostra-cor"></span>
-          <input type="color" id="cor-letra" value="#8c2f39">
-        </label>
-        <label class="fmt fmt-fundo" title="Cor de fundo">
+        </button>
+        <button type="button" class="fmt fmt-fundo" id="btn-cor-fundo"
+          title="Cor de fundo" aria-label="Cor de fundo">
           <span class="bloco-fundo" id="amostra-fundo">A</span>
-          <input type="color" id="cor-fundo" value="#f2c94c">
-        </label>
+        </button>
         <select class="fmt-fonte" id="fmt-fonte" title="Tipo de letra">
           <option value="">Fonte</option>
           <option value="var(--fonte-texto)">Serifada</option>
@@ -1699,6 +1699,7 @@ const App = {
         </select>
         ${botao('removeFormat', 'limpar-formato', 'Limpar formatação')}
       </div>
+      <div class="caixa-cor fechada" id="caixa-cor-nota"></div>
       <div class="editor-nota" id="editor-nota" contenteditable="true"
         role="textbox" aria-multiline="true" data-vazio="Escreva sua anotação…">${a ? Anotacoes.limpar(a.corpo) : ''}</div>
       <div class="acoes-anot">
@@ -1744,26 +1745,65 @@ const App = {
       el.onclick = () => { editor.focus(); css(); document.execCommand(el.dataset.cmd, false, null); };
     });
 
-    const corLetra = document.getElementById('cor-letra');
-    const corFundo = document.getElementById('cor-fundo');
+    // Cor da letra e cor de fundo usam a MESMA roda de cores dos marcadores — o
+    // padrão de cor do app. Tocar no "A" abre a roda embaixo da barra; a cor só
+    // entra na seleção quando a pessoa aperta "Aplicar" dentro da roda.
+    const btnCorLetra = document.getElementById('btn-cor-letra');
+    const btnCorFundo = document.getElementById('btn-cor-fundo');
     const amostraCor = document.getElementById('amostra-cor');
     const amostraFundo = document.getElementById('amostra-fundo');
-    amostraCor.style.background = corLetra.value;
-    amostraFundo.style.background = corFundo.value;
+    const caixaCor = document.getElementById('caixa-cor-nota');
 
-    corLetra.onchange = () => {
-      amostraCor.style.background = corLetra.value;
+    // guarda a última cor de cada tipo, para a roda reabrir de onde parou
+    const corAtual = { letra: '#8c2f39', fundo: '#f2c94c' };
+    amostraCor.style.background = corAtual.letra;
+    amostraFundo.style.background = corAtual.fundo;
+    amostraFundo.style.color = Cores.contraste(corAtual.fundo);   // o "A" contrasta com o fundo
+
+    let modoCor = null;        // 'letra' | 'fundo' | null (fechada)
+
+    const aplicarCor = (modo, cor) => {
       restaurarRange(); css();
-      document.execCommand('foreColor', false, corLetra.value);
-    };
-    corFundo.onchange = () => {
-      amostraFundo.style.background = corFundo.value;
-      restaurarRange(); css();
-      // hiliteColor é o nome moderno; backColor é a reserva de alguns navegadores
-      if (!document.execCommand('hiliteColor', false, corFundo.value)) {
-        document.execCommand('backColor', false, corFundo.value);
+      if (modo === 'letra') {
+        document.execCommand('foreColor', false, cor);
+      } else if (!document.execCommand('hiliteColor', false, cor)) {
+        document.execCommand('backColor', false, cor);   // reserva de alguns navegadores
       }
+      salvarRange();   // o trecho recolorido segue selecionado; recaptura p/ reaplicar limpo
     };
+
+    const fecharCaixaCor = () => {
+      caixaCor.classList.add('fechada');
+      caixaCor.innerHTML = '';
+      modoCor = null;
+      btnCorLetra.classList.remove('ativa');
+      btnCorFundo.classList.remove('ativa');
+    };
+
+    const abrirCaixaCor = modo => {
+      if (modoCor === modo) { fecharCaixaCor(); return; }   // tocar de novo recolhe
+      modoCor = modo;
+      caixaCor.classList.remove('fechada');
+      btnCorLetra.classList.toggle('ativa', modo === 'letra');
+      btnCorFundo.classList.toggle('ativa', modo === 'fundo');
+
+      RodaDeCores.montar(caixaCor, corAtual[modo], cor => {   // chamado só no "Aplicar"
+        corAtual[modo] = cor;
+        if (modo === 'letra') {
+          amostraCor.style.background = cor;
+        } else {
+          amostraFundo.style.background = cor;
+          amostraFundo.style.color = Cores.contraste(cor);   // "A" sempre visível no fundo
+        }
+        aplicarCor(modo, cor);
+      });
+    };
+
+    // segurar o mousedown preserva a seleção do texto ao tocar no botão de cor
+    btnCorLetra.addEventListener('mousedown', e => e.preventDefault());
+    btnCorFundo.addEventListener('mousedown', e => e.preventDefault());
+    btnCorLetra.onclick = () => abrirCaixaCor('letra');
+    btnCorFundo.onclick = () => abrirCaixaCor('fundo');
 
     const fonte = document.getElementById('fmt-fonte');
     fonte.onchange = () => {

@@ -1140,7 +1140,7 @@ body.comparando .comparador { display: flex; }
 
 .caixa-cor.fechada { display: none; }
 
-.roda-linha { display: flex; gap: 16px; align-items: center; }
+.roda-linha { display: flex; gap: 14px; align-items: stretch; }
 
 .roda {
   position: relative;
@@ -1172,20 +1172,66 @@ body.comparando .comparador { display: flex; }
 
 .roda-lado { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
 
-.roda-amostra {
+/* grade das cores recentes, no espaço à direita da roda */
+.roda-paleta {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(22px, 1fr));
+  grid-auto-rows: min-content;
+  gap: 6px;
+  align-content: flex-start;
+  max-height: 152px;
+  overflow-y: auto;
+  padding: 1px;
+}
+.roda-chip {
   width: 100%;
-  height: 54px;
-  min-width: 74px;
+  aspect-ratio: 1 / 1;
+  padding: 0;
+  border-radius: 5px;
+  border: 1px solid color-mix(in srgb, var(--tinta) 22%, transparent);
+  cursor: pointer;
+  transition: transform .08s ease;
+}
+.roda-chip:active { transform: scale(.88); }
+
+/* rodapé: código hexadecimal editável e, abaixo, o botão Aplicar colorido */
+.roda-rodape {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+}
+.roda-aplicar {
+  width: 100%;
+  height: 42px;
   border-radius: var(--raio);
   border: 1px solid color-mix(in srgb, var(--tinta) 18%, transparent);
+  font-family: var(--fonte-ui);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: .03em;
+  cursor: pointer;
+  transition: transform .08s ease;
 }
-
+.roda-aplicar:active { transform: scale(.98); }
 .roda-hex {
+  width: 100%;
   font-family: var(--fonte-sigla);
-  font-size: 12px;
-  letter-spacing: .04em;
-  color: var(--tinta-fraca);
+  font-size: 13px;
+  letter-spacing: .06em;
   text-align: center;
+  text-transform: uppercase;
+  color: var(--tinta);
+  background: var(--papel);
+  padding: 8px 10px;
+  border-radius: var(--raio);
+  border: 1px solid color-mix(in srgb, var(--tinta) 22%, transparent);
+}
+.roda-hex:focus-visible {
+  outline: 2px solid var(--rubrica);
+  outline-offset: 1px;
 }
 
 .roda-barra {
@@ -2468,6 +2514,13 @@ body.com-refs-fixas .voltar-origem { bottom: calc(42vh + 14px); z-index: 32; }
   overflow-y: auto;
 }
 .corpo-editor .acoes-anot { flex: 0 0 auto; margin-top: 12px; }
+/* a roda de cores, quando aberta, ocupa altura própria e empurra o editor */
+.corpo-editor .caixa-cor { flex: 0 0 auto; margin: 0 0 12px; }
+/* botão de cor com a roda aberta: realce discreto */
+.fmt.ativa {
+  background: color-mix(in srgb, var(--rubrica) 14%, transparent);
+  border-color: color-mix(in srgb, var(--rubrica) 45%, transparent);
+}
 
 /* Botão flutuante de seleção múltipla, no canto inferior direito. */
 .mais-selecao {

@@ -47,6 +47,61 @@ const Cores = {
     }
     return { h, s: Math.round(s * 100), l: Math.round(l * 100) };
   },
+
+  /* luminância relativa (0 preto … 1 branco), fórmula sRGB */
+  luminancia(hex) {
+    const m = /^#?([\da-f]{2})([\da-f]{2})([\da-f]{2})$/i.exec((hex || '').trim());
+    if (!m) return 0;
+    const lin = c => (c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4));
+    const [r, g, b] = m.slice(1).map(v => lin(parseInt(v, 16) / 255));
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  },
+
+  /* devolve preto ou branco — o que enxergar melhor SOBRE a cor dada.
+   * Usado em qualquer texto que fique em cima de uma cor (o "Aplicar", o "A"
+   * do fundo…), para nunca sumir numa cor muito clara ou muito escura. */
+  contraste(hex) {
+    const L = this.luminancia(hex);
+    const contraBranco = 1.05 / (L + 0.05);
+    const contraPreto = (L + 0.05) / 0.05;
+    return contraPreto >= contraBranco ? '#000000' : '#ffffff';
+  },
+};
+
+/* Memória global das últimas cores que a pessoa criou — a mesma para todas as
+ * rodas do app (marcadores, notas, estudo…). Guarda até MAX cores, sempre a
+ * mais recente na frente; ao encher, a mais antiga cai fora. Branco e preto
+ * puros ficam SEMPRE presentes (e fixos), porque acertá-los na roda é chato e
+ * eles são muito usados. Enquanto a pessoa não criou nada, mostramos uma paleta
+ * colorida de partida — que vai sendo empurrada para fora conforme ela escolhe. */
+const CoresRecentes = {
+  CHAVE: 'cores-recentes',
+  MAX: 30,
+  FIXAS: ['#ffffff', '#000000'],
+
+  padrao: (() => {
+    const hues = [0, 30, 50, 95, 140, 175, 200, 225, 265, 305];
+    const lums = [44, 60, 74];
+    const out = [];
+    for (const l of lums) for (const h of hues) out.push(Cores.hslParaHex(h, 70, l));
+    return out.slice(0, 30);
+  })(),
+
+  ehFixa(hex) { return this.FIXAS.includes((hex || '').toLowerCase()); },
+
+  lista() {
+    const salvas = Guarda.ler(this.CHAVE, null);
+    return Array.isArray(salvas) && salvas.length ? salvas : this.padrao.slice();
+  },
+
+  registrar(hex) {
+    hex = (hex || '').toLowerCase();
+    if (!/^#[0-9a-f]{6}$/.test(hex) || this.ehFixa(hex)) return;   // ignora inválidas e as fixas
+    let lista = this.lista().filter(c => c.toLowerCase() !== hex);  // tira duplicata
+    lista.unshift(hex);                                            // a nova vai para a frente
+    if (lista.length > this.MAX) lista = lista.slice(0, this.MAX); // a mais antiga cai
+    Guarda.gravar(this.CHAVE, lista);
+  },
 };
 
 const RodaDeCores = {
@@ -65,22 +120,33 @@ const RodaDeCores = {
         <div class="roda" tabindex="0" role="slider" aria-label="Matiz e saturação">
           <div class="roda-alvo"></div>
         </div>
-        <div class="roda-lado">
-          <div class="roda-amostra"></div>
-          <div class="roda-hex"></div>
-        </div>
+        <div class="roda-paleta" role="group" aria-label="Cores recentes"></div>
       </div>
       <div class="roda-barra" tabindex="0" role="slider" aria-label="Tonalidade">
         <div class="roda-alvo barra-alvo"></div>
       </div>
-      <div class="roda-legenda"><span>mais escuro</span><span>mais claro</span></div>`;
+      <div class="roda-legenda"><span>mais escuro</span><span>mais claro</span></div>
+      <div class="roda-rodape">
+        <input class="roda-hex" type="text" spellcheck="false" autocomplete="off"
+          maxlength="7" aria-label="Código hexadecimal da cor">
+        <button type="button" class="roda-aplicar">Aplicar</button>
+      </div>`;
 
     const roda    = caixa.querySelector('.roda');
     const alvo    = caixa.querySelector('.roda .roda-alvo');
     const barra   = caixa.querySelector('.roda-barra');
     const alvoB   = caixa.querySelector('.barra-alvo');
-    const amostra = caixa.querySelector('.roda-amostra');
+    const aplicar = caixa.querySelector('.roda-aplicar');
     const rotulo  = caixa.querySelector('.roda-hex');
+    const paleta  = caixa.querySelector('.roda-paleta');
+
+    // desenha os quadradinhos: as duas fixas (branco/preto) e as recentes
+    const pintarPaleta = () => {
+      const cores = [...CoresRecentes.FIXAS, ...CoresRecentes.lista()];
+      paleta.innerHTML = cores.map(c =>
+        `<button type="button" class="roda-chip" data-cor="${c}"
+           title="${c.toUpperCase()}" style="background:${c}"></button>`).join('');
+    };
 
     const desenhar = (avisar = true) => {
       const hex = Cores.hslParaHex(estado.h, estado.s, estado.l);
@@ -100,9 +166,11 @@ const RodaDeCores = {
       alvoB.style.left = `${estado.l}%`;
       alvoB.style.background = hex;
 
-      amostra.style.background = hex;
-      rotulo.textContent = hex.toUpperCase();
-      if (avisar) aoMudar(hex);
+      // o próprio botão "Aplicar" mostra a cor escolhida, com o texto sempre
+      // contrastando; nada é aplicado ainda — só quando a pessoa apertar.
+      aplicar.style.background = hex;
+      aplicar.style.color = Cores.contraste(hex);
+      if (document.activeElement !== rotulo) rotulo.value = hex.toUpperCase();
     };
 
     /* --------------------------------------------------------- o arrastar */
@@ -160,6 +228,44 @@ const RodaDeCores = {
       desenhar();
     });
 
+    /* ---------- a paleta de recentes: tocar num quadradinho pré-visualiza --- */
+    paleta.addEventListener('click', e => {
+      const chip = e.target.closest('[data-cor]');
+      if (!chip) return;
+      const { h, s, l } = Cores.hexParaHsl(chip.dataset.cor);
+      estado.h = h; estado.s = s; estado.l = l;   // fixas (0% sat) entram exatas
+      desenhar();                                  // só carrega a cor na roda; aplicar é no botão
+    });
+
+    /* ---------- o hex digitável: escrever o código move a cor em tudo ------- */
+    const lerHexDigitado = () => {
+      let v = rotulo.value.trim().replace(/^#/, '');
+      if (/^[0-9a-fA-F]{3}$/.test(v)) v = v.split('').map(c => c + c).join('');  // atalho de 3 dígitos
+      if (!/^[0-9a-fA-F]{6}$/.test(v)) return null;
+      return '#' + v.toLowerCase();
+    };
+    rotulo.addEventListener('input', () => {
+      const hex = lerHexDigitado();
+      if (!hex) return;                            // ainda incompleto: espera terminar
+      const { h, s, l } = Cores.hexParaHsl(hex);
+      estado.h = h; estado.s = s; estado.l = l;
+      desenhar();                                  // sobe na roda, na barra e no botão
+    });
+    // ao confirmar (Enter/sair) só arruma o texto do campo; não aplica nem guarda
+    rotulo.addEventListener('change', () => {
+      rotulo.value = Cores.hslParaHex(estado.h, estado.s, estado.l).toUpperCase();
+    });
+    rotulo.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); rotulo.blur(); } });
+
+    /* ---------- APLICAR: o único lugar que aplica a cor e a guarda ---------- */
+    aplicar.addEventListener('click', () => {
+      const hex = Cores.hslParaHex(estado.h, estado.s, estado.l);
+      aoMudar(hex);                    // aplica no alvo (texto, marcador, fundo…)
+      CoresRecentes.registrar(hex);    // só agora entra nos recentes
+      pintarPaleta();
+    });
+
+    pintarPaleta();
     desenhar(false);
   },
 };
