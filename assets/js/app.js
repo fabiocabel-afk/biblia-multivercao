@@ -3492,8 +3492,20 @@ const App = {
     const bt = aberto === 'raiz'
       ? document.getElementById('refs-raiz-amostra')
       : document.querySelector(`[data-texto="${aberto}"]`);
-    if (bt) { bt.classList.remove('aberto'); bt.textContent = bt.dataset.amostra || '…'; }
+    if (bt) { bt.classList.remove('aberto'); this._restaurarAmostraRef(bt); }
     this.refsTextoAberto = null;
+  },
+
+  /* A bolinha de indicação no fim do trecho: esfera na cor do texto com o sinal
+   * (+ fechado, − aberto) na cor do papel — branco no tema claro, escuro no
+   * escuro, sempre legível. É só charme visual; não muda a lógica. */
+  _bolhaRef(sinal) {
+    return `<span class="rc-bolha" data-sinal="${sinal}" aria-hidden="true"></span>`;
+  },
+
+  _restaurarAmostraRef(bt) {
+    bt.innerHTML = `<span class="rc-amostra-txt">${Leitura.escapar(bt.dataset.amostra || '')}</span>`
+      + this._bolhaRef('+');
   },
 
   async _tocarTextoRef(id) {
@@ -3505,7 +3517,7 @@ const App = {
     const bt = document.querySelector(`[data-texto="${id}"]`);
     bt.classList.add('aberto');
     bt.textContent = 'abrindo…';
-    bt.innerHTML = await this._textoCompletoRef(reg.no);
+    bt.innerHTML = (await this._textoCompletoRef(reg.no)) + this._bolhaRef('−');
     this.refsTextoAberto = id;
   },
 
@@ -3517,7 +3529,7 @@ const App = {
     this._fecharTextoRefAberto();
     bt.classList.add('aberto');
     bt.textContent = 'abrindo…';
-    bt.innerHTML = await this._textoCompletoRef(this.refsRaiz);
+    bt.innerHTML = (await this._textoCompletoRef(this.refsRaiz)) + this._bolhaRef('−');
     this.refsTextoAberto = 'raiz';
   },
 
@@ -3562,9 +3574,10 @@ const App = {
           const vers = +el.dataset.trecho.split('|')[2];
           const v = r.capitulo.verses.find(x => x.number === vers);
           const t = v && v.text ? v.text : '';
-          const amostra = t ? (t.length > 80 ? t.slice(0, 80).trim() : t) + ' +' : '';
-          el.textContent = amostra;
-          el.dataset.amostra = amostra;
+          const base = t ? (t.length > 80 ? t.slice(0, 80).trim() : t) : '';
+          el.dataset.amostra = base;
+          el.innerHTML = `<span class="rc-amostra-txt">${Leitura.escapar(base)}</span>`
+            + this._bolhaRef('+');
         }
       } catch { els.forEach(el => { el.dataset.pronto = '1'; el.textContent = ''; }); }
     }

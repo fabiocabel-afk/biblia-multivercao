@@ -2784,11 +2784,11 @@ body.ouvindo .folha { padding-bottom: 200px; }
   background: none;
   padding: 0 4px 2px;
   max-width: 100%;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  display: flex;
+  align-items: center;
 }
 .refs-raiz-amostra.aberto {
+  display: block;
   white-space: normal;
   overflow: visible;
   color: var(--tinta);
@@ -2892,12 +2892,12 @@ body.ouvindo .folha { padding-bottom: 200px; }
   line-height: 1.4;
   color: var(--tinta-fraca);
   background: none;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: calc(100% - 2.5em);
+  display: flex;
+  align-items: center;
+  max-width: 100%;
 }
 .arv-amostra.aberto {
+  display: block;
   white-space: normal;
   overflow: visible;
   color: var(--tinta);
@@ -2914,6 +2914,45 @@ body.ouvindo .folha { padding-bottom: 200px; }
   vertical-align: super;
   margin-right: 3px;
 }
+
+/* texto do trecho fechado: trunca com reticências e deixa a esfera visível */
+.arv-amostra .rc-amostra-txt,
+.refs-raiz-amostra .rc-amostra-txt {
+  flex: 1 1 auto;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* esfera de expansão no fim do trecho: pequena (só um respiro em volta do
+   sinal), na cor do texto da linha (currentColor). O "+"/"−" é DESENHADO com
+   duas barrinhas na cor do papel — assim fica sempre perfeitamente centrado,
+   sem depender das métricas da fonte. "+" fechado, "−" aberto. */
+.rc-bolha {
+  flex: none;
+  position: relative;
+  display: inline-block;
+  width: 1.1em;
+  height: 1.1em;
+  margin-left: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  vertical-align: middle;
+}
+.rc-bolha::before,   /* barra horizontal — o traço do − e do + */
+.rc-bolha::after {   /* barra vertical — só aparece no + */
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: var(--papel);
+  border-radius: 1px;
+}
+.rc-bolha::before { width: 62%; height: 2px; }
+.rc-bolha::after  { width: 2px; height: 62%; }
+.rc-bolha[data-sinal="−"]::after { display: none; }
 .arv-vazio {
   font-size: 12px;
   color: var(--tinta-fraca);
