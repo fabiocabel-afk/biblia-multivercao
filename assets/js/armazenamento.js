@@ -248,6 +248,17 @@ const Estudos = {
     }];
   },
 
+  /* O conteudo do estudo como uma SEQUENCIA ORDENADA de blocos. Cada bloco e
+   * ou um recorte de versiculos ({tipo:'versos', trecho}) ou um texto do
+   * usuario ({tipo:'texto', html}). O modo edicao (proxima etapa) grava essa
+   * sequencia em e.blocos, podendo intercalar textos entre os versiculos. Se o
+   * estudo ainda so tem trechos (formato de hoje), viram blocos de versiculos
+   * na ordem em que estao — ninguem perde o que ja tinha. */
+  blocosDe(e) {
+    if (Array.isArray(e.blocos)) return e.blocos;
+    return this.trechosDe(e).map(t => ({ tipo: 'versos', trecho: t }));
+  },
+
   criar({ nome, trecho }) {
     const lista = this.todos();
     const estudo = {

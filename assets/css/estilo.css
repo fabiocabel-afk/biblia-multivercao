@@ -1687,6 +1687,151 @@ body.selecionando .rodape { transform: translateY(110%); }
 .estudo-cabeca strong { font-size: 15px; }
 .estudo-cabeca .quando { font-size: 11px; color: var(--tinta-fraca); }
 
+/* o nome do estudo agora é um botão que abre o modo visão */
+.estudo-titulo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  background: none;
+  padding: 2px 0;
+  cursor: pointer;
+  color: var(--tinta);
+}
+.estudo-titulo-seta {
+  width: 15px;
+  height: 15px;
+  flex: none;
+  margin-left: auto;
+  color: var(--tinta-fraca);
+}
+
+/* seta de voltar no cabeçalho de um painel */
+.voltar-painel {
+  background: none;
+  cursor: pointer;
+  color: var(--tinta);
+  padding: 4px;
+  margin-right: 2px;
+}
+.voltar-painel .icone { width: 20px; height: 20px; }
+
+/* ---------------------------------------------- MODO VISÃO DO ESTUDO */
+.corpo-estudo-ver {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0;
+}
+.estudo-ver-conteudo {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 14px 14px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.estudo-bloco { border-radius: 10px; }
+
+/* recorte de bíblia impressa: papel levemente quente, letra serifada */
+.estudo-versos {
+  background:
+    linear-gradient(color-mix(in srgb, var(--tinta) 3%, transparent),
+                    color-mix(in srgb, var(--tinta) 3%, transparent)),
+    var(--papel);
+  border: 1px solid color-mix(in srgb, var(--tinta) 14%, transparent);
+  box-shadow: 0 1px 3px rgb(0 0 0 / .06);
+  padding: 12px 14px 14px;
+}
+.estudo-ref {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-family: var(--fonte-sigla);
+  font-size: 11px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--rubrica);
+  margin-bottom: 8px;
+}
+.estudo-sigla {
+  margin-left: auto;
+  font-size: 9.5px;
+  padding: 1px 5px;
+  border-radius: 6px;
+  color: var(--tinta-fraca);
+  border: 1px solid color-mix(in srgb, var(--tinta) 18%, transparent);
+}
+.estudo-passagem {
+  font-family: var(--fonte-texto);
+  font-size: 16px;
+  line-height: 1.7;
+  color: var(--tinta);
+  text-align: justify;
+}
+.estudo-passagem .ev-n {
+  font-family: var(--fonte-sigla);
+  font-size: 10px;
+  color: var(--tinta-numero);
+  vertical-align: super;
+  margin-right: 2px;
+  font-weight: 600;
+}
+.estudo-vazio { color: var(--tinta-fraca); }
+
+/* separador de capítulo DENTRO do mesmo container (trecho que cruza capítulos):
+   deixa claro que ainda é um só lançamento, apenas dividido por capítulo */
+.estudo-cap-sep {
+  font-family: var(--fonte-sigla);
+  font-size: 11px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--rubrica);
+  margin: 14px 0 6px;
+  padding-top: 8px;
+  border-top: 1px dashed color-mix(in srgb, var(--tinta) 16%, transparent);
+}
+.estudo-passagem + .estudo-cap-sep { margin-top: 12px; }
+
+/* texto do usuário: visual de anotação, bem diferente do versículo */
+.estudo-texto {
+  font-family: var(--fonte-ui);
+  font-size: 14.5px;
+  line-height: 1.6;
+  color: var(--tinta);
+  padding: 10px 14px;
+  border-left: 3px solid color-mix(in srgb, var(--rubrica) 55%, transparent);
+  background: color-mix(in srgb, var(--rubrica) 5%, transparent);
+  border-radius: 0 8px 8px 0;
+}
+
+/* rodapé fixo com o lápis de editar */
+.estudo-ver-rodape {
+  flex: 0 0 auto;
+  padding: 10px 14px calc(10px + env(safe-area-inset-bottom));
+  border-top: 1px solid color-mix(in srgb, var(--tinta) 10%, transparent);
+  display: flex;
+  justify-content: center;
+}
+.pilula-lapis {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 22px;
+  border-radius: 999px;
+  cursor: pointer;
+  font-family: var(--fonte-ui);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--papel);
+  background: var(--rubrica);
+}
+.pilula-lapis .icone { width: 17px; height: 17px; }
+.pilula-lapis:active { transform: scale(.97); }
+
 .trechos-lista { padding: 0 6px; }
 
 .trecho-estudo { display: flex; align-items: stretch; gap: 4px; margin-bottom: 3px; }

@@ -916,7 +916,10 @@ const App = {
 
       return `<div class="cartao-estudo">
         <div class="estudo-cabeca">
-          <strong>${Leitura.escapar(Estudos.nomeDe(e))}</strong>
+          <button class="estudo-titulo" data-ver="${e.id}">
+            <strong>${Leitura.escapar(Estudos.nomeDe(e))}</strong>
+            <svg class="icone estudo-titulo-seta"><use href="#i-depois"/></svg>
+          </button>
           <span class="quando">${Estudos.quandoDe(e)}</span>
         </div>
         <div class="trechos-lista">${listaTrechos}</div>
@@ -930,6 +933,10 @@ const App = {
     }).join('');
 
     const achar = id => Estudos.todos().find(e => e.id === id);
+
+    corpo.querySelectorAll('[data-ver]').forEach(el => {
+      el.onclick = () => this.verEstudo(el.dataset.ver);
+    });
 
     corpo.querySelectorAll('[data-est]').forEach(el => {
       el.onclick = () => {
@@ -999,6 +1006,111 @@ const App = {
         this.desenharEstudos();
       };
     });
+  },
+
+  /* ============================================ MODO VISÃO DO ESTUDO
+   * Tocar no título do estudo abre esta tela: todo o conteúdo montado para
+   * leitura. Os versículos aparecem em "containers" com cara de recorte de
+   * bíblia impressa; os textos do usuário (quando existirem, na etapa de
+   * edição) aparecem com um visual distinto de anotação. Um lápis embaixo
+   * leva ao modo edição. */
+  async verEstudo(id) {
+    const e = Estudos.todos().find(x => x.id === id);
+    if (!e) return;
+    this._estudoAtual = id;
+
+    document.getElementById('titulo-estudo-ver').textContent = Estudos.nomeDe(e) || 'Estudo';
+    const corpo = document.getElementById('corpo-estudo-ver');
+    corpo.innerHTML = '<div class="estado peq">Montando o estudo…</div>';
+    this.abrir('painel-estudo-ver');
+
+    document.getElementById('estudo-ver-voltar').onclick = () => {
+      this.desenharEstudos();
+      this.abrir('painel-estudos');
+    };
+
+    // monta os blocos na ordem; um bloco de versículos pode render mais de um
+    // container se o intervalo antigo cruzava capítulos
+    const partes = [];
+    for (const b of Estudos.blocosDe(e)) {
+      if (b.tipo === 'texto') {
+        partes.push(`<div class="estudo-bloco estudo-texto">${b.html || ''}</div>`);
+        continue;
+      }
+      // um trecho é um lançamento único → sempre UM container, mesmo que cruze
+      // capítulos (aí os capítulos viram separadores internos)
+      partes.push(await this._containerVersos(b.trecho));
+    }
+
+    const conteudo = partes.join('') || '<div class="estado peq">Estudo vazio.</div>';
+    corpo.innerHTML = `
+      <div class="estudo-ver-conteudo">${conteudo}</div>
+      <div class="estudo-ver-rodape">
+        <button class="pilula-lapis" id="estudo-ver-editar">
+          <svg class="icone"><use href="#i-lapis"/></svg> Editar
+        </button>
+      </div>`;
+    document.getElementById('estudo-ver-editar').onclick = () => this.editarEstudo(id);
+  },
+
+  /* Um trecho vira uma ou mais "fatias" — uma por capítulo — cada uma com os
+   * números de versículo a mostrar. Cobre o formato novo (cap + lista) e o
+   * antigo (intervalo contínuo, que pode cruzar capítulos). */
+  _fatiasDoTrecho(t) {
+    if (Array.isArray(t.versiculos)) {
+      return [{ code: t.code, versao: t.versao, cap: t.cap, numeros: t.versiculos }];
+    }
+    const cI = t.capInicio, cF = t.capFim != null ? t.capFim : t.capInicio;
+    const fatias = [];
+    for (let c = cI; c <= cF; c++) {
+      fatias.push({
+        code: t.code, versao: t.versao, cap: c,
+        inicio: c === cI ? t.versInicio : 1,
+        fim: c === cF ? t.versFim : null,     // null = até o fim do capítulo
+      });
+    }
+    return fatias;
+  },
+
+  async _containerVersos(trecho) {
+    const fatias = this._fatiasDoTrecho(trecho);
+    const nome = Dados.nomeCurto(trecho.versao, trecho.code);
+
+    // resolve os versículos de cada capítulo (uma "seção" por capítulo)
+    const secoes = [];
+    for (const f of fatias) {
+      let dado = null;
+      try { dado = await Dados.capitulo(f.versao, f.code, f.cap); }
+      catch { /* versão sem esse capítulo */ }
+      const verses = (dado && dado.capitulo && dado.capitulo.verses) || [];
+      const escolhidos = Array.isArray(f.numeros)
+        ? verses.filter(v => f.numeros.includes(v.number))
+        : verses.filter(v => v.number >= f.inicio && (f.fim == null || v.number <= f.fim));
+      secoes.push({ cap: f.cap, escolhidos });
+    }
+
+    const multi = secoes.length > 1;   // cruza capítulos → separadores internos
+    const corpo = secoes.map(s => {
+      const passagem = s.escolhidos.map(v =>
+        `<span class="ev"><span class="ev-n">${v.number}</span>${Leitura.escapar(v.text)}</span>`
+      ).join(' ');
+      const sep = multi ? `<div class="estudo-cap-sep">${nome} ${s.cap}</div>` : '';
+      return sep + `<div class="estudo-passagem">${passagem
+        || '<em class="estudo-vazio">Texto indisponível nesta versão.</em>'}</div>`;
+    }).join('');
+
+    // a etiqueta do topo traz a referência do trecho INTEIRO (um só lançamento)
+    return `<div class="estudo-bloco estudo-versos">
+      <div class="estudo-ref">${Estudos.refDoTrecho(trecho)}<span class="estudo-sigla">${trecho.versao}</span></div>
+      ${corpo}
+    </div>`;
+  },
+
+  editarEstudo(id) {
+    // A edição (inserir blocos de texto entre os versículos, com a mesma
+    // formatação das notas) é a próxima etapa. Por ora, avisa.
+    this._estudoAtual = id;
+    this.avisoRapido('A edição do estudo chega na próxima etapa');
   },
 
   /* Monta o trecho a partir da seleção, perguntando até onde vai. Devolve o
