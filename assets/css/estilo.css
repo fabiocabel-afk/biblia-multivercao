@@ -3307,3 +3307,148 @@ body.ouvindo .folha { padding-bottom: 200px; }
   margin-top: 6px;
 }
 .refs-troca-acoes .botao { flex: 1; }
+
+/* ================================================ listas de leitura ======= */
+
+/* nome da lista/estudo em execução, acima da referência, na barra do player */
+.player-fila {
+  text-align: center;
+  font-family: var(--fonte-ui);
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--cromo-texto);
+  margin-bottom: 3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* botão "Ouvir" na visão do estudo, ao lado de "Editar" (variante contornada) */
+.estudo-ver-rodape { gap: 10px; }
+.pilula-tocar {
+  color: var(--rubrica);
+  background: none;
+  border: 1.5px solid color-mix(in srgb, var(--rubrica) 55%, transparent);
+}
+
+/* --- painel-listas: uma linha por lista --- */
+.lista-linha {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 4px;
+  border-bottom: 1px solid color-mix(in srgb, var(--tinta) 9%, transparent);
+}
+.lista-tocar {
+  flex: 0 0 auto;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--rubrica);
+  color: #fff;
+  cursor: pointer;
+}
+.lista-tocar .icone { width: 20px; height: 20px; }
+.lista-tocar:active { transform: scale(.95); }
+.lista-abrir {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: left;
+  background: none;
+  cursor: pointer;
+  padding: 2px 0;
+}
+.lista-nome {
+  font-family: var(--fonte-ui);
+  font-size: 15.5px;
+  font-weight: 600;
+  color: var(--tinta);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lista-sub { font-size: 12.5px; color: var(--tinta-fraca); }
+.lista-seta { width: 16px; height: 16px; color: var(--tinta-fraca); flex: 0 0 auto; opacity: .6; }
+
+/* --- painel-lista-ver: gerência de uma lista --- */
+.lista-topo {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+.botao.largo {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.botao.largo .icone { width: 18px; height: 18px; }
+.lista-topo-acoes { display: flex; gap: 10px; }
+.lista-topo-acoes .botao { flex: 1; }
+.botao.secundario.perigo {
+  color: var(--rubrica);
+  border-color: color-mix(in srgb, var(--rubrica) 40%, transparent);
+}
+.lista-secao {
+  font-family: var(--fonte-ui);
+  font-size: 12.5px;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  color: var(--tinta-fraca);
+  margin: 0 0 8px;
+}
+.lista-trechos { display: flex; flex-direction: column; }
+.lista-trecho {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 2px;
+  border-bottom: 1px solid color-mix(in srgb, var(--tinta) 8%, transparent);
+}
+.lista-trecho-num {
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--tinta-fraca);
+  background: color-mix(in srgb, var(--tinta) 8%, transparent);
+}
+.lista-trecho-ref {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.lista-trecho-ref strong { font-size: 14.5px; color: var(--tinta); }
+.lista-trecho-versao { font-size: 11.5px; color: var(--tinta-fraca); }
+.lista-trecho-mover { display: flex; gap: 2px; flex: 0 0 auto; }
+.lista-trecho-mover button,
+.lista-trecho-x {
+  width: 34px;
+  height: 34px;
+  border-radius: var(--raio);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  color: var(--tinta-fraca);
+  cursor: pointer;
+}
+.lista-trecho-mover button .icone { width: 16px; height: 16px; transform: rotate(90deg); }
+.lista-trecho-mover button:disabled { opacity: .25; cursor: default; }
+.lista-trecho-mover button:not(:disabled):active { transform: scale(.92); }
+.lista-trecho-x .icone { width: 17px; height: 17px; }
+.lista-trecho-x:hover { color: var(--rubrica); }

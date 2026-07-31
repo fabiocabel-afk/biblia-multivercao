@@ -39,6 +39,7 @@
   <symbol id="i-limpar-formato" viewBox="0 0 24 24"><path d="M8 6h11M9 6l-2 12M13 6l-1 6" stroke-linecap="round"/><path d="M14 16l6 5M20 16l-6 5" stroke-linecap="round"/></symbol>
   <symbol id="i-lapis" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z" stroke-linejoin="round"/><path d="M14 6l4 4" stroke-linecap="round"/></symbol>
   <symbol id="i-ouvir" viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9z" stroke-linejoin="round"/><path d="M16.5 8.5a5 5 0 0 1 0 7" stroke-linecap="round"/></symbol>
+  <symbol id="i-lista" viewBox="0 0 24 24"><path d="M4 7h10M4 12h10M4 17h6" stroke-linecap="round"/><path d="M16 14l5 3-5 3z" fill="currentColor" stroke="none"/></symbol>
   <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 5l12 7-12 7z" fill="currentColor" stroke="none"/></symbol>
   <symbol id="i-pausar" viewBox="0 0 24 24"><rect x="6" y="5" width="4" height="14" rx="1" fill="currentColor" stroke="none"/><rect x="14" y="5" width="4" height="14" rx="1" fill="currentColor" stroke="none"/></symbol>
   <symbol id="i-vers-antes" viewBox="0 0 24 24"><rect x="5" y="5" width="2.4" height="14" rx="1" fill="currentColor" stroke="none"/><path d="M20 5l-10 7 10 7z" fill="currentColor" stroke="none"/></symbol>
@@ -66,6 +67,7 @@
   <button data-menu="historico"><svg class="icone"><use href="#i-historico"/></svg><span>Histórico</span></button>
   <button data-menu="marcadores"><svg class="icone"><use href="#i-marcador"/></svg><span>Marcadores</span></button>
   <button data-menu="estudos"><svg class="icone"><use href="#i-estudo"/></svg><span>Estudos</span></button>
+  <button data-menu="listas"><svg class="icone"><use href="#i-lista"/></svg><span>Listas de leitura</span></button>
   <button data-menu="caderno"><svg class="icone"><use href="#i-caderno"/></svg><span>Anotação</span></button>
   <button data-menu="referencias"><svg class="icone"><use href="#i-referencias"/></svg><span>Referências cruzadas</span></button>
   <button data-menu="ouvir"><svg class="icone"><use href="#i-ouvir"/></svg><span>Ouvir</span></button>
@@ -118,6 +120,7 @@
     <button class="botao secundario" id="sel-copiar">Copiar</button>
     <button class="botao secundario" id="sel-compartilhar">Compartilhar</button>
     <button class="botao secundario" id="sel-estudo">Salvar estudo</button>
+    <button class="botao secundario" id="sel-lista">Adicionar à lista</button>
     <button class="botao secundario" id="sel-anotar">Anotar</button>
     <button class="botao" id="sel-marcar">Marcar</button>
   </div>
@@ -131,6 +134,7 @@
   <button class="player-x" id="player-fechar" aria-label="Fechar leitura" title="Fechar">
     <svg class="icone"><use href="#i-fechar"/></svg>
   </button>
+  <div class="player-fila" id="player-fila" hidden></div>
   <div class="player-ref" id="player-ref"></div>
   <div class="player-botoes">
     <button class="player-bt" id="player-anterior" aria-label="Versículo anterior" title="Anterior">
@@ -259,6 +263,33 @@
     <button data-fechar aria-label="Fechar"><svg class="icone"><use href="#i-fechar"/></svg></button>
   </header>
   <div class="corpo" id="corpo-salvar-estudo"></div>
+</aside>
+
+<aside class="painel" id="painel-add-lista" aria-hidden="true">
+  <header>
+    <button class="voltar-painel" data-voltar aria-label="Voltar"><svg class="icone"><use href="#i-antes"/></svg></button>
+    <h2 id="titulo-add-lista">Adicionar à lista</h2>
+    <button data-fechar aria-label="Fechar"><svg class="icone"><use href="#i-fechar"/></svg></button>
+  </header>
+  <div class="corpo" id="corpo-add-lista"></div>
+</aside>
+
+<aside class="painel" id="painel-listas" aria-hidden="true">
+  <header>
+    <button class="voltar-painel" data-voltar aria-label="Voltar"><svg class="icone"><use href="#i-antes"/></svg></button>
+    <h2>Listas de leitura</h2>
+    <button data-fechar aria-label="Fechar"><svg class="icone"><use href="#i-fechar"/></svg></button>
+  </header>
+  <div class="corpo" id="corpo-listas"></div>
+</aside>
+
+<aside class="painel" id="painel-lista-ver" aria-hidden="true">
+  <header>
+    <button class="voltar-painel" id="lista-ver-voltar" aria-label="Voltar"><svg class="icone"><use href="#i-antes"/></svg></button>
+    <h2 id="titulo-lista-ver">Lista</h2>
+    <button data-fechar aria-label="Fechar"><svg class="icone"><use href="#i-fechar"/></svg></button>
+  </header>
+  <div class="corpo" id="corpo-lista-ver"></div>
 </aside>
 
 <aside class="painel" id="painel-caderno" aria-hidden="true">

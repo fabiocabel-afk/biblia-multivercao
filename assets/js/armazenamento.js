@@ -432,6 +432,99 @@ const Estudos = {
   },
 };
 
+/* ------------------------------------------------ listas de leitura
+ *
+ * Uma lista de leitura e uma SEQUENCIA ORDENADA de trechos da Biblia, montada
+ * para ser tocada em ordem no modo ouvir (como as faixas de um album). Difere
+ * do estudo por ser so leitura: nao tem blocos de texto do usuario, so os
+ * recortes. Cada trecho tem o mesmo formato do estudo ({code, versao, cap,
+ * versiculos:[...]}), entao o player le os dois com o mesmo codigo.
+ */
+const Listas = {
+  todos() {
+    const v = Guarda.ler('listas', []);
+    return Array.isArray(v) ? v : [];
+  },
+
+  trechosDe(l) {
+    return Array.isArray(l.trechos) ? l.trechos : [];
+  },
+
+  criar({ nome, trecho }) {
+    const lista = this.todos();
+    const nova = {
+      id: 'l' + Date.now(),
+      nome: nome || '',
+      trechos: [trecho],
+      criado: new Date().toISOString(),
+    };
+    lista.unshift(nova);
+    Guarda.gravar('listas', lista);
+    return nova;
+  },
+
+  /** Acrescenta um trecho ao fim de uma lista existente. */
+  acrescentar(id, trecho) {
+    const lista = this.todos();
+    const l = lista.find(x => x.id === id);
+    if (!l) return;
+    l.trechos = this.trechosDe(l);
+    l.trechos.push(trecho);
+    Guarda.gravar('listas', lista);
+  },
+
+  removerTrecho(id, indice) {
+    const lista = this.todos();
+    const l = lista.find(x => x.id === id);
+    if (!l) return;
+    const trechos = this.trechosDe(l);
+    trechos.splice(indice, 1);
+    if (!trechos.length) { this.remover(id); return; }   // lista vazia se apaga
+    l.trechos = trechos;
+    Guarda.gravar('listas', lista);
+  },
+
+  /** Move um trecho de uma posicao para outra (reordenar a sequencia). */
+  mover(id, de, para) {
+    const lista = this.todos();
+    const l = lista.find(x => x.id === id);
+    if (!l) return;
+    const trechos = this.trechosDe(l);
+    if (de < 0 || de >= trechos.length || para < 0 || para >= trechos.length) return;
+    const [item] = trechos.splice(de, 1);
+    trechos.splice(para, 0, item);
+    l.trechos = trechos;
+    Guarda.gravar('listas', lista);
+  },
+
+  remover(id) {
+    Guarda.gravar('listas', this.todos().filter(l => l.id !== id));
+  },
+
+  renomear(id, nome) {
+    const lista = this.todos();
+    const l = lista.find(x => x.id === id);
+    if (l) { l.nome = nome; Guarda.gravar('listas', lista); }
+  },
+
+  refDoTrecho(t) { return Estudos.refDoTrecho(t); },
+
+  refDe(l) {
+    const trechos = this.trechosDe(l);
+    if (!trechos.length) return '(vazia)';
+    const primeiro = this.refDoTrecho(trechos[0]);
+    return trechos.length > 1 ? `${primeiro} e mais ${trechos.length - 1}` : primeiro;
+  },
+
+  nomeDe(l) { return l.nome || this.refDe(l); },
+
+  quandoDe(l) {
+    const d = new Date(l.criado);
+    return d.toLocaleDateString('pt-BR') + ' às '
+      + d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  },
+};
+
 /* ------------------------------------------------ ponto de leitura ("parei aqui")
  *
  * Diferente dos marcadores: e um so, nao tem cor propria e nao serve para

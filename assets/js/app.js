@@ -1074,11 +1074,15 @@ const App = {
     corpo.innerHTML = `
       <div class="estudo-ver-conteudo">${conteudo}</div>
       <div class="estudo-ver-rodape">
+        <button class="pilula-lapis pilula-tocar" id="estudo-ver-tocar">
+          <svg class="icone"><use href="#i-play"/></svg> Ouvir
+        </button>
         <button class="pilula-lapis" id="estudo-ver-editar">
           <svg class="icone"><use href="#i-lapis"/></svg> Editar
         </button>
       </div>`;
     document.getElementById('estudo-ver-editar').onclick = () => this.editarEstudo(id);
+    document.getElementById('estudo-ver-tocar').onclick = () => this.tocarEstudoPorId(id);
   },
 
   /* Um trecho vira uma ou mais "fatias" — uma por capítulo — cada uma com os
@@ -1372,6 +1376,197 @@ const App = {
         this.fecharPaineis();
         this.fecharSelecao();
         this.avisoRapido('Adicionado ao estudo');
+      };
+    });
+  },
+
+  /* "Adicionar à lista" (barra de seleção): espelha o Salvar estudo, mas guarda
+   * numa LISTA DE LEITURA — uma sequência de trechos para o modo ouvir tocar em
+   * ordem. Criar nova (com nome) ou empilhar numa que já existe. */
+  abrirAddLista() {
+    if (!this.selecao) return;
+    this.selecaoGuardada = this.selecao;
+    document.getElementById('barra-selecao').classList.remove('aberta');
+    document.body.classList.remove('selecionando');
+
+    this.trechoParcialLista = {
+      versao: this.versao,
+      code: this.code,
+      cap: this.cap,
+      versiculos: this.versiculosDaSelecao(this.selecaoGuardada),
+    };
+
+    this.desenharAddLista();
+    this.abrir('painel-add-lista');
+  },
+
+  desenharAddLista() {
+    const corpo = document.getElementById('corpo-add-lista');
+    document.getElementById('titulo-add-lista').textContent = 'Adicionar à lista';
+    const anteriores = Listas.todos();
+    const t = this.trechoParcialLista;
+    const refTrecho = Listas.refDoTrecho(t);
+
+    corpo.innerHTML = `
+      <p class="contagem" style="margin:2px 0 14px">Guardando
+        <strong>${refTrecho}</strong> · ${t.versao}</p>
+
+      <button class="opcao-estudo-grande novo" id="lista-nova">
+        <span class="mais">+</span>
+        <span><strong>Nova lista</strong>
+          <span class="sub">Começar uma lista de leitura com este trecho</span></span>
+      </button>
+
+      ${anteriores.length ? `<div class="grupo"><h3>Ou juntar a uma lista</h3>
+        ${anteriores.map(l => {
+          const n = Listas.trechosDe(l).length;
+          return `<button class="opcao-estudo-grande" data-juntar-lista="${l.id}">
+            <span><strong>${Leitura.escapar(Listas.nomeDe(l))}</strong>
+              <span class="sub">${Listas.refDe(l)}</span></span>
+            <span class="conta-trechos">${n} trecho${n > 1 ? 's' : ''}</span>
+          </button>`;
+        }).join('')}
+      </div>` : ''}`;
+
+    const trechoAtual = () => ({ ...t, versiculos: [...(t.versiculos || [])] });
+
+    document.getElementById('lista-nova').onclick = () => {
+      const nome = prompt('Nome da nova lista (opcional):', '');
+      if (nome === null) return;
+      Listas.criar({ nome: nome.trim(), trecho: trechoAtual() });
+      this.fecharPaineis();
+      this.fecharSelecao();
+      this.avisoRapido('Lista criada');
+    };
+
+    corpo.querySelectorAll('[data-juntar-lista]').forEach(el => {
+      el.onclick = () => {
+        Listas.acrescentar(el.dataset.juntarLista, trechoAtual());
+        this.fecharPaineis();
+        this.fecharSelecao();
+        this.avisoRapido('Adicionado à lista');
+      };
+    });
+  },
+
+  /* ============================================== listas de leitura (painéis) */
+
+  _abrirListas() {
+    this.desenharListas();
+    this.abrir('painel-listas');
+    this._volta = () => this.abrirMenuFlutuante();
+  },
+
+  desenharListas() {
+    const corpo = document.getElementById('corpo-listas');
+    const listas = Listas.todos();
+
+    if (!listas.length) {
+      corpo.innerHTML = `<div class="estado peq">Você ainda não tem listas de leitura.<br>
+        Selecione um trecho na Bíblia e toque em <strong>Adicionar à lista</strong>
+        para começar a montar uma sequência.</div>`;
+      return;
+    }
+
+    corpo.innerHTML = listas.map(l => {
+      const n = Listas.trechosDe(l).length;
+      return `<div class="lista-linha">
+        <button class="lista-tocar" data-tocar="${l.id}" aria-label="Tocar lista" title="Tocar">
+          <svg class="icone"><use href="#i-play"/></svg>
+        </button>
+        <button class="lista-abrir" data-abrir="${l.id}">
+          <span class="lista-nome">${Leitura.escapar(Listas.nomeDe(l))}</span>
+          <span class="lista-sub">${Listas.refDe(l)} · ${n} trecho${n > 1 ? 's' : ''}</span>
+        </button>
+        <svg class="icone lista-seta"><use href="#i-depois"/></svg>
+      </div>`;
+    }).join('');
+
+    corpo.querySelectorAll('[data-tocar]').forEach(el => {
+      el.onclick = () => this.tocarListaPorId(el.dataset.tocar);
+    });
+    corpo.querySelectorAll('[data-abrir]').forEach(el => {
+      el.onclick = () => this.verLista(el.dataset.abrir);
+    });
+  },
+
+  /** Gerência de uma lista: renomear, reordenar, remover trecho, tocar. */
+  verLista(id) {
+    const l = Listas.todos().find(x => x.id === id);
+    if (!l) { this.desenharListas(); return; }
+
+    document.getElementById('titulo-lista-ver').textContent = Listas.nomeDe(l);
+    const corpo = document.getElementById('corpo-lista-ver');
+    const trechos = Listas.trechosDe(l);
+
+    corpo.innerHTML = `
+      <div class="lista-topo">
+        <button class="botao primario largo" id="lista-play-tudo">
+          <svg class="icone"><use href="#i-play"/></svg> Tocar a lista
+        </button>
+        <div class="lista-topo-acoes">
+          <button class="botao secundario" id="lista-renomear">Renomear</button>
+          <button class="botao secundario perigo" id="lista-apagar">Apagar lista</button>
+        </div>
+      </div>
+      <h3 class="lista-secao">Sequência (${trechos.length})</h3>
+      <div class="lista-trechos" id="lista-trechos">
+        ${trechos.map((t, i) => `
+          <div class="lista-trecho" data-i="${i}">
+            <span class="lista-trecho-num">${i + 1}</span>
+            <span class="lista-trecho-ref">
+              <strong>${Listas.refDoTrecho(t)}</strong>
+              <span class="lista-trecho-versao">${t.versao || ''}</span>
+            </span>
+            <span class="lista-trecho-mover">
+              <button data-subir="${i}" aria-label="Subir" title="Subir" ${i === 0 ? 'disabled' : ''}>
+                <svg class="icone"><use href="#i-antes"/></svg></button>
+              <button data-descer="${i}" aria-label="Descer" title="Descer" ${i === trechos.length - 1 ? 'disabled' : ''}>
+                <svg class="icone"><use href="#i-depois"/></svg></button>
+            </span>
+            <button class="lista-trecho-x" data-remover="${i}" aria-label="Remover trecho" title="Remover">
+              <svg class="icone"><use href="#i-lixeira"/></svg>
+            </button>
+          </div>`).join('')}
+      </div>`;
+
+    this.abrir('painel-lista-ver');
+    this._volta = () => this._abrirListas();
+    document.getElementById('lista-ver-voltar').onclick = () => this.voltar();
+
+    const recarregar = () => this.verLista(id);
+
+    document.getElementById('lista-play-tudo').onclick = () => this.tocarListaPorId(id);
+
+    document.getElementById('lista-renomear').onclick = () => {
+      const nome = prompt('Nome da lista:', Listas.nomeDe(l));
+      if (nome === null) return;
+      Listas.renomear(id, nome.trim());
+      recarregar();
+    };
+
+    document.getElementById('lista-apagar').onclick = async () => {
+      const ok = await this.confirmar({
+        titulo: 'Apagar lista',
+        mensagem: `Apagar a lista "${Listas.nomeDe(l)}"? Isso não apaga nada da Bíblia, só a sequência.`,
+        confirmar: 'Apagar', cancelar: 'Manter',
+      });
+      if (ok) { Listas.remover(id); this._abrirListas(); }
+    };
+
+    corpo.querySelectorAll('[data-subir]').forEach(el => {
+      el.onclick = () => { const i = +el.dataset.subir; Listas.mover(id, i, i - 1); recarregar(); };
+    });
+    corpo.querySelectorAll('[data-descer]').forEach(el => {
+      el.onclick = () => { const i = +el.dataset.descer; Listas.mover(id, i, i + 1); recarregar(); };
+    });
+    corpo.querySelectorAll('[data-remover]').forEach(el => {
+      el.onclick = () => {
+        const i = +el.dataset.remover;
+        Listas.removerTrecho(id, i);
+        // se esvaziou, a lista some — volta para a lista de listas
+        if (!Listas.todos().find(x => x.id === id)) { this._abrirListas(); return; }
+        recarregar();
       };
     });
   },
@@ -2836,6 +3031,7 @@ const App = {
       historico: () => { this.desenharHistorico(); this.abrir('painel-historico'); },
       marcadores: () => { this.desenharMarcadores(); this.abrir('painel-marcadores'); },
       estudos: () => this._abrirEstudosLista(),
+      listas: () => this._abrirListas(),
       caderno: () => { this.desenharCaderno(); this.abrir('painel-caderno'); },
       referencias: () => this.abrirReferenciasCruzadas(),
       ouvir: () => this.iniciarOuvir(),
@@ -2885,6 +3081,7 @@ const App = {
     q('sel-compartilhar').onclick = () => this.compartilharSelecao();
     q('sel-marcar').onclick = () => this.abrirCoresDaSelecao();
     q('sel-estudo').onclick = () => this.abrirSalvarEstudo();
+    q('sel-lista').onclick = () => this.abrirAddLista();
     q('sel-anotar').onclick = () => this.anotarSelecao();
     q('sel-limpar').onclick = () => this.fecharSelecao();
     q('mais-selecao').onclick = () => this.alternarMulti();
@@ -2949,7 +3146,10 @@ const App = {
     q('folha').onclick = e => {
       if (this.ouvindo) {                // modo player: o toque só reposiciona a leitura
         const v = e.target.closest('.v');
-        if (v) this.lerVersiculo(+v.dataset.vers);
+        if (v) {
+          if (this.modoFila) this._tocarVersoFila(+v.dataset.vers);
+          else this.lerVersiculo(+v.dataset.vers);
+        }
         return;
       }
       const sinal = e.target.closest('.marca-nota');
@@ -3108,10 +3308,13 @@ const App = {
 
     this.ouvindo = true;
     this.pausado = false;
+    this.modoFila = false;
     document.body.classList.add('ouvindo');
     const player = document.getElementById('player-voz');
     player.classList.add('aberto');
     player.setAttribute('aria-hidden', 'false');
+    const filaEl = document.getElementById('player-fila');
+    if (filaEl) { filaEl.hidden = true; filaEl.textContent = ''; }
     this.manterTelaAcesa();
 
     const lista = this.versiculosNaTela();
@@ -3125,10 +3328,15 @@ const App = {
     this.ouvindo = false;
     this.pausado = false;
     this.lendoVers = null;
+    this.modoFila = false;
+    this.fila = [];
+    this.filaVersos = [];
     document.body.classList.remove('ouvindo');
     const player = document.getElementById('player-voz');
     player.classList.remove('aberto');
     player.setAttribute('aria-hidden', 'true');
+    const filaEl = document.getElementById('player-fila');
+    if (filaEl) { filaEl.hidden = true; filaEl.textContent = ''; }
     this.despintarLendo();
     this.liberarTela();
   },
@@ -3191,10 +3399,219 @@ const App = {
     this.atualizarPlayer();
   },
 
+  /* ============================================== player de SEQUÊNCIA (fila)
+   *
+   * Toca uma lista de leitura ou um estudo: uma fila de trechos, lidos em
+   * ordem. Reaproveita a mesma barra do player, o Locutor e o realce do modo
+   * ouvir, mas com motor próprio — a fila atravessa livros, capítulos e até
+   * versões diferentes. Cada trecho é achatado em segmentos de UM capítulo;
+   * dentro do segmento, lê só os versículos escolhidos, na ordem. O selo
+   * `leituraGen` continua sendo o árbitro do que é fala válida vs. obsoleta. */
+  modoFila: false,
+  fila: [],
+  filaNome: '',
+  filaIdx: 0,
+  filaVersos: [],
+  filaVersoIdx: 0,
+
+  /** Achata trechos (de lista ou estudo) em segmentos de um capítulo cada. */
+  _segmentosDeTrechos(trechos) {
+    const segs = [];
+    (trechos || []).forEach(t => {
+      const versao = t.versao || this.versao;
+      if (Array.isArray(t.versiculos) && t.versiculos.length) {
+        segs.push({ versao, code: t.code, cap: t.cap,
+          versos: [...t.versiculos].sort((a, b) => a - b), de: null, ate: null });
+      } else if (t.capInicio != null) {
+        // formato antigo de estudo: capInicio:versInicio — capFim:versFim
+        for (let c = t.capInicio; c <= t.capFim; c++) {
+          segs.push({
+            versao, code: t.code, cap: c, versos: null,
+            de: c === t.capInicio ? (t.versInicio || null) : null,
+            ate: c === t.capFim ? (t.versFim || null) : null,
+          });
+        }
+      } else if (t.cap != null) {
+        segs.push({ versao, code: t.code, cap: t.cap, versos: null, de: null, ate: null });
+      }
+    });
+    return segs;
+  },
+
+  tocarListaPorId(id) {
+    const l = Listas.todos().find(x => x.id === id);
+    if (l) this.tocarSequencia(Listas.trechosDe(l), Listas.nomeDe(l));
+  },
+
+  tocarEstudoPorId(id) {
+    const e = Estudos.todos().find(x => x.id === id);
+    if (e) this.tocarSequencia(Estudos.trechosDe(e), Estudos.nomeDe(e));
+  },
+
+  /** Ponto de entrada: monta a fila e começa a tocar. */
+  tocarSequencia(trechos, nome) {
+    if (!Locutor.disponivel()) {
+      return this.confirmar({
+        titulo: 'Ouvir', mensagem: 'Este navegador não oferece leitura em voz. '
+          + 'Tente pelo Chrome ou pelo aplicativo instalado na tela inicial.',
+        confirmar: 'Entendi', cancelar: 'Fechar',
+      });
+    }
+    const fila = this._segmentosDeTrechos(trechos);
+    if (!fila.length) { this.avisoRapido('Nada para tocar nesta lista'); return; }
+
+    this.fecharPaineis();
+    this.resetarMulti();
+    this.pontoAtual = null;
+    this.esconderMais();
+    this.selecao = null;
+    this.renderBarraSelecao();
+
+    this.modoFila = true;
+    this.ouvindo = true;
+    this.pausado = false;
+    this.fila = fila;
+    this.filaNome = nome || 'Lista';
+    this.filaIdx = 0;
+    this.filaVersos = [];
+    this.filaVersoIdx = 0;
+
+    document.body.classList.add('ouvindo');
+    const player = document.getElementById('player-voz');
+    player.classList.add('aberto');
+    player.setAttribute('aria-hidden', 'false');
+    const filaEl = document.getElementById('player-fila');
+    if (filaEl) { filaEl.hidden = false; filaEl.textContent = this.filaNome; }
+    this.manterTelaAcesa();
+
+    this._irParaSegmento(0, { anunciar: true });
+  },
+
+  /** Navega até o capítulo do segmento idx e começa a ler seus versículos. */
+  async _irParaSegmento(idx, { anunciar = false, aoFim = false } = {}) {
+    if (!this.modoFila) return;
+    if (idx < 0) idx = 0;
+    if (idx >= this.fila.length) { this._fimDaFila(); return; }
+
+    const seg = this.fila[idx];
+    this.filaIdx = idx;
+
+    if (seg.versao && seg.versao !== this.versao && Dados.versao(seg.versao)) {
+      this.versao = seg.versao;
+      Prefs.set('versao', seg.versao);
+    }
+
+    const gen = ++this.leituraGen;   // navegação é assíncrona: sela a transição
+    await this.ir(seg.code, seg.cap, undefined, { registrar: false });
+    if (!this.modoFila || gen !== this.leituraGen) return;
+
+    const versos = this._versosDoSegmento(seg);
+    this.filaVersos = versos;
+    this.filaVersoIdx = aoFim ? Math.max(0, versos.length - 1) : 0;
+
+    if (!versos.length) {
+      // segmento sem versículos válidos: pula para o vizinho na direção do movimento
+      if (aoFim) { if (idx > 0) this._irParaSegmento(idx - 1, { aoFim: true }); }
+      else this._irParaSegmento(idx + 1, { anunciar: true });
+      return;
+    }
+    this._lerPassoFila({ anunciarCap: anunciar });
+  },
+
+  /** Os versículos realmente presentes na tela que o segmento pede, em ordem. */
+  _versosDoSegmento(seg) {
+    let versos = this.versiculosNaTela();
+    if (Array.isArray(seg.versos)) {
+      const pedidos = new Set(seg.versos);
+      return versos.filter(v => pedidos.has(v));
+    }
+    if (seg.de != null) versos = versos.filter(v => v >= seg.de);
+    if (seg.ate != null) versos = versos.filter(v => v <= seg.ate);
+    return versos;
+  },
+
+  /** Lê o versículo corrente da fila; ao terminar, anda para o próximo. */
+  _lerPassoFila({ anunciarCap = false } = {}) {
+    if (!this.modoFila) return;
+    if (this.filaVersoIdx >= this.filaVersos.length) {
+      this._irParaSegmento(this.filaIdx + 1, { anunciar: true });
+      return;
+    }
+    const vers = this.filaVersos[this.filaVersoIdx];
+    this.lendoVers = vers;
+    this.pausado = false;
+    this.pintarLendo(vers);
+    this.rolarAteVersiculo(vers);
+    this.atualizarPlayer();
+
+    const el = document.querySelector(`#folha .v[data-vers="${vers}"]`);
+    const texto = el ? this.textoDoVersiculo(el).trim() : '';
+    const seg = this.fila[this.filaIdx];
+    const prefixo = anunciarCap
+      ? `${Dados.nomeCurto(seg.versao, seg.code)}, capítulo ${seg.cap}. ` : '';
+
+    const gen = ++this.leituraGen;
+    Locutor.parar();
+    setTimeout(() => {
+      if (!this.modoFila || gen !== this.leituraGen) return;
+      const seguir = () => {
+        if (this.modoFila && gen === this.leituraGen) { this.filaVersoIdx++; this._lerPassoFila(); }
+      };
+      Locutor.falar(prefixo + texto, { aoFim: seguir, aoErro: seguir });
+    }, 60);
+  },
+
+  /** Pular versículo dentro da fila (atravessa segmentos nas bordas). */
+  _pularFila(dir) {
+    if (!this.modoFila) return;
+    const j = this.filaVersoIdx + dir;
+    if (j >= 0 && j < this.filaVersos.length) {
+      this.filaVersoIdx = j;
+      this._lerPassoFila();
+      return;
+    }
+    if (dir > 0) this._irParaSegmento(this.filaIdx + 1, { anunciar: true });
+    else if (this.filaIdx > 0) this._irParaSegmento(this.filaIdx - 1, { aoFim: true });
+  },
+
+  /** Reposicionar a leitura tocando num versículo da tela (modo fila). */
+  _tocarVersoFila(vers) {
+    const i = this.filaVersos.indexOf(vers);
+    if (i < 0) return;             // fora do trecho da fila: ignora
+    this.filaVersoIdx = i;
+    this._lerPassoFila();
+  },
+
+  /** Play/pausa no modo fila (retomar re-lê o versículo atual, como no capítulo). */
+  alternarPausaFila() {
+    if (!this.modoFila) return;
+    if (this.lendoVers == null) { this._irParaSegmento(0, { anunciar: true }); return; }
+    if (this.pausado) {
+      this.pausado = false;
+      this._lerPassoFila();
+    } else {
+      this.leituraGen++;
+      Locutor.parar();
+      this.pausado = true;
+      this.atualizarPlayer();
+    }
+  },
+
+  /** Fim da fila: para, mas mantém o player para recomeçar. */
+  _fimDaFila() {
+    this.leituraGen++;
+    Locutor.parar();
+    this.pausado = true;
+    this.despintarLendo();
+    this.lendoVers = null;
+    this.atualizarPlayer();
+  },
+
   /** Play/pausa. Retomar re-lê o versículo atual do começo — é o jeito que
    *  funciona igual em todos os navegadores (o pause/resume nativo falha em
    *  vários aparelhos). Como o versículo é curto, mal se nota. */
   alternarPausa() {
+    if (this.modoFila) return this.alternarPausaFila();
     if (!this.ouvindo) return;
     if (this.lendoVers == null) {            // parado (fim do livro): recomeça o capítulo
       const lista = this.versiculosNaTela();
@@ -3215,6 +3632,7 @@ const App = {
   /** Pular para o versículo anterior/seguinte (atravessa capítulos do mesmo
    *  livro; para nas bordas do livro). */
   pularVers(dir) {
+    if (this.modoFila) return this._pularFila(dir);
     if (!this.ouvindo) return;
     const lista = this.versiculosNaTela();
     const i = lista.indexOf(this.lendoVers);
