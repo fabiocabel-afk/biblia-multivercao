@@ -3452,3 +3452,131 @@ body.ouvindo .folha { padding-bottom: 200px; }
 .lista-trecho-mover button:not(:disabled):active { transform: scale(.92); }
 .lista-trecho-x .icone { width: 17px; height: 17px; }
 .lista-trecho-x:hover { color: var(--rubrica); }
+
+/* =============================================== busca: barra + filtros ==== */
+
+/* linha do campo de busca com o botão da versão ativa à direita */
+.busca-barra {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.busca-barra .campo { flex: 1 1 auto; min-width: 0; }
+.busca-versao {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 10px;
+  border: 1px solid color-mix(in srgb, var(--tinta) 18%, transparent);
+  border-radius: var(--raio);
+  background: color-mix(in srgb, var(--tinta) 5%, transparent);
+  color: var(--tinta);
+  cursor: pointer;
+}
+.busca-versao:hover { background: color-mix(in srgb, var(--tinta) 9%, transparent); }
+.busca-versao .sigla {
+  font-family: var(--fonte-sigla);
+  font-size: 12.5px;
+  letter-spacing: .04em;
+  border: none;
+  padding: 0;
+  font-weight: 600;
+}
+
+/* dois campos dependentes (nível + detalhamento), lado a lado para poupar tela.
+ * Só o "Buscar em" visível → ocupa a linha toda; os dois → metade cada. */
+.busca-filtros { display: flex; flex-direction: row; align-items: flex-end; gap: 10px; margin-bottom: 14px; }
+.campo-rotulo { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.campo-rotulo.oculto { display: none; }
+.campo-rotulo > span {
+  font-size: 10.5px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--tinta-fraca);
+  padding-left: 2px;
+}
+.campo-sel {
+  width: 100%;
+  padding: 11px 34px 11px 12px;
+  font: inherit;
+  font-size: 15px;
+  color: var(--tinta);
+  background: color-mix(in srgb, var(--tinta) 5%, transparent);
+  border: 1px solid color-mix(in srgb, var(--tinta) 18%, transparent);
+  border-radius: var(--raio);
+  -webkit-appearance: none;
+  appearance: none;
+  background-image:
+    linear-gradient(45deg, transparent 50%, currentColor 50%),
+    linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position: right 15px center, right 10px center;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+  cursor: pointer;
+}
+.campo-sel:focus {
+  outline: none;
+  border-color: color-mix(in srgb, var(--rubrica) 55%, transparent);
+}
+
+/* =============================================== busca: multiversão ======== */
+
+.busca-multiversao { margin: -4px 0 14px; }
+.mv-buscando { font-size: 13px; color: var(--tinta-fraca); padding: 4px 2px; }
+.mv-cabec {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 11px 12px;
+  border-radius: var(--raio);
+  border: 1px solid color-mix(in srgb, var(--rubrica) 35%, transparent);
+  background: color-mix(in srgb, var(--rubrica) 8%, transparent);
+  color: var(--tinta);
+  cursor: pointer;
+  text-align: left;
+}
+.mv-cabec .icone { width: 18px; height: 18px; color: var(--rubrica); flex: none; }
+.mv-cabec .mv-texto { flex: 1; font-size: 13.5px; font-weight: 600; }
+.mv-cabec .mv-seta { font-size: 10px; color: var(--tinta-fraca); flex: none; }
+.mv-lista {
+  margin-top: 6px;
+  border: 1px solid color-mix(in srgb, var(--tinta) 12%, transparent);
+  border-radius: var(--raio);
+  overflow: hidden;
+}
+.mv-lista.fechada { display: none; }
+.mv-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  background: none;
+  color: var(--tinta);
+  cursor: pointer;
+  border-bottom: 1px solid color-mix(in srgb, var(--tinta) 8%, transparent);
+  text-align: left;
+}
+.mv-item:last-child { border-bottom: none; }
+.mv-item:hover { background: color-mix(in srgb, var(--tinta) 6%, transparent); }
+.mv-item .sigla {
+  font-family: var(--fonte-sigla);
+  font-size: 12px;
+  padding: 4px 7px;
+  border: 1px solid color-mix(in srgb, var(--tinta) 30%, transparent);
+  border-radius: 4px;
+  flex: none;
+}
+.mv-item .mv-nome { flex: 1; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mv-item .mv-conta {
+  flex: none;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--rubrica);
+  background: color-mix(in srgb, var(--rubrica) 12%, transparent);
+  padding: 2px 9px;
+  border-radius: 999px;
+}

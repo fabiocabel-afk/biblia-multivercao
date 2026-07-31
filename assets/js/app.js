@@ -563,10 +563,12 @@ const App = {
     const alvo = this.alvoVersao || 'principal';
 
     document.getElementById('titulo-versao').textContent =
-      alvo === 'comparar' ? 'Versão de baixo' : 'Versões';
+      alvo === 'comparar' ? 'Versão de baixo' : alvo === 'busca' ? 'Versão da busca' : 'Versões';
 
     corpo.innerHTML = this.htmlListaVersoes(
-      alvo === 'comparar' ? Prefs.get('versaoComparar') : this.versao);
+      alvo === 'comparar' ? Prefs.get('versaoComparar')
+        : alvo === 'busca' ? (this.versaoBusca || this.versao)
+        : this.versao);
 
     corpo.querySelectorAll('[data-versao]').forEach(el => {
       el.onclick = () => {
@@ -577,6 +579,9 @@ const App = {
           this.alvoVersao = 'principal';
           this.fecharPaineis();
           if (this.comparando) this.desenharComparacao();
+        } else if (alvo === 'busca') {
+          // troca a versão da busca e volta ao painel de busca
+          this.trocarVersaoBusca(code);
         } else {
           this.trocarVersao(code);
         }
@@ -586,102 +591,131 @@ const App = {
 
   /* ================================================================ busca */
 
-  /* O funil de busca era uma tira comprida de pílulas — todas as categorias,
-   * todos os testamentos, tudo à mostra o tempo todo, comendo a tela que os
-   * resultados precisavam. Agora são três dobras: Toda a Bíblia, Por categoria
-   * e Por livro. Abre uma por vez, e quando tudo está fechado sobra só uma
-   * linha dizendo onde a busca vai acontecer. */
-  dobraF: null,
+  /* O escopo é escolhido em dois campos dependentes: o primeiro diz o NÍVEL
+   * (toda a Bíblia, por testamento, por categoria ou por livro) e o segundo,
+   * que só aparece quando faz sentido, o DETALHE (qual testamento, categoria ou
+   * livro). Selects nativos: nada fecha sozinho e o layout não pula. */
 
   desenharFiltros() {
     const alvo = document.getElementById('filtros-busca');
-    const arv = Dados.arvore(this.versao);
+    this.versaoBusca = this.versaoBusca || this.versao;
+    const arv = Dados.arvore(this.versaoBusca);
     const e = Busca.escopo;
+    const nivel = e.tipo;   // 'tudo' | 'testamento' | 'categoria' | 'livro'
 
-    const marcado = (tipo, id) => e.tipo === tipo && e.id === id ? 'ativa' : '';
-
-    const dobra = (id, titulo, dentro) => {
-      const aberta = this.dobraF === id;
-      return `<button class="dobra funil" data-f="${id}" aria-expanded="${aberta}">
-          <span class="seta">▶</span><span>${titulo}</span>
-        </button>
-        <div class="dentro ${aberta ? '' : 'fechada'}">${dentro}</div>`;
-    };
-
-    const testamentos = `
-      <button class="linha ${marcado('tudo', null)}" data-e="tudo|">
-        <span>Toda a Bíblia</span></button>
-      ${arv.testaments.map(t => `<button class="linha ${marcado('testamento', t.id)}"
-        data-e="testamento|${t.id}"><span>${t.name}</span></button>`).join('')}`;
-
-    const categorias = arv.testaments.flatMap(t => t.categories).map(c =>
-      `<button class="linha ${marcado('categoria', c.id)}" data-e="categoria|${c.id}">
-        <span>${c.name}</span></button>`).join('');
-
-    const livros = Dados.livros(this.versao).map(b =>
-      `<button class="linha ${marcado('livro', b.code)}" data-e="livro|${b.code}">
-        <span>${b.name}</span><span class="sub">${b.chapters || ''}</span>
-      </button>`).join('');
+    const niveis = [
+      ['tudo', 'Toda a Bíblia'],
+      ['testamento', 'Por Testamento'],
+      ['categoria', 'Por Categoria'],
+      ['livro', 'Por Livro'],
+    ];
+    const detalhes = this._opcoesDetalhe(nivel, arv);
+    const temDetalhe = nivel !== 'tudo';
 
     alvo.innerHTML = `
-      <button class="escopo-atual" id="abrir-funil">
-        <span class="etiqueta">Buscar em</span>
-        <span class="valor">${Leitura.escapar(e.nome)}</span>
-        <span class="seta">${this.dobraF ? '▲' : '▼'}</span>
-      </button>
-      <div class="caixa-funil ${this.dobraF ? '' : 'fechada'}">
-        ${dobra('tudo', 'Toda a Bíblia e Testamentos', testamentos)}
-        ${dobra('categoria', 'Por categoria', categorias)}
-        ${dobra('livro', 'Por livro', livros)}
-      </div>`;
+      <label class="campo-rotulo">
+        <span>Buscar em</span>
+        <select class="campo-sel" id="busca-nivel">
+          ${niveis.map(([v, t]) => `<option value="${v}" ${v === nivel ? 'selected' : ''}>${t}</option>`).join('')}
+        </select>
+      </label>
+      <label class="campo-rotulo ${temDetalhe ? '' : 'oculto'}" id="busca-detalhe-rot">
+        <span>Onde</span>
+        <select class="campo-sel" id="busca-detalhe">
+          ${detalhes.map(o => `<option value="${o.id}" ${o.id === e.id ? 'selected' : ''}>${Leitura.escapar(o.nome)}</option>`).join('')}
+        </select>
+      </label>`;
 
-    document.getElementById('abrir-funil').onclick = () => {
-      this.dobraF = this.dobraF ? null : 'tudo';
+    // Campo 1: muda o nível. "Toda a Bíblia" some com o Campo 2 e busca global.
+    document.getElementById('busca-nivel').onchange = ev => {
+      const nv = ev.target.value;
+      if (nv === 'tudo') {
+        Busca.escopo = { tipo: 'tudo', id: null, nome: 'Toda a Bíblia' };
+      } else {
+        const ops = this._opcoesDetalhe(nv, arv);
+        const primeiro = ops[0] || { id: null, nome: '' };
+        Busca.escopo = { tipo: nv, id: primeiro.id, nome: primeiro.nome };
+      }
       this.desenharFiltros();
+      this.rodarBusca();
     };
 
-    alvo.querySelectorAll('[data-f]').forEach(el => {
-      el.onclick = () => {
-        this.dobraF = this.dobraF === el.dataset.f ? null : el.dataset.f;
-        this.desenharFiltros();
-      };
-    });
+    // Campo 2: escolhe o detalhamento dentro do nível.
+    const det = document.getElementById('busca-detalhe');
+    if (det) det.onchange = ev => {
+      const id = ev.target.value;
+      const nome = ev.target.selectedOptions[0].textContent.trim();
+      Busca.escopo = { tipo: nivel, id, nome };
+      this.rodarBusca();
+    };
+  },
 
-    alvo.querySelectorAll('[data-e]').forEach(el => {
-      el.onclick = () => {
-        const [tipo, id] = el.dataset.e.split('|');
-        const nome = el.querySelector('span').textContent;
-        Busca.escopo = { tipo, id: id || null, nome };
-        this.dobraF = null;   // escolheu: recolhe e devolve a tela aos resultados
-        this.desenharFiltros();
-        this.rodarBusca();
-      };
-    });
+  /** As opções do segundo campo, conforme o nível escolhido no primeiro. */
+  _opcoesDetalhe(nivel, arv) {
+    arv = arv || Dados.arvore(this.versaoBusca || this.versao);
+    if (nivel === 'testamento') return arv.testaments.map(t => ({ id: t.id, nome: t.name }));
+    if (nivel === 'categoria') return arv.testaments.flatMap(t => t.categories).map(c => ({ id: c.id, nome: c.name }));
+    if (nivel === 'livro') return Dados.livros(this.versaoBusca || this.versao).map(b => ({ id: b.code, nome: b.name }));
+    return [];
+  },
+
+  /** A sigla da versão que a busca usa (botão à direita da barra). */
+  atualizarBuscaVersao() {
+    this.versaoBusca = this.versaoBusca || this.versao;
+    const s = document.getElementById('busca-versao-sigla');
+    if (s) s.textContent = this.versaoBusca;
+  },
+
+  /** Reabre o painel de busca (depois de trocar a versão pelo botão da busca). */
+  _reabrirBusca() {
+    this.desenharFiltros();
+    this.atualizarBuscaVersao();
+    this.abrir('painel-busca');
+    this.rodarBusca();
+    setTimeout(() => { const c = document.getElementById('campo-busca'); if (c) c.focus(); }, 180);
+  },
+
+  /** Troca só a versão da BUSCA e refaz a procura. Não mexe na página
+   *  principal (nem na versão aberta, na sigla do topo ou no capítulo lido) —
+   *  a busca é uma consulta à parte, não uma troca de leitura. */
+  trocarVersaoBusca(code) {
+    this.alvoVersao = 'principal';
+    const anterior = this.versaoBusca || this.versao;
+    if (code !== anterior) {
+      // escopo preso num cânone que a nova versão não tem volta a global
+      if (Dados.canoneDe(anterior) !== Dados.canoneDe(code)) {
+        Busca.escopo = { tipo: 'tudo', id: null, nome: 'Toda a Bíblia' };
+      }
+      this.versaoBusca = code;
+    }
+    this._reabrirBusca();
   },
 
   async rodarBusca() {
     const termo = document.getElementById('campo-busca').value;
     const alvo = document.getElementById('resultados-busca');
+    const mv = document.getElementById('busca-multiversao');
+    this.versaoBusca = this.versaoBusca || this.versao;
     Busca.cancelar();
+    if (mv) { mv.hidden = true; mv.innerHTML = ''; }
 
     if (termo.trim().length < 2) {
       alvo.innerHTML = `<div class="estado">Digite ao menos duas letras.</div>`;
       return;
     }
 
-    
     alvo.innerHTML = '<div class="contagem" id="progresso-busca">Procurando…</div>'
       + '<div id="lista-resultados"></div>';
     const lista = document.getElementById('lista-resultados');
     const prog = document.getElementById('progresso-busca');
 
-    const r = await Busca.procurar(this.versao, termo,
+    const r = await Busca.procurar(this.versaoBusca, termo,
       (i, n, nome) => { prog.textContent = `Procurando em ${nome} — ${i} de ${n}`; },
-      (achados, alvoNorm) => {
+      (achados, termos) => {
         lista.insertAdjacentHTML('beforeend', achados.map(a => `
           <button class="resultado" data-code="${a.code}" data-cap="${a.cap}" data-vers="${a.vers}">
             <span class="ref-res">${Leitura.escapar(a.nome)} ${a.cap}:${a.vers}</span>
-            <span class="trecho">${Busca.realcar(a.texto, alvoNorm)}</span>
+            <span class="trecho">${Busca.realcar(a.texto, termos)}</span>
           </button>`).join(''));
       });
 
@@ -691,14 +725,76 @@ const App = {
       : '';
     if (!r.total) {
       lista.innerHTML = `<div class="estado">Nada encontrado em
-        ${Busca.escopo.nome}.<br>Tente outra palavra ou amplie o filtro.</div>`;
+        ${Busca.escopo.nome} <strong>(${this.versaoBusca})</strong>.<br>Tente outra palavra ou amplie o filtro.</div>`;
+      this._buscarNasOutras(termo);   // será que existe noutra versão?
     }
 
     lista.querySelectorAll('.resultado').forEach(el => {
       el.onclick = () => {
         this.fecharPaineis();
-        this.ir(el.dataset.code, +el.dataset.cap, +el.dataset.vers);
+        this.abrirResultadoBusca(el.dataset.code, +el.dataset.cap, +el.dataset.vers);
       };
+    });
+  },
+
+  /** Abre um resultado da busca. Se ele veio de uma versão de busca diferente
+   *  da que está aberta na página, aí sim adota essa versão — porque agora é
+   *  uma navegação explícita para LER o trecho, não mais só procurar. */
+  abrirResultadoBusca(code, cap, vers) {
+    if (this.versaoBusca && this.versaoBusca !== this.versao) {
+      this.versao = this.versaoBusca;
+      Prefs.set('versao', this.versao);
+      const s = document.getElementById('sigla-versao');
+      if (s) s.textContent = this.versao;
+    }
+    this.ir(code, cap, vers);
+  },
+
+  /** Zero resultados na versão da busca: procura nas demais e, se achar, mostra
+   *  um marcador com o total por versão (sem o texto), que abre e deixa trocar. */
+  async _buscarNasOutras(termo) {
+    const mv = document.getElementById('busca-multiversao');
+    if (!mv) return;
+    const termos = Busca.termos(termo);
+    const outras = (Dados.versoes || []).filter(v => v.code !== this.versaoBusca);
+    if (!outras.length || !termos.length) return;
+
+    mv.hidden = false;
+    mv.innerHTML = '<div class="mv-buscando">Procurando em outras versões…</div>';
+
+    const achados = await Busca.contarNasOutras(this.versaoBusca, termos, (i, n) => {
+      const el = mv.querySelector('.mv-buscando');
+      if (el) el.textContent = `Procurando em outras versões… (${i}/${n})`;
+    });
+
+    if (achados === null) return;                    // nova digitação cancelou
+    if (!achados.length) { mv.hidden = true; mv.innerHTML = ''; return; }
+
+    const totalV = achados.length;
+    mv.innerHTML = `
+      <button class="mv-cabec" id="mv-abrir" aria-expanded="false">
+        <svg class="icone"><use href="#i-info"/></svg>
+        <span class="mv-texto">Encontrado em ${totalV} outra${totalV > 1 ? 's' : ''} versõe${totalV > 1 ? 's' : ''}</span>
+        <span class="mv-seta">▶</span>
+      </button>
+      <div class="mv-lista fechada" id="mv-lista">
+        ${achados.map(a => `
+          <button class="mv-item" data-mv="${a.code}">
+            <span class="sigla">${a.code}</span>
+            <span class="mv-nome">${Leitura.escapar(a.name)}</span>
+            <span class="mv-conta">${a.total}</span>
+          </button>`).join('')}
+      </div>`;
+
+    const cabec = document.getElementById('mv-abrir');
+    const listaMv = document.getElementById('mv-lista');
+    cabec.onclick = () => {
+      const aberta = listaMv.classList.toggle('fechada');
+      cabec.setAttribute('aria-expanded', String(!aberta));
+      cabec.querySelector('.mv-seta').textContent = aberta ? '▶' : '▼';
+    };
+    mv.querySelectorAll('[data-mv]').forEach(el => {
+      el.onclick = () => this.trocarVersaoBusca(el.dataset.mv);
     });
   },
 
@@ -3018,6 +3114,12 @@ const App = {
     q('btn-arvore').onclick = () => { this.desenharArvore(); this.abrir('painel-arvore'); };
     q('btn-ref').onclick = () => { this.desenharCapitulos(this.code); this.abrir('painel-arvore'); };
     q('btn-versao').onclick = () => { this.alvoVersao = 'principal'; this.desenharVersoes(); this.abrir('painel-versao'); };
+    q('busca-versao').onclick = () => {
+      this.alvoVersao = 'busca';
+      this.desenharVersoes();
+      this.abrir('painel-versao');
+      this._volta = () => this._reabrirBusca();   // a seta "voltar" retorna à busca
+    };
     q('btn-comparar').onclick = () => this.alternarComparacao();
     q('btn-antes').onclick = () => this.passo(-1);
     q('btn-depois').onclick = () => this.passo(1);
@@ -3026,7 +3128,7 @@ const App = {
      * do botão e fecha ao escolher um item ou ao tocar fora. */
     const menu = q('menu-flutuante');
     const abrirItem = {
-      busca: () => { this.desenharFiltros(); this.abrir('painel-busca');
+      busca: () => { this.versaoBusca = this.versao; this.desenharFiltros(); this.atualizarBuscaVersao(); this.abrir('painel-busca');
                      setTimeout(() => q('campo-busca').focus(), 220); },
       historico: () => { this.desenharHistorico(); this.abrir('painel-historico'); },
       marcadores: () => { this.desenharMarcadores(); this.abrir('painel-marcadores'); },
@@ -3211,7 +3313,9 @@ const App = {
       if (e.key === 'ArrowRight') this.passo(1);
       if (e.key === '/') {
         e.preventDefault();
+        this.versaoBusca = this.versao;
         this.desenharFiltros();
+        this.atualizarBuscaVersao();
         this.abrir('painel-busca');
         setTimeout(() => document.getElementById('campo-busca').focus(), 220);
       }

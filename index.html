@@ -212,10 +212,16 @@
     <button data-fechar aria-label="Fechar"><svg class="icone"><use href="#i-fechar"/></svg></button>
   </header>
   <div class="corpo">
-    <input class="campo" id="campo-busca" type="search" placeholder="Palavra ou expressão" autocomplete="off">
-    <div class="filtros" id="filtros-busca"></div>
+    <div class="busca-barra">
+      <input class="campo campo-busca" id="campo-busca" type="search" placeholder="Palavra ou expressão" autocomplete="off">
+      <button class="busca-versao" id="busca-versao" title="Versão da busca" aria-label="Versão da busca">
+        <span class="sigla" id="busca-versao-sigla">—</span>
+      </button>
+    </div>
+    <div class="busca-filtros" id="filtros-busca"></div>
+    <div class="busca-multiversao" id="busca-multiversao" hidden></div>
     <div id="resultados-busca">
-      <div class="estado">Digite para buscar no texto da versão aberta.<br>Use os filtros para estreitar por parte da Bíblia.</div>
+      <div class="estado">Digite para buscar no texto da versão ativa.<br>Use os filtros para estreitar por parte da Bíblia.</div>
     </div>
   </div>
 </aside>
