@@ -1707,15 +1707,8 @@ body.selecionando .rodape { transform: translateY(110%); }
   color: var(--tinta-fraca);
 }
 
-/* seta de voltar no cabeçalho de um painel */
-.voltar-painel {
-  background: none;
-  cursor: pointer;
-  color: var(--tinta);
-  padding: 4px;
-  margin-right: 2px;
-}
-.voltar-painel .icone { width: 20px; height: 20px; }
+/* seta de voltar no cabeçalho de um painel (irmã do X, à esquerda) */
+.voltar-painel { cursor: pointer; }
 
 /* ---------------------------------------------- MODO VISÃO DO ESTUDO */
 .corpo-estudo-ver {

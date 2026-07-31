@@ -244,6 +244,34 @@ const App = {
     document.getElementById(id).classList.add('aberto');
     document.getElementById(id).setAttribute('aria-hidden', 'false');
     document.getElementById('veu').classList.add('aberto');
+    // por padrão, "voltar" de um painel recém-aberto = fechar (voltar à Bíblia).
+    // Cada tela que tem um passo anterior real sobrescreve isto depois de abrir.
+    this._volta = null;
+  },
+
+  /* O "voltar" (seta à esquerda no cabeçalho): vai para a tela anterior desta,
+   * definida por quem abriu. Sem anterior, fecha e volta à leitura. */
+  voltar() {
+    const anterior = this._volta;
+    if (anterior) anterior();
+    else this.fecharPaineis();
+  },
+
+  /* Reabre o menu flutuante do canto (o "menu anterior" de quem foi aberto por
+   * ele), fechando o painel atual. */
+  abrirMenuFlutuante() {
+    this.fecharPaineis();
+    const menu = document.getElementById('menu-flutuante');
+    if (!menu) return;
+    menu.classList.add('aberto');
+    menu.setAttribute('aria-hidden', 'false');
+  },
+
+  /* Abre a lista de estudos e marca que, dali, voltar = menu. */
+  _abrirEstudosLista() {
+    this.desenharEstudos();
+    this.abrir('painel-estudos');
+    this._volta = () => this.abrirMenuFlutuante();
   },
 
   fecharPaineis() {
@@ -1021,13 +1049,13 @@ const App = {
 
     document.getElementById('titulo-estudo-ver').textContent = Estudos.nomeDe(e) || 'Estudo';
     const corpo = document.getElementById('corpo-estudo-ver');
+    corpo.classList.remove('editando');
     corpo.innerHTML = '<div class="estado peq">Montando o estudo…</div>';
     this.abrir('painel-estudo-ver');
 
-    document.getElementById('estudo-ver-voltar').onclick = () => {
-      this.desenharEstudos();
-      this.abrir('painel-estudos');
-    };
+    // daqui, voltar leva de volta à LISTA de estudos (e não à Bíblia)
+    this._volta = () => this._abrirEstudosLista();
+    document.getElementById('estudo-ver-voltar').onclick = () => this.voltar();
 
     // monta os blocos na ordem; um bloco de versículos pode render mais de um
     // container se o intervalo antigo cruzava capítulos
@@ -1143,14 +1171,11 @@ const App = {
       </div>`;
     this.abrir('painel-estudo-ver');
 
-    // voltar/concluir gravam e voltam para a visão
-    const sairEditando = () => { corpo.classList.remove('editando'); };
-    document.getElementById('estudo-ver-voltar').onclick = () => {
-      Estudos.salvarBlocos(id, blocos); sairEditando(); this.verEstudo(id);
-    };
-    document.getElementById('estudo-edit-concluir').onclick = () => {
-      Estudos.salvarBlocos(id, blocos); sairEditando(); this.verEstudo(id);
-    };
+    // daqui, voltar/concluir salvam e levam de volta à VISÃO do estudo
+    this._volta = () => this.verEstudo(id);
+    const sairSalvando = () => { Estudos.salvarBlocos(id, blocos); corpo.classList.remove('editando'); };
+    document.getElementById('estudo-ver-voltar').onclick = () => { sairSalvando(); this.voltar(); };
+    document.getElementById('estudo-edit-concluir').onclick = () => { sairSalvando(); this.voltar(); };
 
     const area = document.getElementById('estudo-edit-blocos');
 
@@ -2810,7 +2835,7 @@ const App = {
                      setTimeout(() => q('campo-busca').focus(), 220); },
       historico: () => { this.desenharHistorico(); this.abrir('painel-historico'); },
       marcadores: () => { this.desenharMarcadores(); this.abrir('painel-marcadores'); },
-      estudos: () => { this.desenharEstudos(); this.abrir('painel-estudos'); },
+      estudos: () => this._abrirEstudosLista(),
       caderno: () => { this.desenharCaderno(); this.abrir('painel-caderno'); },
       referencias: () => this.abrirReferenciasCruzadas(),
       ouvir: () => this.iniciarOuvir(),
@@ -2833,7 +2858,12 @@ const App = {
     q('voltar-origem').onclick = () => this.voltarParaOrigem();
 
     menu.querySelectorAll('[data-menu]').forEach(el => {
-      el.onclick = () => { fecharMenu(); abrirItem[el.dataset.menu](); };
+      el.onclick = () => {
+        fecharMenu();
+        abrirItem[el.dataset.menu]();
+        // de qualquer painel aberto pelo menu, "voltar" reabre o menu
+        this._volta = () => this.abrirMenuFlutuante();
+      };
     });
 
     // tocar fora do menu o fecha
@@ -2899,7 +2929,15 @@ const App = {
 
     q('veu').onclick = () => this.fecharPaineis();
     document.querySelectorAll('[data-fechar]').forEach(el => {
-      el.onclick = () => this.fecharPaineis();
+      el.onclick = () => { this._volta = null; this.fecharPaineis(); };
+    });
+    document.querySelectorAll('[data-voltar]').forEach(el => {
+      el.onclick = e => {
+        // não deixa este clique chegar ao fechador do menu flutuante (que
+        // fecharia o menu que o próprio "voltar" acabou de reabrir)
+        e.stopPropagation();
+        this.voltar();
+      };
     });
     document.querySelector('[data-fechar-tirinha]').onclick = () => this.fecharTirinha();
 
