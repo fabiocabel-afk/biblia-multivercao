@@ -375,6 +375,17 @@ button {
 }
 .dialogo-acoes { flex: none; display: flex; gap: 10px; }
 .dialogo-acoes .botao { flex: 1; }
+.dialogo-campo { flex: none; margin-bottom: 18px; }
+
+/* popup da roda de cores: um pouco mais largo, com a roda rolando por dentro */
+.dialogo.dialogo-cor { max-width: 360px; }
+.cor-corpo {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  margin-bottom: 16px;
+}
 
 .painel {
   position: fixed;
@@ -2310,7 +2321,7 @@ body.com-refs-fixas .painel-refs-fixas.alto .acoes-ref {
   color: var(--cromo-texto);
 }
 
-.atalho-fixado .icone { stroke: var(--rubrica); width: 20px; height: 20px; }
+.atalho-fixado .icone { stroke: var(--cromo-texto); width: 20px; height: 20px; }
 .atalho-fixado[hidden] { display: none; }
 
 /* ==================== reordenar fixados ============================ */
@@ -3736,3 +3747,221 @@ body.ouvindo .folha { padding-bottom: 200px; }
   font-weight: 700;
   line-height: 1;
 }
+
+/* ============================================================ barras de rolagem
+ * Finas e no tom da tinta, no lugar das barras grossas padrão do navegador.
+ * Seguem o tema: escurecem no claro, clareiam no escuro (a tinta já faz isso). */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--tinta) 30%, transparent) transparent;
+}
+::-webkit-scrollbar { width: 9px; height: 9px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--tinta) 26%, transparent);
+  border-radius: 9px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--tinta) 42%, transparent);
+  background-clip: padding-box;
+}
+/* nas áreas de cromo escuro (cabeçalho, player) a tinta some; usa o texto-cromo */
+.topo ::-webkit-scrollbar-thumb,
+.menu-flutuante ::-webkit-scrollbar-thumb,
+.player-lista::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--cromo-texto) 30%, transparent);
+  background-clip: padding-box;
+}
+
+/* ======================================================== seletor no tema =====
+ * Substitui a lista suspensa nativa. A casca imita a caixa fechada dos campos;
+ * a lista aberta é desenhada por nós, no papel do tema. */
+.sel-nativo {                     /* o <select> real: escondido, mas ainda ativo */
+  position: absolute;
+  width: 1px; height: 1px;
+  margin: -1px; padding: 0;
+  opacity: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+.sel-tema {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  font-size: 15px;
+  color: var(--tinta);
+  background: color-mix(in srgb, var(--tinta) 5%, transparent) !important;
+  background-image: none !important;   /* mata a setinha herdada de .campo-sel */
+  border: 1px solid color-mix(in srgb, var(--tinta) 18%, transparent);
+  border-radius: var(--raio);
+  padding: 11px 12px;
+}
+.sel-tema.fmt-fonte {                 /* barra de formatação do editor: menor */
+  height: 38px;
+  padding: 0 10px;
+  font-size: 13px;
+  font-family: var(--fonte-ui);
+}
+.sel-tema:hover { background: color-mix(in srgb, var(--tinta) 8%, transparent) !important; }
+.sel-tema:disabled { opacity: .5; cursor: default; }
+.sel-tema-txt {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.sel-tema-seta {
+  flex: none;
+  width: 8px; height: 8px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(45deg);
+  margin-bottom: 3px;
+  opacity: .55;
+  transition: transform .16s ease;
+}
+.sel-tema.aberta .sel-tema-seta { transform: rotate(225deg); margin-bottom: -3px; }
+
+.sel-lista {
+  z-index: 100;
+  background: var(--papel);
+  color: var(--tinta);
+  border: 1px solid color-mix(in srgb, var(--tinta) 18%, transparent);
+  border-radius: var(--raio);
+  box-shadow: 0 12px 34px rgb(0 0 0 / .32);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 4px;
+}
+.sel-opcao {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 10px 12px;
+  border-radius: 4px;
+  font: inherit;
+  font-size: 15px;
+  color: var(--tinta);
+  cursor: pointer;
+}
+.sel-opcao:hover { background: color-mix(in srgb, var(--tinta) 8%, transparent); }
+.sel-opcao.marcada { background: color-mix(in srgb, var(--rubrica) 14%, transparent); font-weight: 600; }
+.sel-opcao.inerte { opacity: .5; cursor: default; }
+
+/* ==================================================== controles no tema =====
+ * Checkbox, radio e slider nativos ganham a cara do app. O acento é a rubrica;
+ * o "trilho" e as bordas seguem a tinta (que amarela/escurece com o tema). */
+input[type="checkbox"], input[type="radio"], input[type="range"], .deslizador {
+  accent-color: var(--rubrica);
+}
+
+/* ----- caixa de marcar comum (ex.: versões que aparecem na fita) */
+input[type="checkbox"] {
+  -webkit-appearance: none;
+  appearance: none;
+  flex: none;
+  width: 20px; height: 20px;
+  border: 1.5px solid color-mix(in srgb, var(--tinta) 40%, transparent);
+  border-radius: 5px;
+  background: transparent;
+  position: relative;
+  vertical-align: middle;
+  cursor: pointer;
+  transition: background .15s ease, border-color .15s ease;
+}
+input[type="checkbox"]:checked { background: var(--rubrica); border-color: var(--rubrica); }
+input[type="checkbox"]:checked::after {
+  content: '';
+  position: absolute;
+  left: 6px; top: 2px;
+  width: 5px; height: 10px;
+  border: solid var(--papel);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+/* ----- interruptor: um botão deslizante (vence a regra acima por ser mais específica) */
+.interruptor input[type="checkbox"] {
+  width: 44px; height: 26px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--tinta) 20%, transparent);
+  background: color-mix(in srgb, var(--tinta) 22%, transparent);
+}
+.interruptor input[type="checkbox"]::after {
+  content: '';
+  position: absolute;
+  top: 50%; left: 3px;
+  width: 20px; height: 20px;
+  border: none; border-radius: 50%;
+  background: var(--papel);
+  transform: translateY(-50%) rotate(0);
+  box-shadow: 0 1px 3px rgb(0 0 0 / .3);
+  transition: left .18s ease;
+}
+.interruptor input[type="checkbox"]:checked { background: var(--rubrica); border-color: var(--rubrica); }
+.interruptor input[type="checkbox"]:checked::after { left: 21px; }
+
+/* ----- radio no tema (ex.: versículo corrido x um por linha) */
+input[type="radio"] {
+  -webkit-appearance: none;
+  appearance: none;
+  flex: none;
+  width: 20px; height: 20px;
+  border: 1.5px solid color-mix(in srgb, var(--tinta) 40%, transparent);
+  border-radius: 50%;
+  background: transparent;
+  position: relative;
+  vertical-align: middle;
+  cursor: pointer;
+}
+input[type="radio"]:checked { border-color: var(--rubrica); }
+input[type="radio"]:checked::after {
+  content: '';
+  position: absolute;
+  inset: 3px;
+  border-radius: 50%;
+  background: var(--rubrica);
+}
+
+/* ----- slider (tamanho da letra, temperatura, vibração…) com trilho e botão no tema */
+input[type="range"], .deslizador {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--tinta) 18%, transparent);
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 20px; height: 20px;
+  border-radius: 50%;
+  background: var(--rubrica);
+  border: 2px solid var(--papel);
+  box-shadow: 0 1px 3px rgb(0 0 0 / .3);
+  cursor: pointer;
+  margin-top: -7px;
+}
+input[type="range"]::-moz-range-thumb {
+  width: 20px; height: 20px;
+  border: 2px solid var(--papel);
+  border-radius: 50%;
+  background: var(--rubrica);
+  box-shadow: 0 1px 3px rgb(0 0 0 / .3);
+  cursor: pointer;
+}
+input[type="range"]::-webkit-slider-runnable-track { height: 6px; border-radius: 999px; }
+input[type="range"]::-moz-range-track {
+  height: 6px; border-radius: 999px;
+  background: color-mix(in srgb, var(--tinta) 18%, transparent);
+}
+
+/* tira o "x" nativo do campo de busca (o app já tem o seu próprio) */
+input[type="search"]::-webkit-search-cancel-button,
+input[type="search"]::-webkit-search-decoration { -webkit-appearance: none; appearance: none; }

@@ -111,9 +111,10 @@ const RodaDeCores = {
    * @param {string} corInicial  hex de partida
    * @param {(hex:string)=>void} aoMudar  chamado a cada movimento
    */
-  montar(caixa, corInicial, aoMudar) {
+  montar(caixa, corInicial, aoMudar, opts = {}) {
     const inicio = Cores.hexParaHsl(corInicial);
     const estado = { h: inicio.h, s: Math.max(inicio.s, 12), l: inicio.l };
+    const semAplicar = !!opts.semAplicar;   // no popup, quem aplica é o "Salvar"
 
     caixa.innerHTML = `
       <div class="roda-linha">
@@ -129,7 +130,7 @@ const RodaDeCores = {
       <div class="roda-rodape">
         <input class="roda-hex" type="text" spellcheck="false" autocomplete="off"
           maxlength="7" aria-label="Código hexadecimal da cor">
-        <button type="button" class="roda-aplicar">Aplicar</button>
+        ${semAplicar ? '' : '<button type="button" class="roda-aplicar">Aplicar</button>'}
       </div>`;
 
     const roda    = caixa.querySelector('.roda');
@@ -168,9 +169,12 @@ const RodaDeCores = {
 
       // o próprio botão "Aplicar" mostra a cor escolhida, com o texto sempre
       // contrastando; nada é aplicado ainda — só quando a pessoa apertar.
-      aplicar.style.background = hex;
-      aplicar.style.color = Cores.contraste(hex);
+      if (aplicar) {
+        aplicar.style.background = hex;
+        aplicar.style.color = Cores.contraste(hex);
+      }
       if (document.activeElement !== rotulo) rotulo.value = hex.toUpperCase();
+      if (opts.vivo) opts.vivo(hex);   // no popup, o "Salvar" lê essa cor viva
     };
 
     /* --------------------------------------------------------- o arrastar */
@@ -258,14 +262,22 @@ const RodaDeCores = {
     rotulo.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); rotulo.blur(); } });
 
     /* ---------- APLICAR: o único lugar que aplica a cor e a guarda ---------- */
-    aplicar.addEventListener('click', () => {
-      const hex = Cores.hslParaHex(estado.h, estado.s, estado.l);
-      aoMudar(hex);                    // aplica no alvo (texto, marcador, fundo…)
-      CoresRecentes.registrar(hex);    // só agora entra nos recentes
-      pintarPaleta();
-    });
+    if (aplicar) {
+      aplicar.addEventListener('click', () => {
+        const hex = Cores.hslParaHex(estado.h, estado.s, estado.l);
+        aoMudar(hex);                    // aplica no alvo (texto, marcador, fundo…)
+        CoresRecentes.registrar(hex);    // só agora entra nos recentes
+        pintarPaleta();
+      });
+    }
 
     pintarPaleta();
     desenhar(false);
+
+    // controlador para quem monta em popup: lê a cor viva e força um redesenho
+    return {
+      corAtual: () => Cores.hslParaHex(estado.h, estado.s, estado.l),
+      redesenhar: () => desenhar(false),
+    };
   },
 };

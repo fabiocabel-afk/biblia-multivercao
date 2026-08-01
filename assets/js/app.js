@@ -42,6 +42,7 @@ const App = {
     }
 
     Locutor.preparar();   // já pede a lista de vozes do aparelho (chega assíncrona)
+    Seletor.iniciar();    // troca as listas suspensas nativas pelas do tema
     this.ligarEventos();
     // registra também a abertura: reabrir no mesmo lugar não duplica, porque o
     // Histórico traz a visita repetida para o topo em vez de acrescentar outra.
@@ -1084,9 +1085,9 @@ const App = {
     });
 
     corpo.querySelectorAll('[data-renomear]').forEach(el => {
-      el.onclick = () => {
+      el.onclick = async () => {
         const e = achar(el.dataset.renomear);
-        const nome = prompt('Nome do estudo:', e ? Estudos.nomeDe(e) : '');
+        const nome = await this.pedirTexto({ titulo: 'Renomear estudo', valor: e ? Estudos.nomeDe(e) : '' });
         if (nome === null) return;
         Estudos.renomear(el.dataset.renomear, nome.trim());
         this.desenharEstudos();
@@ -1379,17 +1380,14 @@ const App = {
       btnLetra.classList.remove('ativa'); btnFundo.classList.remove('ativa');
     };
     const abrirCaixaCor = modo => {
-      if (modoCor === modo) { fecharCaixaCor(); return; }
-      modoCor = modo;
-      caixaCor.classList.remove('fechada');
-      btnLetra.classList.toggle('ativa', modo === 'letra');
-      btnFundo.classList.toggle('ativa', modo === 'fundo');
-      RodaDeCores.montar(caixaCor, corAtual[modo], cor => {
-        corAtual[modo] = cor;
-        if (modo === 'letra') amostraCor.style.background = cor;
-        else { amostraFundo.style.background = cor; amostraFundo.style.color = Cores.contraste(cor); }
-        aplicarCor(modo, cor);
-      });
+      this.escolherCor({ cor: corAtual[modo], titulo: modo === 'letra' ? 'Cor da letra' : 'Cor de fundo' })
+        .then(cor => {
+          if (!cor) return;
+          corAtual[modo] = cor;
+          if (modo === 'letra') amostraCor.style.background = cor;
+          else { amostraFundo.style.background = cor; amostraFundo.style.color = Cores.contraste(cor); }
+          aplicarCor(modo, cor);
+        });
     };
     [btnLetra, btnFundo].forEach(b => b.addEventListener('mousedown', ev => ev.preventDefault()));
     btnLetra.onclick = () => abrirCaixaCor('letra');
@@ -1457,8 +1455,8 @@ const App = {
 
     const trechoAtual = () => ({ ...e, versiculos: [...(e.versiculos || [])] });
 
-    document.getElementById('estudo-novo').onclick = () => {
-      const nome = prompt('Nome do novo estudo (opcional):', '');
+    document.getElementById('estudo-novo').onclick = async () => {
+      const nome = await this.pedirTexto({ titulo: 'Novo estudo', placeholder: 'Nome do estudo (opcional)' });
       if (nome === null) return;
       Estudos.criar({ nome: nome.trim(), trecho: trechoAtual() });
       this.fecharPaineis();
@@ -1526,8 +1524,8 @@ const App = {
 
     const trechoAtual = () => ({ ...t, versiculos: [...(t.versiculos || [])] });
 
-    document.getElementById('lista-nova').onclick = () => {
-      const nome = prompt('Nome da nova lista (opcional):', '');
+    document.getElementById('lista-nova').onclick = async () => {
+      const nome = await this.pedirTexto({ titulo: 'Nova lista', placeholder: 'Nome da lista (opcional)' });
       if (nome === null) return;
       Listas.criar({ nome: nome.trim(), trecho: trechoAtual() });
       this.fecharPaineis();
@@ -1634,8 +1632,8 @@ const App = {
 
     document.getElementById('lista-play-tudo').onclick = () => this.tocarListaPorId(id);
 
-    document.getElementById('lista-renomear').onclick = () => {
-      const nome = prompt('Nome da lista:', Listas.nomeDe(l));
+    document.getElementById('lista-renomear').onclick = async () => {
+      const nome = await this.pedirTexto({ titulo: 'Renomear lista', valor: Listas.nomeDe(l) });
       if (nome === null) return;
       Listas.renomear(id, nome.trim());
       recarregar();
@@ -2010,21 +2008,12 @@ const App = {
       };
     });
 
-    // roda de cores: abre embaixo do marcador que foi tocado
+    // roda de cores: abre no popup padrão
     corpo.querySelectorAll('[data-abrir-cor]').forEach(el => {
       el.onclick = () => {
         const id = +el.dataset.abrirCor;
-        const caixa = corpo.querySelector(`[data-caixa="${id}"]`);
-        const abrindo = caixa.classList.contains('fechada');
-
-        corpo.querySelectorAll('.caixa-cor').forEach(c => {
-          c.classList.add('fechada');
-          c.innerHTML = '';
-        });
-
-        if (!abrindo) return;
-        caixa.classList.remove('fechada');
-        RodaDeCores.montar(caixa, Marcadores.de(id).cor, cor => {
+        this.escolherCor({ cor: Marcadores.de(id).cor, titulo: 'Cor do marcador' }).then(cor => {
+          if (!cor) return;
           Marcadores.atualizar(id, { cor });
           el.style.background = cor;
           document.querySelectorAll(`.v [data-marcador="${id}"], .v[data-marcador="${id}"]`)
@@ -2367,22 +2356,18 @@ const App = {
     };
 
     const abrirCaixaCor = modo => {
-      if (modoCor === modo) { fecharCaixaCor(); return; }   // tocar de novo recolhe
-      modoCor = modo;
-      caixaCor.classList.remove('fechada');
-      btnCorLetra.classList.toggle('ativa', modo === 'letra');
-      btnCorFundo.classList.toggle('ativa', modo === 'fundo');
-
-      RodaDeCores.montar(caixaCor, corAtual[modo], cor => {   // chamado só no "Aplicar"
-        corAtual[modo] = cor;
-        if (modo === 'letra') {
-          amostraCor.style.background = cor;
-        } else {
-          amostraFundo.style.background = cor;
-          amostraFundo.style.color = Cores.contraste(cor);   // "A" sempre visível no fundo
-        }
-        aplicarCor(modo, cor);
-      });
+      this.escolherCor({ cor: corAtual[modo], titulo: modo === 'letra' ? 'Cor da letra' : 'Cor de fundo' })
+        .then(cor => {
+          if (!cor) return;
+          corAtual[modo] = cor;
+          if (modo === 'letra') {
+            amostraCor.style.background = cor;
+          } else {
+            amostraFundo.style.background = cor;
+            amostraFundo.style.color = Cores.contraste(cor);   // "A" sempre visível no fundo
+          }
+          aplicarCor(modo, cor);
+        });
     };
 
     // segurar o mousedown preserva a seleção do texto ao tocar no botão de cor
@@ -2598,6 +2583,90 @@ const App = {
       veu.setAttribute('aria-hidden', 'false');
       veu.classList.add('aberto');
       btConf.focus();
+    });
+  },
+
+  /* Entrada de texto no tema do app, no lugar do prompt() do navegador. Devolve
+   * uma promessa: o texto (já aparado) se salvou, ou null se cancelou. Tocar
+   * fora ou Esc cancela; Enter salva. */
+  pedirTexto({ titulo = '', valor = '', ok = 'Salvar', cancelar = 'Cancelar', placeholder = '' } = {}) {
+    return new Promise(resolve => {
+      const veu = document.getElementById('prompt-veu');
+      const campo = document.getElementById('prompt-campo');
+      const btOk = document.getElementById('prompt-ok');
+      const btCanc = document.getElementById('prompt-cancelar');
+      document.getElementById('prompt-titulo').textContent = titulo;
+      btOk.textContent = ok;
+      btCanc.textContent = cancelar;
+      campo.value = valor || '';
+      campo.placeholder = placeholder || '';
+
+      const fechar = resultado => {
+        veu.classList.remove('aberto');
+        veu.setAttribute('aria-hidden', 'true');
+        btOk.onclick = btCanc.onclick = veu.onclick = campo.onkeydown = null;
+        document.removeEventListener('keydown', aoTeclar, true);
+        resolve(resultado);
+      };
+      const salvar = () => fechar(campo.value.trim());
+      const aoTeclar = e => {
+        if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); fechar(null); }
+      };
+
+      btOk.onclick = salvar;
+      btCanc.onclick = () => fechar(null);
+      veu.onclick = e => { if (e.target === veu) fechar(null); };
+      campo.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); salvar(); } };
+      document.addEventListener('keydown', aoTeclar, true);
+
+      veu.setAttribute('aria-hidden', 'false');
+      veu.classList.add('aberto');
+      setTimeout(() => { campo.focus(); campo.select(); }, 30);
+    });
+  },
+
+  /* Seletor de cor padrão: abre a roda num popup próprio, sem empurrar a tela.
+   * Devolve uma promessa com o hex escolhido (se Salvar) ou null (se Cancelar).
+   * A cor entra nos "recentes" só quando salva. */
+  escolherCor({ cor = '#8c2f39', titulo = 'Escolher cor' } = {}) {
+    return new Promise(resolve => {
+      const veu = document.getElementById('cor-veu');
+      const corpo = document.getElementById('cor-corpo');
+      const btSalvar = document.getElementById('cor-salvar');
+      const btCanc = document.getElementById('cor-cancelar');
+      document.getElementById('cor-titulo').textContent = titulo;
+
+      let hexAtual = cor;
+      const ctrl = RodaDeCores.montar(corpo, cor, () => {}, {
+        semAplicar: true,
+        vivo: hex => { hexAtual = hex; },
+      });
+      hexAtual = ctrl.corAtual();
+
+      const fechar = resultado => {
+        veu.classList.remove('aberto');
+        veu.setAttribute('aria-hidden', 'true');
+        btSalvar.onclick = btCanc.onclick = veu.onclick = null;
+        document.removeEventListener('keydown', aoTeclar, true);
+        corpo.innerHTML = '';
+        resolve(resultado);
+      };
+      const aoTeclar = e => {
+        if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); fechar(null); }
+        else if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); salvar(); }
+      };
+      const salvar = () => {
+        CoresRecentes.registrar(hexAtual);
+        fechar(hexAtual);
+      };
+
+      btSalvar.onclick = salvar;
+      btCanc.onclick = () => fechar(null);
+      veu.onclick = e => { if (e.target === veu) fechar(null); };
+      document.addEventListener('keydown', aoTeclar, true);
+
+      veu.setAttribute('aria-hidden', 'false');
+      veu.classList.add('aberto');
     });
   },
 

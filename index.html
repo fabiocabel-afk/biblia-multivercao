@@ -190,6 +190,30 @@
   </div>
 </div>
 
+<!-- entrada de texto no tema (renomear, criar), no lugar do prompt() do navegador -->
+<div class="dialogo-veu" id="prompt-veu" aria-hidden="true">
+  <div class="dialogo" role="dialog" aria-modal="true" aria-labelledby="prompt-titulo">
+    <strong id="prompt-titulo"></strong>
+    <input class="campo dialogo-campo" id="prompt-campo" type="text" autocomplete="off" spellcheck="false">
+    <div class="dialogo-acoes">
+      <button class="botao secundario" id="prompt-cancelar">Cancelar</button>
+      <button class="botao" id="prompt-ok">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- seletor de cor: a roda abre aqui, num popup próprio, com Salvar/Cancelar -->
+<div class="dialogo-veu" id="cor-veu" aria-hidden="true">
+  <div class="dialogo dialogo-cor" role="dialog" aria-modal="true" aria-labelledby="cor-titulo">
+    <strong id="cor-titulo">Escolher cor</strong>
+    <div class="cor-corpo" id="cor-corpo"></div>
+    <div class="dialogo-acoes">
+      <button class="botao secundario" id="cor-cancelar">Cancelar</button>
+      <button class="botao" id="cor-salvar">Salvar</button>
+    </div>
+  </div>
+</div>
+
 <!-- folha flutuante de leitura da anotação (abre pelo sinal no versículo).
      A folha rola por dentro; o X (canto superior direito) e o lápis (canto
      inferior direito) ficam fixos, sempre visíveis. O véu atrás escurece e,
@@ -413,6 +437,7 @@
   <script src="assets/js/leitura.js"></script>
 <script src="assets/js/busca.js"></script>
 <script src="assets/js/voz.js"></script>
+<script src="assets/js/seletor.js"></script>
 <script src="assets/js/app.js"></script>
 </body>
 </html>
