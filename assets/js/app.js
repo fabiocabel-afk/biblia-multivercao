@@ -3429,6 +3429,8 @@ const App = {
     this._fecharListaPlayer();
     this._atualizarSeguirBotao();
     this._atualizarRepetirBotao();
+    Locutor.manterSessao();          // segura a página viva com a tela apagada
+    this._configurarMediaSession();  // controles na tela de bloqueio
     this.manterTelaAcesa();
 
     const lista = this.versiculosNaTela();
@@ -3440,6 +3442,7 @@ const App = {
     this.leituraGen++;
     this._cancelarAutoFechar();
     Locutor.parar();
+    Locutor.encerrarSessao();
     this.ouvindo = false;
     this.pausado = false;
     this.lendoVers = null;
@@ -3513,6 +3516,7 @@ const App = {
       this.ir(this.code, this.cap + 1).then(() => {
         if (!this.ouvindo) return;
         if (this._listaAberta) this.desenharListaPlayer();   // nova página, nova lista
+        this._configurarMediaSession();
         const nova = this.versiculosNaTela();
         this.lerVersiculo(nova[0] || 1, { anunciarCap: true });
       });
@@ -3621,6 +3625,8 @@ const App = {
     this._fecharListaPlayer();
     this._atualizarSeguirBotao();
     this._atualizarRepetirBotao();
+    Locutor.manterSessao();
+    this._configurarMediaSession();
     this.manterTelaAcesa();
 
     this._irParaSegmento(0, { anunciar: true });
@@ -3660,6 +3666,7 @@ const App = {
       else this._irParaSegmento(idx + 1, { anunciar: true });
       return;
     }
+    this._configurarMediaSession();
     this._lerPassoFila({ anunciarCap: anunciar });
   },
 
@@ -3863,6 +3870,7 @@ const App = {
         : Dados.referencia(this.versao, this.code, this.cap);
     }
     if (this._listaAberta) this.desenharListaPlayer();
+    this._atualizarMediaSession();
   },
 
   /* ---- painel expansível do player: "o que está tocando", faixa a faixa ----
@@ -4072,6 +4080,37 @@ const App = {
 
   liberarTela() {
     try { if (this._wake) { this._wake.release(); this._wake = null; } } catch (e) {}
+  },
+
+  /* Media Session: dá controles na tela de bloqueio / notificação (play, pausa,
+   * anterior, próximo) e, tão importante quanto, faz o sistema tratar a página
+   * como "tocando mídia" — o que ajuda a mantê-la viva com a tela apagada. */
+  _configurarMediaSession() {
+    if (!('mediaSession' in navigator)) return;
+    try {
+      const ref = this.modoFila
+        ? (this.filaNome || 'Lista de leitura')
+        : Dados.referencia(this.versao, this.code, this.cap);
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: ref,
+        artist: 'Bíblia',
+        album: this.modoFila ? 'Lista de leitura' : Dados.nomeCurto(this.versao, this.code),
+      });
+      const set = (acao, fn) => { try { navigator.mediaSession.setActionHandler(acao, fn); } catch (e) {} };
+      set('play', () => { if (this.pausado || this.lendoVers == null) this.alternarPausa(); });
+      set('pause', () => { if (!this.pausado && this.lendoVers != null) this.alternarPausa(); });
+      set('previoustrack', () => this.pularVers(-1));
+      set('nexttrack', () => this.pularVers(1));
+      navigator.mediaSession.playbackState = 'playing';
+    } catch (e) {}
+  },
+
+  _atualizarMediaSession() {
+    if (!('mediaSession' in navigator)) return;
+    try {
+      navigator.mediaSession.playbackState =
+        (this.ouvindo && this.lendoVers != null && !this.pausado) ? 'playing' : 'paused';
+    } catch (e) {}
   },
 
   /** Amostra da voz nos Ajustes: fala um versículo (o primeiro do capítulo
