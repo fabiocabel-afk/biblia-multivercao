@@ -2944,25 +2944,6 @@ body.ouvindo .folha { padding-bottom: 200px; }
 .player-voz.aberto { transform: none; }
 
 /* o X de fechar: pequeno, discreto, no canto superior direito e um tico acima */
-.player-x {
-  position: absolute;
-  top: 6px;
-  right: 10px;
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: transparent;
-  color: var(--cromo-fraco);
-  border: none;
-  cursor: pointer;
-  opacity: .75;
-  transition: opacity .15s ease;
-}
-.player-x:hover { opacity: 1; }
-.player-x .icone { width: 16px; height: 16px; stroke: var(--cromo-fraco); }
 
 .player-ref {
   text-align: center;
@@ -2978,7 +2959,7 @@ body.ouvindo .folha { padding-bottom: 200px; }
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 18px;
+  gap: 12px;
 }
 
 .player-bt {
@@ -3604,26 +3585,39 @@ body.ouvindo .folha { padding-bottom: 200px; }
 .player-alca:hover { opacity: 1; }
 .player-alca .icone { width: 18px; height: 18px; stroke: none; fill: var(--cromo-texto); }
 
-/* linha da referência com o botão discreto de "seguir capítulos" à direita */
-.player-ref-linha { position: relative; }
-.player-seguir {
+/* o X de fechar: círculo na cor do botão tocar, subido para metade fora da barra */
+.player-x {
   position: absolute;
-  right: 2px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 30px;
-  height: 30px;
+  top: -18px;
+  right: 16px;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: transparent;
+  background: var(--rubrica);
+  color: #fff;
   border: none;
-  color: var(--cromo-fraco);
   cursor: pointer;
-  opacity: .5;                 /* discreto quando desligado */
+  box-shadow: 0 2px 8px rgb(0 0 0 / .28);
+  transition: filter .15s ease, transform .15s ease;
 }
-.player-seguir .icone { width: 17px; height: 17px; stroke: var(--cromo-texto); }
-.player-seguir.ativo { opacity: 1; color: var(--cromo-texto); }
+.player-x:hover { filter: brightness(1.06); }
+.player-x:active { transform: scale(.94); }
+.player-x .icone { width: 18px; height: 18px; stroke: #fff; }
+
+/* botões pequenos e discretos (repetir / seguir) ao lado do transporte */
+.player-bt.player-bt-peq {
+  width: 34px;
+  height: 34px;
+  border-color: transparent;
+  color: var(--cromo-fraco);
+  opacity: .5;
+}
+.player-bt.player-bt-peq .icone { width: 18px; height: 18px; stroke: var(--cromo-texto); }
+.player-bt.player-bt-peq.ativo { opacity: 1; color: var(--cromo-texto); }
+.player-bt.player-bt-peq:hover { background: color-mix(in srgb, var(--cromo-texto) 10%, transparent); }
 
 /* o painel da lista: cresce para cima até ~metade da tela (barra + lista) */
 .player-lista {

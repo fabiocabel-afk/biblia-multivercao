@@ -43,7 +43,12 @@
   <symbol id="i-cima" viewBox="0 0 24 24"><path d="M6 15l6-6 6 6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="i-tri-cima" viewBox="0 0 24 24"><path d="M12 8l6 8H6z" fill="currentColor" stroke="none"/></symbol>
   <symbol id="i-tri-baixo" viewBox="0 0 24 24"><path d="M12 16l-6-8h12z" fill="currentColor" stroke="none"/></symbol>
-  <symbol id="i-avancar" viewBox="0 0 24 24"><path d="M5 6l6 6-6 6M12 6l6 6-6 6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-avancar" viewBox="0 0 24 24"><path d="M4 7l6 5-6 5M12 7l6 5-6 5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-seguir-sim" viewBox="0 0 24 24"><path d="M3 8l5 4-5 4M10 8l5 4-5 4" stroke-linecap="round" stroke-linejoin="round"/><path d="M19 6v12" stroke-linecap="round"/></symbol>
+  <symbol id="i-seguir-nao" viewBox="0 0 24 24"><path d="M5 8l5 4-5 4M12 8l5 4-5 4" stroke-linecap="round" stroke-linejoin="round"/><path d="M20 6v12" stroke-linecap="round"/></symbol>
+  <symbol id="i-rep-nao" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M6.3 6.3l11.4 11.4" stroke-linecap="round"/></symbol>
+  <symbol id="i-rep-cap" viewBox="0 0 24 24"><path d="M17 4l3 3-3 3" stroke-linecap="round" stroke-linejoin="round"/><path d="M20 7H8a4 4 0 0 0-4 4v1" stroke-linecap="round" stroke-linejoin="round"/><path d="M7 20l-3-3 3-3" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 17h12a4 4 0 0 0 4-4v-1" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-rep-vers" viewBox="0 0 24 24"><path d="M17 4l3 3-3 3" stroke-linecap="round" stroke-linejoin="round"/><path d="M20 7H8a4 4 0 0 0-4 4v1" stroke-linecap="round" stroke-linejoin="round"/><path d="M7 20l-3-3 3-3" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 17h12a4 4 0 0 0 4-4v-1" stroke-linecap="round" stroke-linejoin="round"/><text x="12" y="14.5" font-size="7" font-weight="700" text-anchor="middle" fill="currentColor" stroke="none">1</text></symbol>
   <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 5l12 7-12 7z" fill="currentColor" stroke="none"/></symbol>
   <symbol id="i-pausar" viewBox="0 0 24 24"><rect x="6" y="5" width="4" height="14" rx="1" fill="currentColor" stroke="none"/><rect x="14" y="5" width="4" height="14" rx="1" fill="currentColor" stroke="none"/></symbol>
   <symbol id="i-vers-antes" viewBox="0 0 24 24"><rect x="5" y="5" width="2.4" height="14" rx="1" fill="currentColor" stroke="none"/><path d="M20 5l-10 7 10 7z" fill="currentColor" stroke="none"/></symbol>
@@ -143,13 +148,11 @@
     <svg class="icone"><use href="#i-fechar"/></svg>
   </button>
   <div class="player-fila" id="player-fila" hidden></div>
-  <div class="player-ref-linha">
-    <div class="player-ref" id="player-ref"></div>
-    <button class="player-seguir" id="player-seguir" aria-label="Seguir para o próximo capítulo" title="Seguir capítulos" hidden>
-      <svg class="icone"><use href="#i-avancar"/></svg>
-    </button>
-  </div>
+  <div class="player-ref" id="player-ref"></div>
   <div class="player-botoes">
+    <button class="player-bt player-bt-peq" id="player-repetir" aria-label="Repetir" title="Repetir">
+      <svg class="icone"><use href="#i-rep-nao"/></svg>
+    </button>
     <button class="player-bt" id="player-anterior" aria-label="Versículo anterior" title="Anterior">
       <svg class="icone"><use href="#i-vers-antes"/></svg>
     </button>
@@ -158,6 +161,9 @@
     </button>
     <button class="player-bt" id="player-proximo" aria-label="Próximo versículo" title="Próximo">
       <svg class="icone"><use href="#i-vers-depois"/></svg>
+    </button>
+    <button class="player-bt player-bt-peq" id="player-seguir" aria-label="Seguir para o próximo capítulo" title="Seguir capítulos" hidden>
+      <svg class="icone"><use href="#i-seguir-sim"/></svg>
     </button>
   </div>
 </div>

@@ -3287,6 +3287,7 @@ const App = {
     q('player-fechar').onclick = () => this.pararOuvir();
     q('player-alca').onclick = () => this.alternarListaPlayer();
     q('player-seguir').onclick = () => this.alternarSeguirCapitulos();
+    q('player-repetir').onclick = () => this.alternarRepetir();
 
     q('folha').ondblclick = e => {
       if (this.ouvindo) return;          // no modo player, o duplo não faz nada
@@ -3417,6 +3418,7 @@ const App = {
     this.modoFila = false;
     this._listaAberta = false;
     if (this.seguirCapitulos == null) this.seguirCapitulos = true;
+    this.repetir = this.repetir || 'nao';
     this._cancelarAutoFechar();
     document.body.classList.add('ouvindo');
     const player = document.getElementById('player-voz');
@@ -3426,6 +3428,7 @@ const App = {
     if (filaEl) { filaEl.hidden = true; filaEl.textContent = ''; }
     this._fecharListaPlayer();
     this._atualizarSeguirBotao();
+    this._atualizarRepetirBotao();
     this.manterTelaAcesa();
 
     const lista = this.versiculosNaTela();
@@ -3491,10 +3494,18 @@ const App = {
 
   /** Passou o último versículo: vira a página; no fim do livro, encerra. */
   avancarLeitura() {
+    if (this.repetir === 'vers' && this.lendoVers != null) {   // repete o mesmo versículo
+      this.lerVersiculo(this.lendoVers);
+      return;
+    }
     const lista = this.versiculosNaTela();
     const i = lista.indexOf(this.lendoVers);
     if (i >= 0 && i < lista.length - 1) {
       this.lerVersiculo(lista[i + 1]);
+      return;
+    }
+    if (this.repetir === 'cap') {              // fim do capítulo: recomeça do início
+      this.lerVersiculo(lista[0] || 1, { anunciarCap: true });
       return;
     }
     const info = Dados.infoLivro(this.versao, this.code);
@@ -3593,6 +3604,7 @@ const App = {
     this.ouvindo = true;
     this.pausado = false;
     this._listaAberta = false;
+    this.repetir = this.repetir || 'nao';
     this._cancelarAutoFechar();
     this.fila = fila;
     this.filaNome = nome || 'Lista';
@@ -3608,6 +3620,7 @@ const App = {
     if (filaEl) { filaEl.hidden = false; filaEl.textContent = this.filaNome; }
     this._fecharListaPlayer();
     this._atualizarSeguirBotao();
+    this._atualizarRepetirBotao();
     this.manterTelaAcesa();
 
     this._irParaSegmento(0, { anunciar: true });
@@ -3688,7 +3701,17 @@ const App = {
     setTimeout(() => {
       if (!this.modoFila || gen !== this.leituraGen) return;
       const seguir = () => {
-        if (this.modoFila && gen === this.leituraGen) { this.filaVersoIdx++; this._lerPassoFila(); }
+        if (!this.modoFila || gen !== this.leituraGen) return;
+        if (this.repetir === 'vers') { this._lerPassoFila(); return; }   // mesmo versículo
+        this.filaVersoIdx++;
+        // fim da fila com repetição de "capítulo" (= lista inteira): recomeça
+        if (this.repetir === 'cap'
+          && this.filaIdx >= this.fila.length - 1
+          && this.filaVersoIdx >= this.filaVersos.length) {
+          this._irParaSegmento(0, { anunciar: true });
+          return;
+        }
+        this._lerPassoFila();
       };
       Locutor.falar(prefixo + texto, { aoFim: seguir, aoErro: seguir });
     }, 60);
@@ -3897,8 +3920,38 @@ const App = {
     const b = document.getElementById('player-seguir');
     if (!b) return;
     b.hidden = this.modoFila;                  // na fila não faz sentido
+    b.querySelector('use').setAttribute('href', this.seguirCapitulos ? '#i-seguir-sim' : '#i-seguir-nao');
     b.classList.toggle('ativo', !!this.seguirCapitulos);
     const t = this.seguirCapitulos ? 'Seguindo capítulos' : 'Só este capítulo';
+    b.setAttribute('aria-label', t);
+    b.title = t;
+  },
+
+  /* Ciclo de repetição, percorrido a cada toque no botão:
+   *   'nao'  ⊘  não repete (segue o fluxo normal)
+   *   'cap'  ⟳  ao acabar, recomeça o capítulo / a fila do começo
+   *   'vers' ↻  repete sempre o mesmo versículo
+   * Sem texto no botão: cada toque mostra um aviso rápido do que ligou. */
+  alternarRepetir() {
+    const ordem = ['nao', 'cap', 'vers'];
+    const i = ordem.indexOf(this.repetir || 'nao');
+    this.repetir = ordem[(i + 1) % ordem.length];
+    this._atualizarRepetirBotao();
+    this.avisoRapido(
+      this.repetir === 'cap' ? (this.modoFila ? 'Repetir a lista' : 'Repetir o capítulo')
+      : this.repetir === 'vers' ? 'Repetir o versículo'
+      : 'Sem repetição');
+  },
+
+  _atualizarRepetirBotao() {
+    const b = document.getElementById('player-repetir');
+    if (!b) return;
+    const icone = this.repetir === 'cap' ? '#i-rep-cap'
+      : this.repetir === 'vers' ? '#i-rep-vers' : '#i-rep-nao';
+    b.querySelector('use').setAttribute('href', icone);
+    b.classList.toggle('ativo', this.repetir && this.repetir !== 'nao');
+    const t = this.repetir === 'cap' ? (this.modoFila ? 'Repetindo a lista' : 'Repetindo o capítulo')
+      : this.repetir === 'vers' ? 'Repetindo o versículo' : 'Sem repetição';
     b.setAttribute('aria-label', t);
     b.title = t;
   },
