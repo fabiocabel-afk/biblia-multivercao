@@ -69,14 +69,37 @@ const Locutor = {
     if (voz) { u.voice = voz; u.lang = voz.lang; } else { u.lang = 'pt-BR'; }
     const vel = +Prefs.get('vozVel') || 1;
     u.rate = Math.max(0.5, Math.min(2, vel));
-    u.onend = () => { if (aoFim) aoFim(); };
-    u.onerror = () => { if (aoErro) aoErro(); };
+    const fim = () => { this._pararKeepAlive(); if (aoFim) aoFim(); };
+    const erro = () => { this._pararKeepAlive(); if (aoErro) aoErro(); };
+    u.onend = fim;
+    u.onerror = erro;
     window.speechSynthesis.speak(u);
+    this._manterVivo();   // segura a fala viva mesmo com a tela apagada
     return u;
+  },
+
+  /* Com a tela bloqueada (Chrome/Android principalmente) o motor de voz costuma
+   * ENTRAR em pausa sozinho no meio da fala. Um resume() periódico enquanto há
+   * algo falando mantém o áudio correndo — é o truque que faz ouvir de bolso,
+   * pelo fone, funcionar. Para sozinho quando não há mais nada falando. */
+  _manterVivo() {
+    if (this._keep) return;
+    this._keep = setInterval(() => {
+      try {
+        const s = window.speechSynthesis;
+        if (s.speaking || s.pending) { if (s.paused) s.resume(); s.resume(); }
+        else this._pararKeepAlive();
+      } catch (e) { this._pararKeepAlive(); }
+    }, 8000);
+  },
+
+  _pararKeepAlive() {
+    if (this._keep) { clearInterval(this._keep); this._keep = null; }
   },
 
   /** Interrompe qualquer fala em andamento. */
   parar() {
+    this._pararKeepAlive();
     if (!this.disponivel()) return;
     try { window.speechSynthesis.cancel(); } catch (e) {}
   },

@@ -3285,6 +3285,8 @@ const App = {
     q('player-play').onclick = () => this.alternarPausa();
     q('player-proximo').onclick = () => this.pularVers(1);
     q('player-fechar').onclick = () => this.pararOuvir();
+    q('player-alca').onclick = () => this.alternarListaPlayer();
+    q('player-seguir').onclick = () => this.alternarSeguirCapitulos();
 
     q('folha').ondblclick = e => {
       if (this.ouvindo) return;          // no modo player, o duplo não faz nada
@@ -3413,12 +3415,17 @@ const App = {
     this.ouvindo = true;
     this.pausado = false;
     this.modoFila = false;
+    this._listaAberta = false;
+    if (this.seguirCapitulos == null) this.seguirCapitulos = true;
+    this._cancelarAutoFechar();
     document.body.classList.add('ouvindo');
     const player = document.getElementById('player-voz');
     player.classList.add('aberto');
     player.setAttribute('aria-hidden', 'false');
     const filaEl = document.getElementById('player-fila');
     if (filaEl) { filaEl.hidden = true; filaEl.textContent = ''; }
+    this._fecharListaPlayer();
+    this._atualizarSeguirBotao();
     this.manterTelaAcesa();
 
     const lista = this.versiculosNaTela();
@@ -3428,6 +3435,7 @@ const App = {
   /** Sai do modo ouvir e devolve o app ao normal. */
   pararOuvir() {
     this.leituraGen++;
+    this._cancelarAutoFechar();
     Locutor.parar();
     this.ouvindo = false;
     this.pausado = false;
@@ -3435,12 +3443,19 @@ const App = {
     this.modoFila = false;
     this.fila = [];
     this.filaVersos = [];
+    this._listaAberta = false;
     document.body.classList.remove('ouvindo');
     const player = document.getElementById('player-voz');
     player.classList.remove('aberto');
+    player.classList.remove('expandido');
     player.setAttribute('aria-hidden', 'true');
     const filaEl = document.getElementById('player-fila');
     if (filaEl) { filaEl.hidden = true; filaEl.textContent = ''; }
+    const listaEl = document.getElementById('player-lista');
+    if (listaEl) { listaEl.hidden = true; listaEl.innerHTML = ''; }
+    const alca = document.getElementById('player-alca');
+    if (alca) { alca.setAttribute('aria-expanded', 'false'); alca.classList.remove('aberta');
+      alca.querySelector('use').setAttribute('href', '#i-cima'); }
     this.despintarLendo();
     this.liberarTela();
   },
@@ -3450,6 +3465,7 @@ const App = {
     const lista = this.versiculosNaTela();
     if (!lista.includes(vers)) return;
 
+    this._cancelarAutoFechar();
     this.lendoVers = vers;
     this.pausado = false;
     this.pintarLendo(vers);
@@ -3482,15 +3498,16 @@ const App = {
       return;
     }
     const info = Dados.infoLivro(this.versao, this.code);
-    if (info && this.cap < info.chapters) {
+    if (this.seguirCapitulos && info && this.cap < info.chapters) {
       this.ir(this.code, this.cap + 1).then(() => {
         if (!this.ouvindo) return;
+        if (this._listaAberta) this.desenharListaPlayer();   // nova página, nova lista
         const nova = this.versiculosNaTela();
         this.lerVersiculo(nova[0] || 1, { anunciarCap: true });
       });
       return;
     }
-    this.finalizarLeitura();   // fim do livro
+    this.finalizarLeitura();   // fim do capítulo (ou avanço desligado)
   },
 
   /** Chegou ao fim do livro: para, mas mantém o player para recomeçar. */
@@ -3501,6 +3518,7 @@ const App = {
     this.despintarLendo();
     this.lendoVers = null;
     this.atualizarPlayer();
+    this._agendarAutoFechar();   // acabou: some sozinho e libera a tela
   },
 
   /* ============================================== player de SEQUÊNCIA (fila)
@@ -3574,6 +3592,8 @@ const App = {
     this.modoFila = true;
     this.ouvindo = true;
     this.pausado = false;
+    this._listaAberta = false;
+    this._cancelarAutoFechar();
     this.fila = fila;
     this.filaNome = nome || 'Lista';
     this.filaIdx = 0;
@@ -3586,13 +3606,16 @@ const App = {
     player.setAttribute('aria-hidden', 'false');
     const filaEl = document.getElementById('player-fila');
     if (filaEl) { filaEl.hidden = false; filaEl.textContent = this.filaNome; }
+    this._fecharListaPlayer();
+    this._atualizarSeguirBotao();
     this.manterTelaAcesa();
 
     this._irParaSegmento(0, { anunciar: true });
   },
 
-  /** Navega até o capítulo do segmento idx e começa a ler seus versículos. */
-  async _irParaSegmento(idx, { anunciar = false, aoFim = false } = {}) {
+  /** Navega até o capítulo do segmento idx e começa a ler seus versículos.
+   *  `versoAlvo` (opcional) posiciona num versículo específico do segmento. */
+  async _irParaSegmento(idx, { anunciar = false, aoFim = false, versoAlvo = null } = {}) {
     if (!this.modoFila) return;
     if (idx < 0) idx = 0;
     if (idx >= this.fila.length) { this._fimDaFila(); return; }
@@ -3611,7 +3634,12 @@ const App = {
 
     const versos = this._versosDoSegmento(seg);
     this.filaVersos = versos;
-    this.filaVersoIdx = aoFim ? Math.max(0, versos.length - 1) : 0;
+    if (versoAlvo != null) {
+      const k = versos.indexOf(versoAlvo);
+      this.filaVersoIdx = k >= 0 ? k : 0;
+    } else {
+      this.filaVersoIdx = aoFim ? Math.max(0, versos.length - 1) : 0;
+    }
 
     if (!versos.length) {
       // segmento sem versículos válidos: pula para o vizinho na direção do movimento
@@ -3637,6 +3665,7 @@ const App = {
   /** Lê o versículo corrente da fila; ao terminar, anda para o próximo. */
   _lerPassoFila({ anunciarCap = false } = {}) {
     if (!this.modoFila) return;
+    this._cancelarAutoFechar();
     if (this.filaVersoIdx >= this.filaVersos.length) {
       this._irParaSegmento(this.filaIdx + 1, { anunciar: true });
       return;
@@ -3709,6 +3738,22 @@ const App = {
     this.despintarLendo();
     this.lendoVers = null;
     this.atualizarPlayer();
+    this._agendarAutoFechar();   // acabou a sequência: some e libera a tela
+  },
+
+  /* Quando a leitura chega ao fim, o player fica parado mas ainda segura a tela
+   * acesa (wake lock), gastando bateria. Depois de 15s sem nada acontecer, ele
+   * se fecha sozinho — aí a tela pode apagar. Qualquer retomada cancela isso. */
+  _agendarAutoFechar() {
+    this._cancelarAutoFechar();
+    this.liberarTela();          // já solta a tela; não precisa segurar parado
+    this._timerFechar = setTimeout(() => {
+      if (this.ouvindo && this.lendoVers == null && this.pausado) this.pararOuvir();
+    }, 15000);
+  },
+
+  _cancelarAutoFechar() {
+    if (this._timerFechar) { clearTimeout(this._timerFechar); this._timerFechar = null; }
   },
 
   /** Play/pausa. Retomar re-lê o versículo atual do começo — é o jeito que
@@ -3794,6 +3839,166 @@ const App = {
         ? `${Dados.nomeCurto(this.versao, this.code)} ${this.cap}:${this.lendoVers}`
         : Dados.referencia(this.versao, this.code, this.cap);
     }
+    if (this._listaAberta) this.desenharListaPlayer();
+  },
+
+  /* ---- painel expansível do player: "o que está tocando", faixa a faixa ----
+   * Uma alça (setinha) abre uma lista que ocupa cerca de metade da tela junto
+   * com a barra. No modo fila, lista todos os trechos da sequência (livros
+   * diferentes inclusive) e deixa saltar de faixa num toque — dá pra adiantar
+   * ou voltar livros e enxergar quanto falta. No modo ouvir simples, mostra os
+   * versículos do capítulo atual e, no rodapé, um "próximo capítulo +" quando
+   * ainda há capítulo à frente (nada quando é o fim). */
+  alternarListaPlayer() {
+    this._listaAberta = !this._listaAberta;
+    const alca = document.getElementById('player-alca');
+    const lista = document.getElementById('player-lista');
+    if (alca) {
+      alca.setAttribute('aria-expanded', String(this._listaAberta));
+      alca.setAttribute('aria-label', this._listaAberta ? 'Ocultar lista' : 'Exibir lista');
+      alca.title = this._listaAberta ? 'Ocultar lista' : 'Exibir lista';
+      alca.querySelector('use').setAttribute('href', this._listaAberta ? '#i-tri-baixo' : '#i-tri-cima');
+      alca.classList.toggle('aberta', this._listaAberta);
+    }
+    if (lista) lista.hidden = !this._listaAberta;
+    document.getElementById('player-voz')?.classList.toggle('expandido', this._listaAberta);
+    if (this._listaAberta) this.desenharListaPlayer();
+  },
+
+  /** Deixa a alça/lista no estado fechado (ao (re)abrir o player num modo). */
+  _fecharListaPlayer() {
+    this._listaAberta = false;
+    const alca = document.getElementById('player-alca');
+    if (alca) {
+      alca.setAttribute('aria-expanded', 'false');
+      alca.setAttribute('aria-label', 'Exibir lista');
+      alca.title = 'Exibir lista';
+      alca.classList.remove('aberta');
+      alca.querySelector('use').setAttribute('href', '#i-tri-cima');
+    }
+    const lista = document.getElementById('player-lista');
+    if (lista) { lista.hidden = true; lista.innerHTML = ''; }
+    document.getElementById('player-voz')?.classList.remove('expandido');
+  },
+
+  /* Botãozinho "»" na linha da referência: liga/desliga o avanço automático
+   * para o próximo capítulo. Desligado, a leitura para no fim do capítulo atual
+   * — um jeito de delimitar a leitura a um único capítulo. Só aparece no modo
+   * ouvir simples (na fila, atravessar trechos é o próprio sentido). */
+  alternarSeguirCapitulos() {
+    this.seguirCapitulos = !this.seguirCapitulos;
+    this._atualizarSeguirBotao();
+    this.avisoRapido(this.seguirCapitulos
+      ? 'Segue para o próximo capítulo'
+      : 'Vai tocar só este capítulo');
+  },
+
+  _atualizarSeguirBotao() {
+    const b = document.getElementById('player-seguir');
+    if (!b) return;
+    b.hidden = this.modoFila;                  // na fila não faz sentido
+    b.classList.toggle('ativo', !!this.seguirCapitulos);
+    const t = this.seguirCapitulos ? 'Seguindo capítulos' : 'Só este capítulo';
+    b.setAttribute('aria-label', t);
+    b.title = t;
+  },
+
+  desenharListaPlayer() {
+    const lista = document.getElementById('player-lista');
+    if (!lista || !this._listaAberta) return;
+
+    lista.innerHTML = this.modoFila
+      ? this._htmlListaFila()
+      : this._htmlListaCapitulo();
+
+    // rola até a faixa que está tocando, para ela ficar à vista
+    const ativo = lista.querySelector('.faixa.tocando');
+    if (ativo) ativo.scrollIntoView({ block: 'center' });
+
+    // modo fila: tocar num versículo salta a leitura direto para ele
+    lista.querySelectorAll('[data-faixa]').forEach(el => {
+      el.onclick = () => {
+        const idx = +el.dataset.faixa;
+        const v = el.dataset.fverso != null ? +el.dataset.fverso : null;
+        this._irParaSegmento(idx, { anunciar: true, versoAlvo: v });
+      };
+    });
+    // modo capítulo: tocar num versículo reposiciona a leitura ali
+    lista.querySelectorAll('[data-verso]').forEach(el => {
+      el.onclick = () => this.lerVersiculo(+el.dataset.verso);
+    });
+  },
+
+  /** Uma linha da lista: número de ordem, versão no retângulo padrão, e a
+   *  referência "Livro cap:vers" — sem o texto do versículo. */
+  _faixaHTML({ ordem, versao, nome, cap, vers, estado, attrs }) {
+    const ref = vers != null ? `${nome} ${cap}:${vers}` : `${nome} ${cap}`;
+    return `<button class="faixa ${estado}" ${attrs}>
+      <span class="faixa-num">${ordem}</span>
+      <span class="sigla faixa-versao">${versao || ''}</span>
+      <span class="faixa-ref">${Leitura.escapar(ref)}</span>
+      ${estado === 'tocando' ? '<span class="faixa-agora">tocando</span>' : ''}
+    </button>`;
+  },
+
+  /** Lista da FILA: uma linha por VERSÍCULO (não por trecho). A atual fica
+   *  marcada; um contador diz quantos versículos ainda faltam. */
+  _htmlListaFila() {
+    const versoAtual = this.filaVersos[this.filaVersoIdx];
+    const linhas = [];
+    let ordem = 0, totalVersos = 0, jaPassou = 0, achouAtual = false;
+
+    this.fila.forEach((seg, si) => {
+      const nome = Dados.nomeCurto(seg.versao, seg.code);
+      const versos = Array.isArray(seg.versos) && seg.versos.length ? seg.versos : [null];
+      versos.forEach(v => {
+        ordem++; totalVersos++;
+        let estado = '';
+        if (si === this.filaIdx && (v == null || v === versoAtual)) { estado = 'tocando'; achouAtual = true; }
+        else if (!achouAtual) { estado = 'passou'; jaPassou++; }
+        const attrs = `data-faixa="${si}"` + (v != null ? ` data-fverso="${v}"` : '');
+        linhas.push(this._faixaHTML({ ordem, versao: seg.versao, nome, cap: seg.cap, vers: v, estado, attrs }));
+      });
+    });
+
+    const faltam = Math.max(0, totalVersos - jaPassou - 1);
+    return `<div class="player-lista-topo">
+        <span class="player-lista-nome">${Leitura.escapar(this.filaNome || 'Lista')}</span>
+        <span class="player-lista-conta">${totalVersos} versículo${totalVersos > 1 ? 's' : ''} · faltam ${faltam}</span>
+      </div>
+      <div class="player-lista-rol">${linhas.join('')}</div>`;
+  },
+
+  /** Lista do CAPÍTULO (ouvir simples): uma linha por versículo do capítulo
+   *  atual; no rodapé, "próximo capítulo +" quando há capítulo adiante. */
+  _htmlListaCapitulo() {
+    const versos = this.versiculosNaTela();
+    const nome = Dados.nomeCurto(this.versao, this.code);
+    let ordem = 0;
+    const linhas = versos.map(v => {
+      let estado = '';
+      if (v === this.lendoVers) estado = 'tocando';
+      else if (this.lendoVers != null && v < this.lendoVers) estado = 'passou';
+      return this._faixaHTML({ ordem: ++ordem, versao: this.versao, nome, cap: this.cap, vers: v, estado, attrs: `data-verso="${v}"` });
+    }).join('');
+
+    const rodape = this._temProximoCapitulo()
+      ? `<div class="player-lista-proximo">Próximo capítulo <span class="mais-cap">+</span></div>`
+      : '';
+
+    return `<div class="player-lista-topo">
+        <span class="player-lista-nome">${nome} ${this.cap}</span>
+        <span class="player-lista-conta">${versos.length} versículo${versos.length > 1 ? 's' : ''}</span>
+      </div>
+      <div class="player-lista-rol">${linhas}${rodape}</div>`;
+  },
+
+  /** Há um próximo capítulo (neste livro ou no seguinte) depois do atual? */
+  _temProximoCapitulo() {
+    try {
+      const info = Dados.infoLivro(this.versao, this.code);
+      return (info && this.cap < info.chapters) || !!Dados.vizinho(this.versao, this.code, 1);
+    } catch (e) { return false; }
   },
 
   /* Mantém a tela acesa enquanto ouve (nem todo aparelho deixa; quando não
