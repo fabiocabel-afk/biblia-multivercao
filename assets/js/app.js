@@ -3515,6 +3515,7 @@ const App = {
     this.ouvindo = false;
     this.pausado = false;
     this.lendoVers = null;
+    this.lendoNota = false;
     this.modoFila = false;
     this.fila = [];
     this.filaVersos = [];
@@ -3644,6 +3645,34 @@ const App = {
     return segs;
   },
 
+  /** Texto puro de uma nota do estudo (tira o HTML, junta os espaços). */
+  _textoDaNota(html) {
+    const d = document.createElement('div');
+    d.innerHTML = html || '';
+    return (d.textContent || '').replace(/\s+/g, ' ').trim();
+  },
+
+  /* Monta a fila de um ESTUDO percorrendo os blocos NA ORDEM. Um bloco de
+   * texto vira um segmento de nota (numerado: "Anotação 1", "Anotação 2"…);
+   * um bloco de versículos vira os segmentos de versículo de sempre. Assim a
+   * leitura do estudo inclui as anotações no lugar certo, sem confundi-las com
+   * a Bíblia — cada nota é anunciada com "Nota" antes do texto. */
+  _segmentosDeEstudo(e) {
+    const segs = [];
+    let nNota = 0;
+    for (const b of Estudos.blocosDe(e)) {
+      if (b.tipo === 'texto') {
+        const texto = this._textoDaNota(b.html || '');
+        if (!texto) continue;                 // nota vazia não entra na fila
+        nNota++;
+        segs.push({ tipo: 'nota', texto, rotulo: `Anotação ${nNota}`, versao: this.versao });
+      } else if (b.trecho) {
+        segs.push(...this._segmentosDeTrechos([b.trecho]));
+      }
+    }
+    return segs;
+  },
+
   tocarListaPorId(id) {
     const l = Listas.todos().find(x => x.id === id);
     if (l) this.tocarSequencia(Listas.trechosDe(l), Listas.nomeDe(l));
@@ -3651,11 +3680,16 @@ const App = {
 
   tocarEstudoPorId(id) {
     const e = Estudos.todos().find(x => x.id === id);
-    if (e) this.tocarSequencia(Estudos.trechosDe(e), Estudos.nomeDe(e));
+    if (e) this.tocarFila(this._segmentosDeEstudo(e), Estudos.nomeDe(e));
   },
 
-  /** Ponto de entrada: monta a fila e começa a tocar. */
+  /** Ponto de entrada por TRECHOS (listas de leitura): vira segmentos e toca. */
   tocarSequencia(trechos, nome) {
+    this.tocarFila(this._segmentosDeTrechos(trechos), nome);
+  },
+
+  /** Núcleo: recebe a fila já montada (versículos e/ou notas) e começa a tocar. */
+  tocarFila(fila, nome) {
     if (!Locutor.disponivel()) {
       return this.confirmar({
         titulo: 'Ouvir', mensagem: 'Este navegador não oferece leitura em voz. '
@@ -3663,8 +3697,7 @@ const App = {
         confirmar: 'Entendi', cancelar: 'Fechar',
       });
     }
-    const fila = this._segmentosDeTrechos(trechos);
-    if (!fila.length) { this.avisoRapido('Nada para tocar nesta lista'); return; }
+    if (!fila || !fila.length) { this.avisoRapido('Nada para tocar nesta lista'); return; }
 
     this.fecharPaineis();
     this.resetarMulti();
@@ -3676,6 +3709,7 @@ const App = {
     this.modoFila = true;
     this.ouvindo = true;
     this.pausado = false;
+    this.lendoNota = false;
     this._listaAberta = false;
     this.repetir = this.repetir || 'nao';
     this._cancelarAutoFechar();
@@ -3710,6 +3744,15 @@ const App = {
 
     const seg = this.fila[idx];
     this.filaIdx = idx;
+
+    // segmento de NOTA: não navega na Bíblia; é um passo único que lê o texto
+    if (seg.tipo === 'nota') {
+      this.filaVersos = [null];
+      this.filaVersoIdx = 0;
+      this._configurarMediaSession();
+      this._lerPassoFila({ anunciarCap: false });
+      return;
+    }
 
     if (seg.versao && seg.versao !== this.versao && Dados.versao(seg.versao)) {
       this.versao = seg.versao;
@@ -3759,18 +3802,31 @@ const App = {
       this._irParaSegmento(this.filaIdx + 1, { anunciar: true });
       return;
     }
-    const vers = this.filaVersos[this.filaVersoIdx];
-    this.lendoVers = vers;
-    this.pausado = false;
-    this.pintarLendo(vers);
-    this.rolarAteVersiculo(vers);
-    this.atualizarPlayer();
-
-    const el = document.querySelector(`#folha .v[data-vers="${vers}"]`);
-    const texto = el ? this.textoDoVersiculo(el).trim() : '';
     const seg = this.fila[this.filaIdx];
-    const prefixo = anunciarCap
-      ? `${Dados.nomeCurto(seg.versao, seg.code)}, capítulo ${seg.cap}. ` : '';
+    let fala = '';
+
+    if (seg.tipo === 'nota') {
+      // uma NOTA do estudo: anuncia "Nota" antes, para não soar como Bíblia
+      this.lendoVers = null;
+      this.lendoNota = true;
+      this.pausado = false;
+      this.despintarLendo();
+      this.atualizarPlayer();
+      fala = 'Nota. ' + (seg.texto || '');
+    } else {
+      const vers = this.filaVersos[this.filaVersoIdx];
+      this.lendoVers = vers;
+      this.lendoNota = false;
+      this.pausado = false;
+      this.pintarLendo(vers);
+      this.rolarAteVersiculo(vers);
+      this.atualizarPlayer();
+      const el = document.querySelector(`#folha .v[data-vers="${vers}"]`);
+      const texto = el ? this.textoDoVersiculo(el).trim() : '';
+      const prefixo = anunciarCap
+        ? `${Dados.nomeCurto(seg.versao, seg.code)}, capítulo ${seg.cap}. ` : '';
+      fala = prefixo + texto;
+    }
 
     const gen = ++this.leituraGen;
     Locutor.parar();
@@ -3778,7 +3834,7 @@ const App = {
       if (!this.modoFila || gen !== this.leituraGen) return;
       const seguir = () => {
         if (!this.modoFila || gen !== this.leituraGen) return;
-        if (this.repetir === 'vers') { this._lerPassoFila(); return; }   // mesmo versículo
+        if (this.repetir === 'vers') { this._lerPassoFila(); return; }   // mesmo passo
         this.filaVersoIdx++;
         // fim da fila com repetição de "capítulo" (= lista inteira): recomeça
         if (this.repetir === 'cap'
@@ -3789,7 +3845,7 @@ const App = {
         }
         this._lerPassoFila();
       };
-      Locutor.falar(prefixo + texto, { aoFim: seguir, aoErro: seguir });
+      Locutor.falar(fala, { aoFim: seguir, aoErro: seguir });
     }, 60);
   },
 
@@ -3817,7 +3873,7 @@ const App = {
   /** Play/pausa no modo fila (retomar re-lê o versículo atual, como no capítulo). */
   alternarPausaFila() {
     if (!this.modoFila) return;
-    if (this.lendoVers == null) { this._irParaSegmento(0, { anunciar: true }); return; }
+    if (this.lendoVers == null && !this.lendoNota) { this._irParaSegmento(0, { anunciar: true }); return; }
     if (this.pausado) {
       this.pausado = false;
       this._lerPassoFila();
@@ -3924,9 +3980,11 @@ const App = {
 
   /** Atualiza o rótulo e o ícone (play vs pausa) da barra do player. */
   atualizarPlayer() {
+    const seg = this.modoFila && this.fila ? this.fila[this.filaIdx] : null;
+    const emNota = !!(seg && seg.tipo === 'nota');
     const btn = document.getElementById('player-play');
     if (btn) {
-      const tocando = this.ouvindo && this.lendoVers != null && !this.pausado;
+      const tocando = this.ouvindo && !this.pausado && (this.lendoVers != null || emNota);
       btn.querySelector('use').setAttribute('href', tocando ? '#i-pausar' : '#i-play');
       const rotulo = tocando ? 'Pausar' : 'Tocar';
       btn.setAttribute('aria-label', rotulo);
@@ -3934,9 +3992,11 @@ const App = {
     }
     const ref = document.getElementById('player-ref');
     if (ref) {
-      ref.textContent = this.lendoVers != null
-        ? `${Dados.nomeCurto(this.versao, this.code)} ${this.cap}:${this.lendoVers}`
-        : Dados.referencia(this.versao, this.code, this.cap);
+      ref.textContent = emNota
+        ? (seg.rotulo || 'Anotação')
+        : (this.lendoVers != null
+          ? `${Dados.nomeCurto(this.versao, this.code)} ${this.cap}:${this.lendoVers}`
+          : Dados.referencia(this.versao, this.code, this.cap));
     }
     if (this._listaAberta) this.desenharListaPlayer();
     this._atualizarMediaSession();
@@ -4076,13 +4136,27 @@ const App = {
   _htmlListaFila() {
     const versoAtual = this.filaVersos[this.filaVersoIdx];
     const linhas = [];
-    let ordem = 0, totalVersos = 0, jaPassou = 0, achouAtual = false;
+    let ordem = 0, totalItens = 0, jaPassou = 0, achouAtual = false, temNota = false;
 
     this.fila.forEach((seg, si) => {
+      // segmento de NOTA: uma única linha "Anotação N", sem versão nem referência
+      if (seg.tipo === 'nota') {
+        temNota = true;
+        ordem++; totalItens++;
+        let estado = '';
+        if (si === this.filaIdx) { estado = 'tocando'; achouAtual = true; }
+        else if (!achouAtual) { estado = 'passou'; jaPassou++; }
+        linhas.push(`<button class="faixa faixa-nota ${estado}" data-faixa="${si}">
+          <span class="faixa-num">${ordem}</span>
+          <span class="faixa-ref">${Leitura.escapar(seg.rotulo || 'Anotação')}</span>
+          ${estado === 'tocando' ? '<span class="faixa-agora">tocando</span>' : ''}
+        </button>`);
+        return;
+      }
       const nome = Dados.nomeCurto(seg.versao, seg.code);
       const versos = Array.isArray(seg.versos) && seg.versos.length ? seg.versos : [null];
       versos.forEach(v => {
-        ordem++; totalVersos++;
+        ordem++; totalItens++;
         let estado = '';
         if (si === this.filaIdx && (v == null || v === versoAtual)) { estado = 'tocando'; achouAtual = true; }
         else if (!achouAtual) { estado = 'passou'; jaPassou++; }
@@ -4091,10 +4165,11 @@ const App = {
       });
     });
 
-    const faltam = Math.max(0, totalVersos - jaPassou - 1);
+    const faltam = Math.max(0, totalItens - jaPassou - 1);
+    const palavra = temNota ? 'iten' : 'versículo';   // "itens" quando há notas na mistura
     return `<div class="player-lista-topo">
         <span class="player-lista-nome">${Leitura.escapar(this.filaNome || 'Lista')}</span>
-        <span class="player-lista-conta">${totalVersos} versículo${totalVersos > 1 ? 's' : ''} · faltam ${faltam}</span>
+        <span class="player-lista-conta">${totalItens} ${palavra}${totalItens > 1 ? 's' : ''} · faltam ${faltam}</span>
       </div>
       <div class="player-lista-rol">${linhas.join('')}</div>`;
   },
@@ -4178,7 +4253,7 @@ const App = {
     if (!('mediaSession' in navigator)) return;
     try {
       navigator.mediaSession.playbackState =
-        (this.ouvindo && this.lendoVers != null && !this.pausado) ? 'playing' : 'paused';
+        (this.ouvindo && !this.pausado && (this.lendoVers != null || this.lendoNota)) ? 'playing' : 'paused';
     } catch (e) {}
   },
 

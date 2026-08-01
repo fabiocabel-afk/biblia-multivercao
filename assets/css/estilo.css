@@ -3718,6 +3718,11 @@ body.ouvindo .folha { padding-bottom: 200px; }
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* faixa de anotação: distingue da referência bíblica com itálico e a rubrica */
+.faixa.faixa-nota .faixa-ref {
+  font-style: italic;
+  color: var(--rubrica-clara);
+}
 .faixa-agora {
   flex: none;
   font-size: 10px;
