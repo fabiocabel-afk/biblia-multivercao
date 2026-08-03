@@ -1,3 +1,4 @@
+/* Bíblia — © 2026 Fabio · CC BY-NC-SA 4.0 (uso não comercial, sem lucro). Veja LICENSE. */
 /* cores.js — a roda de cores dos marcadores.
  *
  * O seletor do proprio navegador e desconfortavel no celular: abre uma janela

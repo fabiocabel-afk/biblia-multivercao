@@ -1,3 +1,4 @@
+/* Bíblia — © 2026 Fabio · CC BY-NC-SA 4.0 (uso não comercial, sem lucro). Veja LICENSE. */
 /* voz.js — leitura em voz alta usando as vozes do próprio aparelho
  * (Web Speech API, que já vem no navegador — não precisa de internet nem de
  * servidor). A leitura é feita versículo a versículo: quando um termina, o

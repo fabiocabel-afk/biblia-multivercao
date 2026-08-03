@@ -1,3 +1,4 @@
+/* Bíblia — © 2026 Fabio · CC BY-NC-SA 4.0 (uso não comercial, sem lucro). Veja LICENSE. */
 /* armazenamento.js — tudo que precisa sobreviver a fechar o app.
  *
  * O historico e o coracao do app: ele nunca apaga nada. Grava sozinho a cada

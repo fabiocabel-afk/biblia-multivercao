@@ -1,3 +1,4 @@
+/* Bíblia — © 2026 Fabio · CC BY-NC-SA 4.0 (uso não comercial, sem lucro). Veja LICENSE. */
 /* busca.js — procura no texto bíblico.
  *
  * O escopo (funil) reaproveita a árvore de navegação: Toda a Bíblia >

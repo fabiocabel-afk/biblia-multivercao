@@ -1,3 +1,4 @@
+/* Bíblia — © 2026 Fabio · CC BY-NC-SA 4.0 (uso não comercial, sem lucro). Veja LICENSE. */
 /* leitura.js — desenha o texto na folha.
  *
  * Capitular grande com o numero do capitulo, numeros de versiculo pequenos

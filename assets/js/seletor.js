@@ -1,3 +1,4 @@
+/* Bíblia — © 2026 Fabio · CC BY-NC-SA 4.0 (uso não comercial, sem lucro). Veja LICENSE. */
 /* ============================================================== Seletor =====
  * A lista suspensa nativa do <select> é desenhada pelo sistema operacional e
  * não aceita o nosso tema — fica com cara de navegador. Este módulo desenha,

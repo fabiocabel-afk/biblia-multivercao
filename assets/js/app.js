@@ -1,3 +1,14 @@
+/* Bíblia — aplicativo de leitura e estudo bíblico (PWA)
+ * Copyright © 2026 Fabio
+ *
+ * Distribuído sob a licença Creative Commons
+ * Atribuição-NãoComercial-CompartilhaIgual 4.0 Internacional (CC BY-NC-SA 4.0).
+ * https://creativecommons.org/licenses/by-nc-sa/4.0/deed.pt-br
+ *
+ * Uso livre e gratuito, sem qualquer fim comercial. Feito para promover a fé
+ * e servir às pessoas — não para ser vendido. Veja o arquivo LICENSE.
+ */
+
 /* app.js — junta tudo.
  *
  * Estado minimo: qual versao, qual livro, qual capitulo. Toda passagem aberta
@@ -48,6 +59,28 @@ const App = {
     // Histórico traz a visita repetida para o topo em vez de acrescentar outra.
     await this.ir(this.code, this.cap, null);
     this.registrarServico();
+    this.talvezBoasVindas();   // saudação de abertura, só na primeira visita
+  },
+
+  /* Saudação de boas-vindas: aparece uma única vez, na primeira abertura do
+   * app. Explica o propósito — recurso gratuito, sem fim comercial — e some
+   * para sempre depois de a pessoa confirmar. Marca a visita ANTES de mostrar,
+   * para não reaparecer se a página recarregar com o aviso ainda aberto. */
+  async talvezBoasVindas() {
+    if (Guarda.ler('boasVindas', false)) return;   // já foi vista antes
+    Guarda.gravar('boasVindas', true);
+    await this.avisar({
+      titulo: 'Bem-vindo à Bíblia',
+      html:
+        'Este aplicativo foi criado para <strong>promover a fé</strong> e o ' +
+        'estudo da Palavra — um recurso <strong>gratuito</strong>, feito para ' +
+        'servir às pessoas.<br><br>' +
+        'Use e compartilhe à vontade. O único pedido é que ele ' +
+        '<strong>nunca seja usado para lucro</strong>: foi feito com propósito, ' +
+        'não para ser vendido.<br><br>' +
+        '<span style="color:var(--tinta-fraca)">Distribuído sob a licença ' +
+        'Creative Commons BY-NC-SA 4.0.</span>',
+    });
   },
 
   /* Quando os dados nao abrem, o app precisa dizer QUAL foi o problema.

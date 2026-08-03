@@ -1,3 +1,4 @@
+/* Bíblia — © 2026 Fabio · CC BY-NC-SA 4.0 (uso não comercial, sem lucro). Veja LICENSE. */
 /* dados.js — carregador unificado.
  *
  * O resto do app nunca precisa saber qual versao esta aberta, nem que a

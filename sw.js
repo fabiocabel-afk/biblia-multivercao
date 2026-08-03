@@ -1,3 +1,14 @@
+/* Bíblia — aplicativo de leitura e estudo bíblico (PWA)
+ * Copyright © 2026 Fabio
+ *
+ * Distribuído sob a licença Creative Commons
+ * Atribuição-NãoComercial-CompartilhaIgual 4.0 Internacional (CC BY-NC-SA 4.0).
+ * https://creativecommons.org/licenses/by-nc-sa/4.0/deed.pt-br
+ *
+ * Uso livre e gratuito, sem qualquer fim comercial. Feito para promover a fé
+ * e servir às pessoas — não para ser vendido. Veja o arquivo LICENSE.
+ */
+
 /* sw.js — deixa o app funcionar sem internet.
  *
  * O esqueleto (telas, estilo, codigo) e os arquivos de meta entram no cache na
@@ -8,7 +19,7 @@
 /* A casca sobe de versao a cada mudanca no app, para o navegador nao servir a
  * versao antiga. Os textos biblicos ficam numa versao propria e estavel: eles
  * nunca mudam, e nao ha por que rebaixar tudo por causa de um ajuste de tela. */
-const CASCA = 'casca-biblia-v64';
+const CASCA = 'casca-biblia-v65';
 const TEXTOS = 'textos-biblia-v1';
 
 const ESSENCIAIS = [
