@@ -182,9 +182,10 @@ const App = {
     this.selecao = null;
     this.renderBarraSelecao();
 
-    // versão interlinear: o significado em português vem do léxico Strong, que
-    // precisa estar carregado ANTES de desenhar (a montagem é síncrona)
-    if (Dados.ehInterlinear(this.versao)) {
+    // versão de língua original (interlinear ou texto puro): o significado em
+    // português vem do léxico Strong, que precisa estar carregado ANTES de
+    // desenhar (a montagem é síncrona) — e alimenta o pop-up de estudo da palavra
+    if (Dados.ehOriginal(this.versao)) {
       try { await Dados.carregarLexico(r.livro.lang); } catch {}
     }
 
@@ -3072,6 +3073,29 @@ const App = {
     this.atualizarMais();
   },
 
+  /** Tocar no número grande do capítulo seleciona todos os versículos de uma vez.
+   *  Se todos já estão selecionados, um novo toque limpa a seleção. Havendo apenas
+   *  alguns marcados, passa a marcar o capítulo inteiro. Atalho do modo de vários. */
+  selecionarCapitulo() {
+    const todos = [...document.querySelectorAll('#folha .v[data-vers]')]
+      .map(el => +el.dataset.vers)
+      .filter(n => !Number.isNaN(n));
+    if (!todos.length) return;
+    this.multiVers = this.multiVers || new Set();
+    const jaTodos = this.multiVers.size === todos.length
+      && todos.every(v => this.multiVers.has(v));
+    if (jaTodos) {
+      this.resetarMulti();
+      this.selecao = null;
+      this.renderBarraSelecao();
+    } else {
+      window.getSelection()?.removeAllRanges();   // larga qualquer seleção de texto
+      this.multiAtivo = true;                      // fica no modo de vários para ajustar depois
+      this.multiVers = new Set(todos);
+      this.atualizarSelecaoMulti();
+    }
+  },
+
   /** Fecha a barra ao concluir uma ação. No modo de vários versículos, mantém o
    *  grupo e o modo ligados (só recolhe a paleta de cores). */
   encerrarAcao() {
@@ -3251,6 +3275,10 @@ const App = {
         alvo.innerHTML = `<div class="cabeca-metade">${sigla(versaoCode, qual)}
           <span>Capítulo não encontrado.</span>${fecharBotao}</div>`;
         return;
+      }
+      // metade de língua original: carrega o léxico antes (montagem síncrona)
+      if (Dados.ehOriginal(versaoCode)) {
+        try { await Dados.carregarLexico(r.livro.lang); } catch {}
       }
       alvo.innerHTML = `<div class="cabeca-metade">
           ${sigla(versaoCode, qual)}
@@ -3556,6 +3584,12 @@ const App = {
         }
         return;
       }
+      // tocar no número grande do capítulo seleciona (ou limpa) todos os versículos
+      if (e.target.closest('.capitular')) {
+        clearTimeout(espera); espera = null;
+        this.selecionarCapitulo();
+        return;
+      }
       const sinal = e.target.closest('.marca-nota');
       if (sinal) {                       // tocar no sinalzinho abre a leitura
         clearTimeout(espera); espera = null;
@@ -3569,10 +3603,9 @@ const App = {
       const palavra = e.target.closest('.il-p');   // tocou numa palavra do interlinear?
       espera = setTimeout(() => {
         espera = null;
-        // interlinear: com o versículo JÁ selecionado, tocar a palavra abre o
-        // estudo dela (mesmo padrão das outras Bíblias: 1º seleciona, 2º abre)
-        if (palavra && this.pontoAtual === vers && !this.multiAtivo && !this.multiSelecao
-            && Dados.ehInterlinear(this.versao)) {
+        // com o versículo JÁ selecionado, tocar a palavra abre o estudo dela —
+        // vale no interlinear e no original puro (ambos têm dados por palavra)
+        if (palavra && this.pontoAtual === vers && !this.multiAtivo && !this.multiSelecao) {
           this.abrirPalavraInterlinear(palavra);
           return;
         }

@@ -100,7 +100,11 @@ const Leitura = {
 
       // no interlinear o áudio não pode ler o alfabeto original: guardamos a
       // transliteração inteira no data-fala, e é ela que a voz e a cópia usam
-      const temPalavras = ehInter && Array.isArray(v.palavras) && v.palavras.length;
+      // tem dados palavra a palavra? (interlinear empilhado OU original corrido)
+      const temPalavras = Array.isArray(v.palavras) && v.palavras.length;
+      // original tocável: versão de língua original SEM ser interlinear (HEB-GRE)
+      // — o texto flui como de costume, mas cada palavra é tocável para o estudo
+      const corrido = temPalavras && !ehInter;
       const fala = temPalavras
         ? ` data-fala="${this.escaparAttr(v.palavras.map(p => p.t).filter(Boolean).join(' '))}"`
         : '';
@@ -110,7 +114,7 @@ const Leitura = {
       const dir = rtl ? ' dir="rtl"' : '';
 
       const attrs = [
-        `class="v${(v.text || temPalavras) ? '' : ' vazio'}${ehInter ? ' interlinear' : ''}${rtl ? ' il-rtl' : ''}${ehPonto ? ' ponto' : ''}"`,
+        `class="v${(v.text || temPalavras) ? '' : ' vazio'}${temPalavras ? ' interlinear' : ''}${rtl ? ' il-rtl' : ''}${corrido ? ' il-corr' : ''}${ehPonto ? ' ponto' : ''}"`,
         `data-vers="${v.number}"${fala}${dir}`,
       ].join(' ');
 
@@ -124,7 +128,9 @@ const Leitura = {
 
       let texto;
       if (temPalavras) {
-        texto = this.interlinear(v.palavras, livro.lang);
+        // o número entra no fluxo das palavras: vira cabeçalho da linha, na mesma
+        // linha do início do texto (à direita no hebraico, à esquerda no grego)
+        texto = this.interlinear(v.palavras, livro.lang, numero, corrido);
       } else if (v.text) {
         texto = this.comMarcas(v.text, faixas);
       } else {
@@ -133,7 +139,9 @@ const Leitura = {
       }
 
       const nota = comNota.has(v.number) ? this.marcaNotaHTML(v.number) : '';
-      const verso = `<span ${attrs}>${numero}${nota}${texto}</span>`;
+      // com palavras, o número já foi injetado no fluxo; fora disso, vai antes
+      const numeroFora = temPalavras ? '' : numero;
+      const verso = `<span ${attrs}>${numeroFora}${nota}${texto}</span>`;
 
       // No "um por linha" a capitular vai numa coluna própria à esquerda, fora da
       // caixa do versiculo — assim a marcacao (e o "onde parei") pegam so o texto,
@@ -254,8 +262,8 @@ const Leitura = {
    * O português sai do léxico Strong (já carregado antes de desenhar). Quando
    * ainda não há português para aquele Strong, cai no gloss inglês da palavra,
    * para o bloco nunca ficar vazio. */
-  interlinear(palavras, lang) {
-    const blocos = palavras.map(p => {
+  interlinear(palavras, lang, numeroHTML = '', corrido = false) {
+    const arr = palavras.map(p => {
       const pt = (Dados.significado(lang, p.s) || p.g || '').trim();
       const strong = p.s ? ` data-strong="${this.escaparAttr(p.s)}"` : '';
       // bloco de morfologia: Strong, código gramatical e lema empilhados; é a
@@ -267,8 +275,14 @@ const Leitura = {
         + `<span class="il-g"><span class="il-txt">${this.escapar(pt)}</span></span>`
         + `<span class="il-m">${morfo}</span>`
         + `</span>`;
-    }).join('');
-    return `<span class="il-palavras">${blocos}</span>`;
+    });
+    // corrido = original tocável fluindo como texto: as palavras são separadas por
+    // um espaço real, que dá o ponto de quebra de linha (cada palavra é nowrap).
+    // Empilhado = blocos colados (o flex cuida do espaçamento e da quebra).
+    const blocos = corrido ? arr.join(' ') : arr.join('');
+    const sep = corrido && numeroHTML ? ' ' : '';
+    const cls = corrido ? 'il-palavras il-corrido' : 'il-palavras';
+    return `<span class="${cls}">${numeroHTML}${sep}${blocos}</span>`;
   },
 
   /* Monta a caixinha de morfologia de uma palavra: número de Strong em cima,

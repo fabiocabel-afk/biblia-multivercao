@@ -212,6 +212,8 @@ button {
   font-weight: 500;
   color: var(--rubrica);
   font-feature-settings: 'lnum' 1;
+  cursor: pointer;                 /* toca para selecionar o capítulo inteiro */
+  touch-action: manipulation;
 }
 
 /* touch-action: o toque duplo abre a tirinha, e nao pode dar zoom na pagina */
@@ -4014,12 +4016,14 @@ input[type="search"]::-webkit-search-decoration { -webkit-appearance: none; appe
   display: block;
   margin: 0 0 1.15rem;
 }
-.v.interlinear .n {
+/* o número agora é o 1º item do fluxo das palavras: cabeçalho de linha, no topo,
+   na direção de leitura (à direita no hebraico, à esquerda no grego) */
+.v.interlinear .il-palavras > .n {
+  align-self: flex-start;
   color: var(--tinta-numero);
-  font-size: .64em;
+  font-size: .68em;
   font-weight: 700;
-  vertical-align: super;
-  margin: 0 .2em;
+  margin: .12em .1em 0;
 }
 
 .il-palavras {
@@ -4224,4 +4228,31 @@ html[data-il-abrev="sim"] .il-m-c .il-txt {
 .il-opcao.inativa {
   opacity: .4;
   pointer-events: none;
+}
+
+/* ------------------------------------------------- original corrido (HEB-GRE)
+   A versão em língua original SEM interlinear: o texto flui como de costume
+   (só o original visível), mas cada palavra continua sendo um bloco tocável —
+   as camadas de apoio ficam no DOM, escondidas, alimentando o pop-up de estudo. */
+.il-palavras.il-corrido {
+  display: block;             /* fluxo de texto: quebra nos espaços entre palavras */
+  line-height: 2;
+  font-size: 1.12em;
+  text-align: start;          /* à direita no hebraico (RTL), à esquerda no grego */
+}
+/* no hebraico o bloco herda direction:rtl, então as linhas quebradas já ficam
+   alinhadas à direita; no grego, alinhadas à esquerda, como esperado */
+.il-corrido .il-p { display: inline; }
+.il-corrido .il-o { font-size: 1em; margin: 0; }
+/* nada de transliteração/português/morfologia inline aqui (só no toque) */
+.il-corrido .il-t,
+.il-corrido .il-g,
+.il-corrido .il-m { display: none !important; }
+/* número como cabeçalho de linha, na direção de leitura (RTL herda do container) */
+.il-corrido > .n {
+  font-size: .62em;
+  font-weight: 700;
+  color: var(--tinta-numero);
+  vertical-align: super;
+  margin: 0 .15em;
 }
