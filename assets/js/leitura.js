@@ -88,6 +88,7 @@ const Leitura = {
     // o numero do primeiro continua, porque ali cada linha comeca pelo numero.
     const porLinha = Prefs.get('versiculoPorLinha');
     const versificacao = Dados.versificacaoDe(versaoCode);
+    const ehInter = Dados.ehInterlinear(versaoCode);   // desenha em blocos palavra-a-palavra
     // versiculos que tem anotacao neste capitulo, para o sinalzinho na tela
     const comNota = Anotacoes.noCapitulo(versificacao, livro.code, capitulo.number);
     const partes = [];
@@ -97,9 +98,20 @@ const Leitura = {
       const faixas = Marcadores.faixas(versificacao, livro.code, capitulo.number, v.number);
       const ehPonto = Ponto.eh(versificacao, livro.code, capitulo.number, v.number);
 
+      // no interlinear o áudio não pode ler o alfabeto original: guardamos a
+      // transliteração inteira no data-fala, e é ela que a voz e a cópia usam
+      const temPalavras = ehInter && Array.isArray(v.palavras) && v.palavras.length;
+      const fala = temPalavras
+        ? ` data-fala="${this.escaparAttr(v.palavras.map(p => p.t).filter(Boolean).join(' '))}"`
+        : '';
+      // hebraico corre da direita para a esquerda; grego, da esquerda para a
+      // direita — como na Bíblia interlinear impressa
+      const rtl = temPalavras && livro.lang === 'he';
+      const dir = rtl ? ' dir="rtl"' : '';
+
       const attrs = [
-        `class="v${v.text ? '' : ' vazio'}${ehPonto ? ' ponto' : ''}"`,
-        `data-vers="${v.number}"`,
+        `class="v${(v.text || temPalavras) ? '' : ' vazio'}${ehInter ? ' interlinear' : ''}${rtl ? ' il-rtl' : ''}${ehPonto ? ' ponto' : ''}"`,
+        `data-vers="${v.number}"${fala}${dir}`,
       ].join(' ');
 
       const ehAbertura = comCapitular && i === 0;
@@ -110,10 +122,15 @@ const Leitura = {
       // o numero do primeiro versiculo so sai no corrido; no "um por linha" fica
       const numero = (ehAbertura && !porLinha) ? '' : `<span class="n">${v.number}</span>`;
 
-      if (!v.text) lacunas++;
-      const texto = v.text
-        ? this.comMarcas(v.text, faixas)
-        : '(este versículo não veio no texto de origem)';
+      let texto;
+      if (temPalavras) {
+        texto = this.interlinear(v.palavras, livro.lang);
+      } else if (v.text) {
+        texto = this.comMarcas(v.text, faixas);
+      } else {
+        lacunas++;
+        texto = '(este versículo não veio no texto de origem)';
+      }
 
       const nota = comNota.has(v.number) ? this.marcaNotaHTML(v.number) : '';
       const verso = `<span ${attrs}>${numero}${nota}${texto}</span>`;
@@ -191,6 +208,9 @@ const Leitura = {
 
   pintarMarca(vers, texto, faixas) {
     document.querySelectorAll(`#folha .v[data-vers="${vers}"]`).forEach(el => {
+      // no interlinear o versículo são blocos empilhados; repintar por dentro
+      // apagaria as palavras. A marcação de cor não se aplica a esse modo.
+      if (el.classList.contains('interlinear')) return;
       const n = el.querySelector('.n');
       const nota = el.querySelector('.marca-nota');   // preserva o sinal ao repintar
       const capitular = el.previousElementSibling;
@@ -217,6 +237,54 @@ const Leitura = {
 
   escapar(t) {
     return t.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+  },
+
+  escaparAttr(t) {
+    return String(t == null ? '' : t).replace(/[&<>"]/g,
+      c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  },
+
+  /* --------------------------------------------------------- interlinear
+   *
+   * Cada palavra vira um bloco empilhado: original em cima, transliteração e
+   * português embaixo. Os blocos fluem na ordem de leitura do original e quebram
+   * linha como palavras num paragrafo. A transliteração e o português somem/
+   * aparecem por CSS conforme os data-atributos da raiz (o pop-up "Exibir").
+   *
+   * O português sai do léxico Strong (já carregado antes de desenhar). Quando
+   * ainda não há português para aquele Strong, cai no gloss inglês da palavra,
+   * para o bloco nunca ficar vazio. */
+  interlinear(palavras, lang) {
+    const blocos = palavras.map(p => {
+      const pt = (Dados.significado(lang, p.s) || p.g || '').trim();
+      const strong = p.s ? ` data-strong="${this.escaparAttr(p.s)}"` : '';
+      // bloco de morfologia: Strong, código gramatical e lema empilhados; é a
+      // camada "informativa" que alterna com o português (nunca os dois juntos)
+      const morfo = this.morfologia(p);
+      return `<span class="il-p"${strong}>`
+        + `<span class="il-o">${this.escapar(p.o || '')}</span>`
+        + `<span class="il-t">${this.escapar(p.t || '')}</span>`
+        + `<span class="il-g"><span class="il-txt">${this.escapar(pt)}</span></span>`
+        + `<span class="il-m">${morfo}</span>`
+        + `</span>`;
+    }).join('');
+    return `<span class="il-palavras">${blocos}</span>`;
+  },
+
+  /* Monta a caixinha de morfologia de uma palavra: número de Strong em cima,
+     o código gramatical decodificado no meio e o lema (forma de dicionário)
+     embaixo. Cada linha só sai se existir, para não ficar buraco. */
+  morfologia(p) {
+    const linhas = [];
+    if (p.s) linhas.push(`<span class="il-m-s">${this.escapar(p.s)}</span>`);
+    if (p.m) {
+      const curto = MorfologiaCodigo.compacto(p.m);
+      const longo = MorfologiaCodigo.completo(p.m);
+      const titulo = longo ? ` title="${this.escaparAttr(longo)}"` : '';
+      linhas.push(`<span class="il-m-c"${titulo}><span class="il-txt">${this.escapar(curto || p.m)}</span></span>`);
+    }
+    if (p.l) linhas.push(`<span class="il-m-l">${this.escapar(p.l)}</span>`);
+    return linhas.join('');
   },
 
   /* ----------------------------------------------------------- tirinha */

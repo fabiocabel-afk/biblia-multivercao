@@ -58,6 +58,9 @@ const Prefs = {
     mostrarNotas: true,        // sinalzinho no versículo quando há anotação no caderno
     vozURI: null,              // voz escolhida para a leitura em voz alta (null = automática)
     vozVel: 1,                 // velocidade da leitura em voz (1 = normal)
+    interlinearTranslit: true, // interlinear: mostrar a transliteração sob cada palavra
+    interlinearInfo: 'pt',     // interlinear: qual informação embaixo ('pt'=português, 'morfo'=morfologia, 'nada'=nenhuma)
+    interlinearAbrev: false,   // interlinear: cortar o começo do português/morfologia (colunas alinhadas)
   },
 
   todas() {

@@ -29,6 +29,46 @@ const Dados = {
     return this.versoes.find(v => v.code === code) || null;
   },
 
+  /* ---------------------------------------------------- interlinear + léxico
+   * Uma versão interlinear traz, em cada versículo, o array `palavras` (original,
+   * transliteração, Strong, morfologia). O significado em português vem à parte,
+   * do léxico Strong, carregado sob demanda e indexado por número (H430, G2316). */
+  lexico: { he: null, gr: null },
+
+  ehInterlinear(versaoCode) {
+    return !!(this.versao(versaoCode) && this.versao(versaoCode).interlinear);
+  },
+
+  /** Versão em língua original (hebraico/grego): o grupo "original" cobre tanto
+   *  o texto puro quanto o interlinear. Usado, p.ex., para desligar o áudio —
+   *  a voz do navegador não pronuncia esses alfabetos. */
+  ehOriginal(versaoCode) {
+    const v = this.versao(versaoCode);
+    return !!(v && (v.group === 'original' || v.interlinear));
+  },
+
+  async carregarLexico(lang) {
+    if (lang !== 'he' && lang !== 'gr') return {};
+    if (this.lexico[lang]) return this.lexico[lang];
+    try {
+      const d = await fetch(`data/lexico/strong-${lang}.json`).then(r => r.ok ? r.json() : {});
+      this.lexico[lang] = d;
+      return d;
+    } catch {
+      this.lexico[lang] = {};
+      return {};
+    }
+  },
+
+  /** Significado de um Strong: português do léxico; se faltar, o inglês. */
+  significado(lang, strong) {
+    const dic = this.lexico[lang];
+    if (!dic || !strong) return '';
+    const e = dic[strong];
+    if (!e) return '';
+    return e.pt || e.en || '';
+  },
+
   canoneDe(versaoCode) {
     const v = this.versao(versaoCode);
     return v ? v.canon : 'protestant';

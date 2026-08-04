@@ -3981,3 +3981,243 @@ input[type="range"]::-moz-range-track {
 /* tira o "x" nativo do campo de busca (o app já tem o seu próprio) */
 input[type="search"]::-webkit-search-cancel-button,
 input[type="search"]::-webkit-search-decoration { -webkit-appearance: none; appearance: none; }
+
+/* ============================================================ interlinear
+ * Espelha a Bíblia interlinear impressa: cada palavra é um bloco empilhado —
+ * original grande em cima, transliteração (opcional) e português embaixo. O
+ * hebraico corre da direita para a esquerda; o grego, da esquerda para a
+ * direita. As camadas aparecem/somem pelos data-atributos da raiz (pop-up). */
+
+.barra-interlinear {
+  display: flex;
+  justify-content: flex-end;
+  margin: 0 0 .7rem;
+}
+.botao-il {
+  display: inline-flex;
+  align-items: center;
+  gap: .4em;
+  padding: .38em .85em;
+  font: inherit;
+  font-size: .82rem;
+  color: var(--cromo-texto);
+  background: var(--cromo);
+  border: none;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.botao-il .icone { width: 1.05em; height: 1.05em; }
+
+/* o versículo interlinear é um bloco; o número vai sobrescrito, colado na
+   primeira palavra (à direita no hebraico, à esquerda no grego) */
+.v.interlinear {
+  display: block;
+  margin: 0 0 1.15rem;
+}
+.v.interlinear .n {
+  color: var(--tinta-numero);
+  font-size: .64em;
+  font-weight: 700;
+  vertical-align: super;
+  margin: 0 .2em;
+}
+
+.il-palavras {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: .55em 1.05em;          /* linha, coluna: respira como na página impressa */
+}
+.v.interlinear.il-rtl .il-palavras { direction: rtl; }
+
+/* cada palavra: coluna centrada, original sobre a tradução */
+.il-p {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  direction: ltr;             /* a coluna em si é sempre montada de cima para baixo */
+  line-height: 1.15;
+}
+.il-o {
+  font-size: 1.32em;
+  color: var(--tinta);
+  unicode-bidi: isolate;      /* cada palavra hebraica/grega com a direção certa */
+  white-space: nowrap;
+  margin-bottom: .12em;
+}
+.v.interlinear.il-rtl .il-o { direction: rtl; }
+.il-t {
+  font-size: .72em;
+  font-style: italic;
+  color: var(--rubrica-clara);   /* transliteração num vermelho mais claro */
+  white-space: nowrap;
+  margin-bottom: .05em;
+}
+.il-g {
+  font-size: .8em;
+  color: var(--rubrica);         /* português num vinho — família do translit, tom mais fechado */
+  max-width: 11em;
+}
+
+/* bloco de morfologia: Strong, código gramatical e lema empilhados; alterna
+   com o português (nunca os dois juntos, para não poluir) */
+.il-m {
+  display: none;              /* aparece só no modo morfologia */
+  flex-direction: column;
+  align-items: center;
+  line-height: 1.25;
+  max-width: 12em;
+}
+.il-m-s { font-size: .72em; font-weight: 700; color: var(--rubrica); }
+.il-m-c { font-size: .72em; color: var(--rubrica); }
+/* o lema é letra original (hebraico/grego): fica no tom neutro, como o original */
+.il-m-l { font-size: .82em; color: var(--tinta-fraca); unicode-bidi: isolate; }
+.v.interlinear.il-rtl .il-m-l { direction: rtl; }
+
+/* transliteração: liga/desliga independente */
+html[data-il-translit="nao"] .il-t { display: none; }
+
+/* português × morfologia × nenhum (exclusivos): o português é o padrão */
+html[data-il-info="morfo"] .il-g,
+html[data-il-info="nada"]  .il-g { display: none; }
+html[data-il-info="morfo"] .il-m { display: flex; }
+
+/* modo abreviar: corta o começo do português/morfologia sem quebra de linha,
+   deixando as colunas alinhadas; o "+" aparece só quando de fato cortou (a
+   classe .il-cortado é posta por JS medindo o transbordo). O texto vai num
+   span interno recortado, para o "+" ficar de fora e não sumir junto. */
+html[data-il-abrev="sim"] .il-g .il-txt,
+html[data-il-abrev="sim"] .il-m-c .il-txt {
+  display: inline-block;
+  max-width: 5.2em;
+  overflow: hidden;
+  white-space: nowrap;
+  vertical-align: bottom;
+}
+.il-cortado::after {
+  content: "+";
+  font-size: .9em;
+  font-weight: 700;
+  color: var(--rubrica-clara);
+  margin-left: .08em;
+  vertical-align: bottom;
+}
+
+/* opções do pop-up (checkbox/rádio + rótulo com subtítulo) */
+.il-opcao {
+  display: flex;
+  align-items: flex-start;
+  gap: .6em;
+  padding: .55em 0;
+  cursor: pointer;
+}
+.il-opcao input { margin-top: .2em; width: 1.15em; height: 1.15em; flex: none; }
+.il-opcao span { display: flex; flex-direction: column; }
+.il-opcao small { color: var(--tinta-fraca); font-size: .82em; margin-top: .1em; }
+
+/* grupo exclusivo (português / morfologia / nenhum) */
+.il-grupo {
+  border: none;
+  border-top: 1px solid var(--linha, rgba(128,128,128,.25));
+  margin: .4em 0 0;
+  padding: .5em 0 0;
+}
+.il-grupo legend {
+  padding: 0;
+  font-size: .82em;
+  color: var(--tinta-fraca);
+}
+
+/* ---------------------------------------------- engrenagem "Exibir" na compar.
+   A do topo herda o estilo de .topo button; aqui só a do cabeçalho das metades. */
+.cabeca-metade .btn-il-exibir {
+  flex: none;
+  padding: 3px 6px;
+  background: none;
+  border: none;
+  color: var(--tinta-fraca);
+  cursor: pointer;
+}
+.cabeca-metade .btn-il-exibir .icone { width: 18px; height: 18px; }
+
+/* ------------------------------------------------- pop-up de estudo da palavra
+   Palavra original grande no topo; abaixo, cada dado numa linha rotulada,
+   separadas por um fio finíssimo — transliteração, português, morfologia,
+   Strong e lema. */
+.pe-original {
+  flex: none;
+  font-size: 2em;
+  line-height: 1.2;
+  text-align: center;
+  color: var(--tinta);
+  margin-bottom: .5em;
+  unicode-bidi: isolate;
+}
+.pe-linha {
+  flex: none;
+  display: block;                /* rótulo em cima (título), valor embaixo em largura total */
+  padding: .55em 0;
+  border-top: 1px solid color-mix(in srgb, var(--tinta) 12%, transparent);
+}
+.pe-rot {
+  display: block;
+  color: var(--tinta-fraca);
+  font-size: .72em;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  margin-bottom: .15em;
+}
+.pe-val {
+  display: block;
+  text-align: left;              /* ocupa toda a largura, menos quebra */
+  color: var(--rubrica);         /* mesma família das camadas de apoio */
+  line-height: 1.4;
+}
+#pe-l { color: var(--tinta-fraca); }   /* lema é letra original: tom neutro */
+.palavra-estudo .dialogo-acoes { margin-top: 1.1em; }
+
+/* ------------------------------------------------ quadradinho da versão + eng.
+   Nome da versão e engrenagem "Exibir" dentro de uma só moldura: parecem um
+   botão só, com uma barrinha vertical separando as duas ações. */
+.versao-box {
+  display: inline-flex;
+  align-items: stretch;
+  border: 1px solid var(--cromo-fraco);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.versao-box .versao-nome,
+.versao-box .btn-il-exibir {
+  height: 32px;
+  min-width: 0;
+  padding: 0 9px;
+  border: none;
+  border-radius: 0;
+  background: none;
+  color: inherit;
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+}
+.versao-box .versao-nome {
+  font-family: var(--fonte-sigla);
+  font-size: 12px;
+  letter-spacing: .04em;
+}
+.versao-box .versao-nome:hover,
+.versao-box .btn-il-exibir:hover { background: var(--cromo-alto); }
+/* a divisória só aparece quando a engrenagem está presente (interlinear) */
+.versao-box.com-engrenagem .btn-il-exibir { border-left: 1px solid var(--cromo-fraco); }
+.versao-box .btn-il-exibir { padding: 0 8px; }
+.versao-box .btn-il-exibir .icone { width: 17px; height: 17px; }
+
+/* "Abreviar" indentado dentro do grupo de informação; inativo quando "Nenhum" */
+.il-opcao.il-sub {
+  margin-left: 1.7em;
+  padding-top: .5em;
+}
+.il-opcao.inativa {
+  opacity: .4;
+  pointer-events: none;
+}

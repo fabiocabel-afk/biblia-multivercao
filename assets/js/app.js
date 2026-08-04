@@ -41,6 +41,7 @@ const App = {
     Leitura.aplicarFonte(p.fonte);
     Leitura.aplicarModoVersiculo(p.versiculoPorLinha);
     Leitura.aplicarModoNotas(p.mostrarNotas);
+    this.aplicarInterlinear(p.interlinearTranslit, p.interlinearInfo, p.interlinearAbrev);
     this.aplicarRefsFixas(p.refsFixas);
 
     // retoma sempre do último lugar visitado — é onde a pessoa parou de fato.
@@ -181,11 +182,18 @@ const App = {
     this.selecao = null;
     this.renderBarraSelecao();
 
+    // versão interlinear: o significado em português vem do léxico Strong, que
+    // precisa estar carregado ANTES de desenhar (a montagem é síncrona)
+    if (Dados.ehInterlinear(this.versao)) {
+      try { await Dados.carregarLexico(r.livro.lang); } catch {}
+    }
+
     folha.innerHTML = `<p class="titulo-livro ${cap === 1 ? 'abertura' : ''}">${Leitura.escapar(r.livro.name)}</p>`
       + Leitura.html(this.versao, r.livro, r.capitulo);
 
     this.atualizarBarra();
     window.scrollTo(0, 0);
+    this._marcarCortados();   // no modo abreviar, marca as palavras que cortaram
 
     if (vers) {
       const alvo = folha.querySelector(`.v[data-vers="${vers}"]`);
@@ -216,6 +224,12 @@ const App = {
     document.getElementById('btn-ref').textContent =
       Dados.referencia(this.versao, this.code, this.cap);
     document.getElementById('sigla-versao').textContent = this.versao;
+    // a engrenagem "Exibir" (dentro do quadradinho da versão) só no interlinear
+    const ehInter = Dados.ehInterlinear(this.versao);
+    const engrenagem = document.getElementById('btn-il-exibir');
+    if (engrenagem) engrenagem.hidden = !ehInter;
+    const caixa = document.getElementById('versao-box');
+    if (caixa) caixa.classList.toggle('com-engrenagem', ehInter);
 
     const info = Dados.infoLivro(this.versao, this.code);
     const temAntes = this.cap > 1 || Dados.vizinho(this.versao, this.code, -1);
@@ -269,6 +283,146 @@ const App = {
     p.className = 'aviso-lacuna';
     p.textContent = texto;
     folha.insertBefore(p, folha.children[1] || null);
+  },
+
+  /* ========================================================== interlinear */
+
+  /* Botão de engrenagem "Exibir em cada palavra". Fica ao lado do seletor de
+   * versão (no topo e, na comparação, no cabeçalho de cada metade). Só aparece
+   * em versão interlinear; abre o pop-up que controla transliteração, português/
+   * morfologia e abreviar. */
+  htmlEngrenagemIl() {
+    return `<button class="btn-il-exibir" type="button" title="Exibir em cada palavra"
+      aria-label="Exibir em cada palavra" aria-haspopup="dialog">
+      <svg class="icone"><use href="#i-ajustes"/></svg>
+    </button>`;
+  },
+
+  /* Liga/desliga as camadas do interlinear por data-atributo na raiz; o CSS
+   * cuida do resto. A transliteração (.il-t) é independente. O português (.il-g)
+   * e a morfologia (.il-m) se excluem: 'info' vale 'pt', 'morfo' ou 'nada'. O
+   * abreviar corta o começo do texto para alinhar as colunas. */
+  aplicarInterlinear(translit, info, abrev) {
+    const r = document.documentElement;
+    r.dataset.ilTranslit = translit ? 'sim' : 'nao';
+    r.dataset.ilInfo = (info === 'morfo' || info === 'nada') ? info : 'pt';
+    r.dataset.ilAbrev = abrev ? 'sim' : 'nao';
+    this._marcarCortados();
+  },
+
+  /* No modo abreviar, marca com "+" só as palavras cujo texto realmente foi
+   * cortado (mede o transbordo do span interno). Fora do modo, limpa as marcas.
+   * Roda depois de desenhar o capítulo e a cada troca no pop-up "Exibir". */
+  _marcarCortados() {
+    const abrev = document.documentElement.dataset.ilAbrev === 'sim';
+    if (!abrev) {
+      document.querySelectorAll('.il-cortado').forEach(e => e.classList.remove('il-cortado'));
+      return;
+    }
+    // deixa o layout assentar antes de medir (evita medir com largura 0)
+    requestAnimationFrame(() => {
+      document.querySelectorAll('#folha .il-g, #folha .il-m-c').forEach(cont => {
+        const txt = cont.querySelector('.il-txt');
+        if (!txt) return;
+        // elementos escondidos (modo oposto) medem 0 e nunca ganham "+"
+        const cortou = txt.scrollWidth > txt.clientWidth + 1;
+        cont.classList.toggle('il-cortado', cortou);
+      });
+    });
+  },
+
+  abrirExibirInterlinear() {
+    const cx = document.getElementById('il-translit');
+    if (cx) cx.checked = Prefs.get('interlinearTranslit');
+    const ca = document.getElementById('il-abrev');
+    if (ca) ca.checked = Prefs.get('interlinearAbrev');
+    // marca o rádio certo (português / morfologia / nenhum)
+    const info = Prefs.get('interlinearInfo') || 'pt';
+    const alvo = document.getElementById(
+      info === 'morfo' ? 'il-morfo' : info === 'nada' ? 'il-nada' : 'il-pt');
+    if (alvo) alvo.checked = true;
+    this._atualizarAbrevDisponivel();     // "Abreviar" inativo quando "Nenhum"
+    document.getElementById('il-veu').classList.add('aberto');
+    document.getElementById('il-veu').setAttribute('aria-hidden', 'false');
+  },
+
+  /* "Abreviar" pertence à informação de baixo: só faz sentido com português ou
+   * morfologia ativos. Com "Nenhum", fica inativo (esmaecido e sem clique). */
+  _atualizarAbrevDisponivel() {
+    const info = Prefs.get('interlinearInfo') || 'pt';
+    const vale = info === 'pt' || info === 'morfo';
+    const cx = document.getElementById('il-abrev');
+    const opc = document.getElementById('il-abrev-opcao');
+    if (cx) cx.disabled = !vale;
+    if (opc) opc.classList.toggle('inativa', !vale);
+  },
+
+  fecharExibirInterlinear() {
+    const veu = document.getElementById('il-veu');
+    if (!veu) return;
+    veu.classList.remove('aberto');
+    veu.setAttribute('aria-hidden', 'true');
+  },
+
+  alternarInterlinear(qual, valor) {
+    if (qual === 'translit') Prefs.set('interlinearTranslit', valor);
+    else if (qual === 'abrev') Prefs.set('interlinearAbrev', valor);
+    else Prefs.set('interlinearInfo', valor);   // 'pt' | 'morfo' | 'nada'
+    this.aplicarInterlinear(
+      Prefs.get('interlinearTranslit'), Prefs.get('interlinearInfo'), Prefs.get('interlinearAbrev'));
+    if (qual === 'info') this._atualizarAbrevDisponivel();   // "Nenhum" inativa o abreviar
+  },
+
+  /* Abre o estudo de uma palavra do interlinear a partir do bloco `.il-p`
+   * tocado. Lê os dados que já estão no DOM (original, transliteração, português
+   * do léxico, morfologia decodificada por extenso, Strong e lema) — assim serve
+   * tanto à leitura normal quanto às duas metades da comparação, sem depender de
+   * qual versão está em cada lado. */
+  abrirPalavraInterlinear(palavraEl) {
+    if (!palavraEl) return;
+    const q = id => document.getElementById(id);
+    const txt = sel => { const e = palavraEl.querySelector(sel); return e ? e.textContent.trim() : ''; };
+
+    const o = txt('.il-o');
+    const t = txt('.il-t');
+    const g = (palavraEl.querySelector('.il-g .il-txt') || {}).textContent || '';
+    const mc = palavraEl.querySelector('.il-m-c');
+    // no bloco de morfologia guardamos a forma por extenso no title; se faltar,
+    // cai no código compacto que está visível
+    const m = mc ? (mc.getAttribute('title') || mc.textContent || '').trim() : '';
+    const s = (palavraEl.dataset.strong || txt('.il-m-s') || '').trim();
+    const l = txt('.il-m-l');
+    const rtl = !!palavraEl.closest('.il-rtl');
+
+    const linha = (idLinha, idVal, valor, comDir) => {
+      const box = q(idLinha);
+      if (!box) return;
+      if (!valor) { box.hidden = true; return; }
+      box.hidden = false;
+      const val = q(idVal);
+      val.textContent = valor;
+      val.dir = comDir && rtl ? 'rtl' : '';
+    };
+
+    const alvoO = q('pe-o');
+    alvoO.textContent = o;
+    alvoO.dir = rtl ? 'rtl' : '';
+    linha('pe-linha-t', 'pe-t', t, false);
+    linha('pe-linha-g', 'pe-g', g.trim(), false);
+    linha('pe-linha-m', 'pe-m', m, false);
+    linha('pe-linha-s', 'pe-s', s, false);
+    linha('pe-linha-l', 'pe-l', l, true);   // lema é letra original
+
+    const veu = q('palavra-veu');
+    veu.classList.add('aberto');
+    veu.setAttribute('aria-hidden', 'false');
+  },
+
+  fecharPalavraInterlinear() {
+    const veu = document.getElementById('palavra-veu');
+    if (!veu) return;
+    veu.classList.remove('aberto');
+    veu.setAttribute('aria-hidden', 'true');
   },
 
   /* ============================================================== painéis */
@@ -575,8 +729,14 @@ const App = {
    * Ajustes e a troca direta dentro da comparação. Uma só aparência, para a
    * pessoa reconhecer na hora onde quer que ela apareça. */
   htmlListaVersoes(selecionada, atributo = 'data-versao') {
-    const porCanone = { protestant: [], catholic: [] };
-    Dados.versoes.forEach(v => porCanone[v.canon].push(v));
+    // as versões vão para três grupos: as marcadas com group:"original" (hebraico
+    // e grego) ficam num grupo próprio, "Textos Originais"; as demais seguem pelo
+    // cânone (protestante / católica)
+    const grupos = { protestant: [], catholic: [], original: [] };
+    Dados.versoes.forEach(v => {
+      const g = v.group === 'original' ? 'original' : (grupos[v.canon] ? v.canon : 'protestant');
+      grupos[g].push(v);
+    });
 
     const bloco = (titulo, lista) => lista.length ? `<div class="grupo">
       <h3>${titulo}</h3>
@@ -588,8 +748,9 @@ const App = {
       </button>`).join('')}
     </div>` : '';
 
-    return bloco('Protestantes', porCanone.protestant)
-         + bloco('Católica', porCanone.catholic);
+    return bloco('Protestantes', grupos.protestant)
+         + bloco('Católica', grupos.catholic)
+         + bloco('Textos Originais', grupos.original);
   },
 
   desenharVersoes() {
@@ -2070,6 +2231,9 @@ const App = {
 
   /** O texto do versículo como está na tela, sem o número que o antecede. */
   textoDoVersiculo(el) {
+    // interlinear: a voz nativa não pronuncia hebraico/grego, então lemos a
+    // transliteração guardada em data-fala (também serve para copiar/compartilhar)
+    if (el.dataset && el.dataset.fala) return el.dataset.fala;
     const n = el.querySelector('.n');
     const inteiro = el.textContent;
     return n ? inteiro.slice(n.textContent.length) : inteiro;
@@ -3090,6 +3254,7 @@ const App = {
       }
       alvo.innerHTML = `<div class="cabeca-metade">
           ${sigla(versaoCode, qual)}
+          ${Dados.ehInterlinear(versaoCode) ? this.htmlEngrenagemIl() : ''}
           <span>${Leitura.escapar(r.livro.name)} ${capitulo}</span>
           ${nota ? `<span style="color:var(--rubrica)">${nota}</span>` : ''}
           ${fecharBotao}
@@ -3131,6 +3296,12 @@ const App = {
         const v = e.target.closest('.v');
         if (!v) return;
         const vers = +v.dataset.vers;
+        // interlinear: com o versículo já realçado, tocar a palavra abre o estudo
+        const palavra = e.target.closest('.il-p');
+        if (palavra && this.destaqueComparacao === vers) {
+          this.abrirPalavraInterlinear(palavra);
+          return;
+        }
         realcar(this.destaqueComparacao === vers ? null : vers);
       };
     });
@@ -3290,6 +3461,35 @@ const App = {
     q('sel-limpar').onclick = () => this.fecharSelecao();
     q('mais-selecao').onclick = () => this.alternarMulti();
 
+    /* Pop-up "Exibir" do interlinear. As engrenagens são redesenhadas (topo e
+     * metades da comparação), então entram por delegação pela classe; os toggles
+     * e o fechar são fixos no HTML. */
+    document.addEventListener('click', e => {
+      if (e.target.closest && e.target.closest('.btn-il-exibir')) this.abrirExibirInterlinear();
+    });
+    const ilVeu = q('il-veu');
+    if (ilVeu) {
+      q('il-fechar').onclick = () => this.fecharExibirInterlinear();
+      ilVeu.addEventListener('click', e => { if (e.target === ilVeu) this.fecharExibirInterlinear(); });
+      // transliteração: independente (checkbox)
+      q('il-translit').onchange = e => this.alternarInterlinear('translit', e.target.checked);
+      // abreviar: independente (checkbox)
+      const abrevEl = q('il-abrev');
+      if (abrevEl) abrevEl.onchange = e => this.alternarInterlinear('abrev', e.target.checked);
+      // português × morfologia × nenhum: exclusivos (rádios)
+      ['il-pt', 'il-morfo', 'il-nada'].forEach(id => {
+        const el = q(id);
+        if (el) el.onchange = e => { if (e.target.checked) this.alternarInterlinear('info', e.target.value); };
+      });
+    }
+
+    /* Pop-up de estudo da palavra (interlinear). */
+    const peVeu = q('palavra-veu');
+    if (peVeu) {
+      q('pe-fechar').onclick = () => this.fecharPalavraInterlinear();
+      peVeu.addEventListener('click', e => { if (e.target === peVeu) this.fecharPalavraInterlinear(); });
+    }
+
     /* Arrastar para os lados vira a pagina, como num livro de verdade.
      *
      * Tres cuidados para nao atrapalhar o resto: se o dedo andou mais na
@@ -3366,8 +3566,16 @@ const App = {
       if (!v) return;
       if (espera) { clearTimeout(espera); espera = null; return; } // e duplo
       const vers = +v.dataset.vers;
+      const palavra = e.target.closest('.il-p');   // tocou numa palavra do interlinear?
       espera = setTimeout(() => {
         espera = null;
+        // interlinear: com o versículo JÁ selecionado, tocar a palavra abre o
+        // estudo dela (mesmo padrão das outras Bíblias: 1º seleciona, 2º abre)
+        if (palavra && this.pontoAtual === vers && !this.multiAtivo && !this.multiSelecao
+            && Dados.ehInterlinear(this.versao)) {
+          this.abrirPalavraInterlinear(palavra);
+          return;
+        }
         if (this.multiAtivo) {
           // modo ligado: acumula (ou tira) o versículo do grupo
           this.alternarVersiculoMulti(vers);
@@ -3507,6 +3715,12 @@ const App = {
           + 'ou pelo aplicativo instalado na tela inicial.',
         confirmar: 'Entendi', cancelar: 'Fechar',
       });
+    }
+    // a voz do navegador não pronuncia hebraico/grego; ler a transliteração
+    // soletra os pontos e não fica bom — por ora, avisa e não entra no modo.
+    if (Dados.ehOriginal(this.versao)) {
+      this.avisoRapido('Áudio indisponível nas versões em hebraico e grego');
+      return;
     }
     this.fecharPaineis();
     this.resetarMulti();

@@ -75,7 +75,13 @@
   <button id="btn-atalho-fixado" class="atalho-fixado" title="Voltar ao fixado" aria-label="Voltar ao fixado" hidden>
     <svg class="icone"><use href="#i-fixar"/></svg>
   </button>
-  <button id="btn-versao" title="Trocar versão"><span class="sigla" id="sigla-versao">—</span></button>
+  <div class="versao-box" id="versao-box" title="Trocar versão">
+    <button id="btn-versao" class="versao-nome"><span class="sigla-txt" id="sigla-versao">—</span></button>
+    <button id="btn-il-exibir" class="btn-il-exibir" title="Exibir em cada palavra"
+      aria-label="Exibir em cada palavra" aria-haspopup="dialog" hidden>
+      <svg class="icone"><use href="#i-ajustes"/></svg>
+    </button>
+  </div>
   <button id="btn-menu" title="Menu" aria-label="Menu">
     <svg class="icone"><use href="#i-menu"/></svg>
   </button>
@@ -201,7 +207,62 @@
   </div>
 </div>
 
-<!-- entrada de texto no tema (renomear, criar), no lugar do prompt() do navegador -->
+<!-- interlinear: escolher o que aparece em cada palavra -->
+<div class="dialogo-veu" id="il-veu" aria-hidden="true">
+  <div class="dialogo" role="dialog" aria-modal="true" aria-labelledby="il-titulo">
+    <strong id="il-titulo">Exibir em cada palavra</strong>
+    
+    <!-- transliteração: independente (liga/desliga) -->
+    <label class="il-opcao">
+      <input type="checkbox" id="il-translit">
+      <span>Transliteração<small>como se lê o original em letras nossas</small></span>
+    </label>
+    
+    <!-- português vs morfologia: escolhe um ou outro (radio buttons) -->
+    <fieldset class="il-grupo">
+      <legend>Informação embaixo:</legend>
+      <label class="il-opcao">
+        <input type="radio" name="il-info" id="il-pt" value="pt">
+        <span>Português<small>o significado da palavra</small></span>
+      </label>
+      <label class="il-opcao">
+        <input type="radio" name="il-info" id="il-morfo" value="morfo">
+        <span>Morfologia<small>número de Strong, códigos gramaticais</small></span>
+      </label>
+      <label class="il-opcao">
+        <input type="radio" name="il-info" id="il-nada" value="nada">
+        <span>Nenhum<small>só o original e transliteração (se ligada)</small></span>
+      </label>
+      <!-- abreviar: pertence à informação de baixo; indentado. Só vale com
+           português ou morfologia ativos (some/inativa quando "Nenhum"). -->
+      <label class="il-opcao il-sub" id="il-abrev-opcao">
+        <input type="checkbox" id="il-abrev">
+        <span>Abreviar<small>mostra só o começo (toque a palavra pra ver tudo)</small></span>
+      </label>
+    </fieldset>
+    
+    <div class="dialogo-acoes">
+      <button class="botao" id="il-fechar">Pronto</button>
+    </div>
+  </div>
+</div>
+
+<!-- estudo da palavra: abre ao tocar uma palavra do interlinear com o versículo
+     já selecionado. Mostra a palavra original grande e, abaixo, transliteração,
+     português, morfologia completa, Strong e lema — cada um rotulado. -->
+<div class="dialogo-veu" id="palavra-veu" aria-hidden="true">
+  <div class="dialogo palavra-estudo" role="dialog" aria-modal="true" aria-labelledby="pe-o">
+    <div class="pe-original" id="pe-o"></div>
+    <div class="pe-linha" id="pe-linha-t"><span class="pe-rot">Transliteração</span><span class="pe-val" id="pe-t"></span></div>
+    <div class="pe-linha" id="pe-linha-g"><span class="pe-rot">Português</span><span class="pe-val" id="pe-g"></span></div>
+    <div class="pe-linha" id="pe-linha-m"><span class="pe-rot">Morfologia</span><span class="pe-val" id="pe-m"></span></div>
+    <div class="pe-linha" id="pe-linha-s"><span class="pe-rot">Strong</span><span class="pe-val" id="pe-s"></span></div>
+    <div class="pe-linha" id="pe-linha-l"><span class="pe-rot">Lema</span><span class="pe-val" id="pe-l"></span></div>
+    <div class="dialogo-acoes">
+      <button class="botao" id="pe-fechar">Fechar</button>
+    </div>
+  </div>
+</div>
 <div class="dialogo-veu" id="prompt-veu" aria-hidden="true">
   <div class="dialogo" role="dialog" aria-modal="true" aria-labelledby="prompt-titulo">
     <strong id="prompt-titulo"></strong>
@@ -445,6 +506,7 @@
 <script src="assets/js/dados.js"></script>
 <script src="assets/js/armazenamento.js"></script>
 <script src="assets/js/cores.js"></script>
+  <script src="assets/js/morfologia.js"></script>
   <script src="assets/js/leitura.js"></script>
 <script src="assets/js/busca.js"></script>
 <script src="assets/js/voz.js"></script>
