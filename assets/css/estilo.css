@@ -4207,9 +4207,13 @@ html[data-il-abrev="sim"] .il-m-c .il-txt {
 }
 .versao-box .versao-nome:hover,
 .versao-box .btn-il-exibir:hover { background: var(--cromo-alto); }
-/* a divisória só aparece quando a engrenagem está presente (interlinear) */
-.versao-box.com-engrenagem .btn-il-exibir { border-left: 1px solid var(--cromo-fraco); }
-.versao-box .btn-il-exibir { padding: 0 8px; }
+/* a engrenagem (e a divisória) só existem no interlinear; nas outras versões
+   fica escondida — sem esse recurso, não há o que exibir */
+.versao-box .btn-il-exibir { display: none; padding: 0 8px; }
+.versao-box.com-engrenagem .btn-il-exibir {
+  display: inline-flex;
+  border-left: 1px solid var(--cromo-fraco);
+}
 .versao-box .btn-il-exibir .icone { width: 17px; height: 17px; }
 
 /* "Abreviar" indentado dentro do grupo de informação; inativo quando "Nenhum" */
