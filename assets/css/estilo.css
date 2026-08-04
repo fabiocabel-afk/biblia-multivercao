@@ -2059,6 +2059,11 @@ body.selecionando .rodape { transform: translateY(110%); }
 }
 
 .menu-flutuante button:hover { background: color-mix(in srgb, var(--tinta) 8%, transparent); }
+/* "Fechar aplicativo": última ação, destacada por um fio acima */
+.menu-flutuante button.menu-sair {
+  margin-top: 4px;
+  border-top: 1px solid color-mix(in srgb, var(--tinta) 12%, transparent);
+}
 
 .menu-flutuante .icone {
   width: 20px;
@@ -2813,6 +2818,17 @@ body.selecionando .mais-selecao { bottom: 168px; }
 .v.multi-sel {
   background: color-mix(in srgb, var(--rubrica) 16%, transparent);
   border-radius: 6px;
+  box-shadow: none;            /* dentro da seleção o traço do "parei" não compete */
+}
+/* início da seleção (menor número): leva o traço à esquerda, marcando o começo.
+   Vem depois de .multi-sel para vencer na cascata quando o versículo tem os dois. */
+.v.multi-inicio {
+  box-shadow: inset 5px 0 0 var(--rubrica);
+  border-radius: 6px;
+  padding: .05em .2em .05em .45em;
+  margin-left: -.2em;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
 }
 
 /* ---------------------------------------------- X da comparação no cabeçalho */

@@ -3024,11 +3024,18 @@ const App = {
   },
 
   pintarMultiSel() {
-    document.querySelectorAll('#folha .v.multi-sel')
-      .forEach(el => el.classList.remove('multi-sel'));
+    document.querySelectorAll('#folha .v.multi-sel, #folha .v.multi-inicio')
+      .forEach(el => el.classList.remove('multi-sel', 'multi-inicio'));
     for (const v of (this.multiVers || [])) {
       const el = document.querySelector(`#folha .v[data-vers="${v}"]`);
       if (el) el.classList.add('multi-sel');
+    }
+    // o traço à esquerda (início da seleção) fica SEMPRE no menor número —
+    // isto é, no primeiro versículo do grupo, mesmo quando se seleciona para cima
+    if (this.multiVers && this.multiVers.size) {
+      const menor = Math.min(...this.multiVers);
+      const ini = document.querySelector(`#folha .v[data-vers="${menor}"]`);
+      if (ini) ini.classList.add('multi-inicio');
     }
   },
 
@@ -3068,8 +3075,8 @@ const App = {
     this.multiAtivo = false;
     this.multiSelecao = false;
     if (this.multiVers) this.multiVers.clear();
-    document.querySelectorAll('#folha .v.multi-sel')
-      .forEach(el => el.classList.remove('multi-sel'));
+    document.querySelectorAll('#folha .v.multi-sel, #folha .v.multi-inicio')
+      .forEach(el => el.classList.remove('multi-sel', 'multi-inicio'));
     this.atualizarMais();
   },
 
@@ -3114,6 +3121,21 @@ const App = {
     el.textContent = texto;
     document.body.appendChild(el);
     setTimeout(() => el.remove(), 1700);
+  },
+
+  /** Fecha o aplicativo, para quem prefere um botão a fazer o gesto do sistema.
+   *  Em PWA instalado o window.close() costuma funcionar; num navegador comum,
+   *  muitos bloqueiam fechar uma aba que o script não abriu — nesse caso avisa. */
+  async fecharAplicativo() {
+    const ok = await this.confirmar({
+      titulo: 'Fechar aplicativo',
+      mensagem: 'Deseja fechar o aplicativo agora?',
+      confirmar: 'Fechar', cancelar: 'Cancelar',
+    });
+    if (!ok) return;
+    try { window.close(); } catch {}
+    // se ainda estamos aqui depois de um instante, o fechamento foi bloqueado
+    setTimeout(() => this.avisoRapido('Se não fechou, use o gesto do aparelho para sair'), 500);
   },
 
   /** Copia texto, com o caminho antigo de reserva para navegadores restritos. */
@@ -3440,6 +3462,7 @@ const App = {
       ouvir: () => this.iniciarOuvir(),
       ajustes: () => { this.desenharAjustes(); this.abrir('painel-ajustes'); },
       compartilhar: () => { this.desenharCompartilhar(); this.abrir('painel-compartilhar'); },
+      'fechar-app': () => this.fecharAplicativo(),
     };
 
     const fecharMenu = () => {
