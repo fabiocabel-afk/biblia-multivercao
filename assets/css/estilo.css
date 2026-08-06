@@ -2436,6 +2436,51 @@ body.com-refs-fixas .painel-refs-fixas.alto .acoes-ref {
 .atalho-fixado .icone { stroke: var(--cromo-texto); width: 20px; height: 20px; }
 .atalho-fixado[hidden] { display: none; }
 
+/* a lista discreta dos fixados, que abre a partir do atalho no topo. Só mostra
+   livro cap:versículo e a versão de destino; toque abre, nada mais. Usa o cromo
+   (marrom escuro no Histórico), respeitando o tema. */
+.fixados-pop {
+  position: fixed;
+  top: calc(var(--barra) + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 60;
+  width: min(90vw, 320px);
+  max-height: 60vh;
+  overflow-y: auto;
+  background: var(--cromo);
+  color: var(--cromo-texto);
+  border-radius: var(--raio);
+  box-shadow: 0 10px 34px rgb(0 0 0 / .32);
+  padding: 6px;
+}
+.fixados-pop[hidden] { display: none; }
+.fixados-pop .fix-titulo {
+  font-size: 11px;
+  color: var(--cromo-fraco);
+  padding: 6px 12px 4px;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+.fixados-pop .fix-item {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: calc(var(--raio) - 3px);
+  text-align: left;
+  color: inherit;
+}
+.fixados-pop .fix-item:hover { background: var(--cromo-alto); }
+.fixados-pop .fix-ref { flex: 1; font-size: 14px; font-weight: 600; }
+.fixados-pop .fix-versao {
+  font-family: var(--fonte-sigla);
+  font-size: 11px;
+  color: var(--cromo-fraco);
+  flex: none;
+}
+
 /* ==================== reordenar fixados ============================ */
 
 .ordem-fixado {

@@ -1011,9 +1011,10 @@ const App = {
   atualizarAtalhoFixado() {
     const btn = document.getElementById('btn-atalho-fixado');
     if (!btn) return;
-    const primeiro = Historico.primeiroFixado();
-    const mostrar = primeiro && primeiro.code !== this.code;
-    btn.hidden = !mostrar;
+    // o atalho abre a lista de fixados; aparece sempre que houver ao menos um
+    const tem = Historico.fixados().length > 0;
+    btn.hidden = !tem;
+    if (!tem) this.fecharListaFixados();
   },
 
   irParaPrimeiroFixado() {
@@ -1021,6 +1022,59 @@ const App = {
     if (!f) return;
     if (f.versao !== this.versao) { this.versao = f.versao; Prefs.set('versao', f.versao); }
     this.ir(f.code, f.cap || 1, f.vers);
+  },
+
+  /* O atalho no topo não pula direto: abre uma lista discreta com TODOS os
+   * fixados — livro capítulo:versículo e a versão de destino — para a pessoa
+   * escolher para onde ir. Nenhuma outra ação além de abrir; serve só para ela
+   * saber o destino antes (às vezes vê o alfinete e não lembra o que é). */
+  alternarListaFixados() {
+    const pop = document.getElementById('fixados-pop');
+    if (pop && !pop.hidden) this.fecharListaFixados();
+    else this.abrirListaFixados();
+  },
+
+  abrirListaFixados() {
+    const pop = document.getElementById('fixados-pop');
+    if (!pop) return;
+    const fixados = Historico.fixados();
+    if (!fixados.length) { this.fecharListaFixados(); return; }
+    const itens = fixados.map((f, i) => {
+      const ref = `${Dados.nomeCurto(f.versao, f.code)} ${f.cap || 1}` +
+        (f.vers ? ':' + f.vers : '');
+      return `<button class="fix-item" role="menuitem" data-fix-idx="${i}">
+        <span class="fix-ref">${ref}</span>
+        <span class="fix-versao">${f.versao}</span>
+      </button>`;
+    }).join('');
+    pop.innerHTML = `<div class="fix-titulo">Fixados</div>${itens}`;
+    pop.hidden = false;
+    pop.setAttribute('aria-hidden', 'false');
+    pop.querySelectorAll('[data-fix-idx]').forEach(el => {
+      el.onclick = () => {
+        const f = Historico.fixados()[+el.dataset.fixIdx];
+        this.fecharListaFixados();
+        if (!f) return;
+        if (f.versao !== this.versao) { this.versao = f.versao; Prefs.set('versao', f.versao); }
+        this.ir(f.code, f.cap || 1, f.vers);
+      };
+    });
+    // um toque fora fecha a lista
+    this._fecharFixadosFora = (ev) => {
+      if (!pop.contains(ev.target)) this.fecharListaFixados();
+    };
+    document.addEventListener('click', this._fecharFixadosFora);
+  },
+
+  fecharListaFixados() {
+    const pop = document.getElementById('fixados-pop');
+    if (!pop || pop.hidden) return;
+    pop.hidden = true;
+    pop.setAttribute('aria-hidden', 'true');
+    if (this._fecharFixadosFora) {
+      document.removeEventListener('click', this._fecharFixadosFora);
+      this._fecharFixadosFora = null;
+    }
   },
 
   /* Ao pular para uma referência, guarda de onde a pessoa veio e mostra embaixo
@@ -3548,7 +3602,7 @@ const App = {
       menu.setAttribute('aria-hidden', aberto ? 'false' : 'true');
     };
 
-    q('btn-atalho-fixado').onclick = () => this.irParaPrimeiroFixado();
+    q('btn-atalho-fixado').onclick = (ev) => { ev.stopPropagation(); this.alternarListaFixados(); };
     q('voltar-origem').onclick = () => this.voltarParaOrigem();
 
     menu.querySelectorAll('[data-menu]').forEach(el => {
