@@ -90,8 +90,12 @@
   --tinta-numero: #9a6b3e;
   --rubrica: #a1301f;           /* vermelhão (cinábrio): o vermelho dos manuscritos */
   --rubrica-clara: #b9584a;
-  /* o cromo (painéis, cabeçalhos) segue escuro como sempre — só as barras de
-     leitura ficam transparentes, tratadas à parte abaixo. */
+  /* o cromo escuro do sistema — o "+", o menu de ações, o player, os avisos —
+     vira MARROM bem escuro no Histórico; o quase-preto parecia moderno demais
+     para a folha. As barras de leitura e os cabeçalhos dos menus são tratados à
+     parte, com a cor da encadernação. */
+  --cromo: #2a1c11;             /* marrom bem escuro (café) */
+  --cromo-alto: #3b2917;        /* hover, um tom acima */
 }
 
 /* a folha de pergaminho: uma camada fixa atrás de tudo, contínua de cima a
@@ -150,6 +154,9 @@
    o comparador opaco já o cobre; no Histórico o comparador é transparente para a
    folha aparecer, então sem isto os botões vazariam sob o texto das metades. */
 [data-estilo='historico'] body.comparando .rodape { display: none; }
+
+/* o botão "+" da seleção fica um tom mais escuro que o menu de ações que ele abre */
+[data-estilo='historico'] .mais-selecao { background: #20140a; }
 
 /* a capitular no Histórico: maior e em vermelhão, no espírito da rubricação */
 [data-estilo='historico'] .capitular {

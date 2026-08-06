@@ -48,9 +48,9 @@ const Prefs = {
   padrao: {
     versao: 'ACF',
     temperatura: 50,      // 0 = papel branco, 100 = sepia carregado; começa no meio
-    fonte: 20,            // px do corpo do texto
+    fonte: 16,            // px do corpo do texto
     escuro: false,
-    estilo: 'tradicional',     // 'tradicional' = papel liso de sempre; 'historico' = pergaminho
+    estilo: 'historico',       // padrão inicial = Histórico; 'tradicional' = papel liso
     pergaminhoIdade: 45,       // 0..100: idade da folha no estilo Histórico (queima/ambar)
     historicoTema: 'marrom',   // encadernação no Histórico: 'marrom' | 'vermelho' | 'classico'
     versoesTirinha: ['ACF', 'NVI', 'NTLH'],

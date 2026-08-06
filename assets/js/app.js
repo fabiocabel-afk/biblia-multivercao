@@ -1985,11 +1985,11 @@ const App = {
         </label>
       </div>` : ''}
 
+      ${!historico ? `
       <div class="rotulo-controle" style="margin-top:22px"><span>Temperatura do papel</span>
         <span id="rot-temp">${p.temperatura}</span></div>
-      <input class="deslizador" type="range" id="ctrl-temp" min="0" max="100" value="${p.temperatura}" ${historico ? 'disabled' : ''}>
-      <div class="amostra-folha" id="amostra">No princípio, Deus criou o céu e a terra.</div>
-      ${historico ? '<p class="contagem">A temperatura vale no estilo Tradicional. No Histórico, quem manda no tom é a idade da folha.</p>' : ''}
+      <input class="deslizador" type="range" id="ctrl-temp" min="0" max="100" value="${p.temperatura}">
+      <div class="amostra-folha" id="amostra">No princípio, Deus criou o céu e a terra.</div>` : ''}
 
       <div class="rotulo-controle" style="margin-top:20px"><span>Tamanho da letra</span>
         <span id="rot-fonte">${p.fonte}px</span></div>
