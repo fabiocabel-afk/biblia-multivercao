@@ -38,6 +38,9 @@ const App = {
     this.versao = Dados.versao(p.versao) ? p.versao : Dados.versoes[0].code;
     Leitura.aplicarEscuro(p.escuro);
     Leitura.aplicarTemperatura(p.temperatura);
+    Pergaminho.aplicarIdade(p.pergaminhoIdade);
+    Pergaminho.aplicarTema(p.historicoTema);
+    Pergaminho.aplicarEstilo(p.estilo);
     Leitura.aplicarFonte(p.fonte);
     Leitura.aplicarModoVersiculo(p.versiculoPorLinha);
     Leitura.aplicarModoNotas(p.mostrarNotas);
@@ -193,6 +196,7 @@ const App = {
       + Leitura.html(this.versao, r.livro, r.capitulo);
 
     this.atualizarBarra();
+    Pergaminho.folha(code, cap);   // cada capítulo tem a sua folha no estilo Histórico
     window.scrollTo(0, 0);
     this._marcarCortados();   // no modo abreviar, marca as palavras que cortaram
 
@@ -1939,11 +1943,53 @@ const App = {
     const corpo = document.getElementById('corpo-ajustes');
     const p = Prefs.todas();
 
+    const historico = p.estilo === 'historico';
     const folha = `
-      <div class="rotulo-controle"><span>Temperatura do papel</span>
+      <div class="rotulo-controle"><span>Estilo da página</span></div>
+      <div class="escolha-radio">
+        <label class="opcao-radio">
+          <input type="radio" name="estilo-folha" value="tradicional" ${historico ? '' : 'checked'}>
+          <span class="marca-radio"></span>
+          <span class="rotulo-radio"><strong>Tradicional</strong><span>O papel de sempre, com a temperatura abaixo</span></span>
+        </label>
+        <label class="opcao-radio">
+          <input type="radio" name="estilo-folha" value="historico" ${historico ? 'checked' : ''}>
+          <span class="marca-radio"></span>
+          <span class="rotulo-radio"><strong>Histórico</strong><span>Pergaminho envelhecido, capitular em vermelho</span></span>
+        </label>
+      </div>
+      ${historico ? `
+      <div class="rotulo-controle" style="margin-top:18px"><span>Idade da folha</span>
+        <span id="rot-idade">${p.pergaminhoIdade}</span></div>
+      <input class="deslizador" type="range" id="ctrl-idade" min="0" max="100" value="${p.pergaminhoIdade}">
+      <p class="contagem">Um controle só: envelhece a folha inteira de uma vez —
+      as laterais queimam mais, o âmbar aprofunda. Cada capítulo tem a sua folha,
+      e ela permanece a mesma quando você volta a ele.</p>
+
+      <div class="rotulo-controle" style="margin-top:18px"><span>Cor da encadernação</span></div>
+      <div class="escolha-radio">
+        <label class="opcao-radio">
+          <input type="radio" name="tema-historico" value="marrom" ${p.historicoTema === 'marrom' ? 'checked' : ''}>
+          <span class="marca-radio"></span>
+          <span class="rotulo-radio"><strong>Marrom</strong><span>Couro escuro, combina com a folha</span></span>
+        </label>
+        <label class="opcao-radio">
+          <input type="radio" name="tema-historico" value="vermelho" ${p.historicoTema === 'vermelho' ? 'checked' : ''}>
+          <span class="marca-radio"></span>
+          <span class="rotulo-radio"><strong>Vermelho</strong><span>Capa antiga, detalhes em dourado</span></span>
+        </label>
+        <label class="opcao-radio">
+          <input type="radio" name="tema-historico" value="classico" ${p.historicoTema === 'classico' ? 'checked' : ''}>
+          <span class="marca-radio"></span>
+          <span class="rotulo-radio"><strong>Creme</strong><span>Barras claras, como na primeira versão</span></span>
+        </label>
+      </div>` : ''}
+
+      <div class="rotulo-controle" style="margin-top:22px"><span>Temperatura do papel</span>
         <span id="rot-temp">${p.temperatura}</span></div>
-      <input class="deslizador" type="range" id="ctrl-temp" min="0" max="100" value="${p.temperatura}">
+      <input class="deslizador" type="range" id="ctrl-temp" min="0" max="100" value="${p.temperatura}" ${historico ? 'disabled' : ''}>
       <div class="amostra-folha" id="amostra">No princípio, Deus criou o céu e a terra.</div>
+      ${historico ? '<p class="contagem">A temperatura vale no estilo Tradicional. No Histórico, quem manda no tom é a idade da folha.</p>' : ''}
 
       <div class="rotulo-controle" style="margin-top:20px"><span>Tamanho da letra</span>
         <span id="rot-fonte">${p.fonte}px</span></div>
@@ -2087,6 +2133,32 @@ const App = {
         pintar();
       };
       temp.onchange = () => Prefs.set('temperatura', +temp.value);
+    }
+
+    corpo.querySelectorAll('input[name="estilo-folha"]').forEach(el => {
+      el.onchange = () => {
+        Prefs.set('estilo', el.value);
+        Pergaminho.aplicarIdade(Prefs.get('pergaminhoIdade'));
+        Pergaminho.aplicarEstilo(el.value);
+        if (el.value === 'historico') Pergaminho.folha(this.code, this.cap);
+        this.desenharAjustes();   // mostra ou esconde o controle de idade
+      };
+    });
+
+    corpo.querySelectorAll('input[name="tema-historico"]').forEach(el => {
+      el.onchange = () => {
+        Prefs.set('historicoTema', el.value);
+        Pergaminho.aplicarTema(el.value);
+      };
+    });
+
+    const idade = achar('ctrl-idade');
+    if (idade) {
+      idade.oninput = () => {
+        achar('rot-idade').textContent = idade.value;
+        Pergaminho.aplicarIdade(+idade.value);
+      };
+      idade.onchange = () => Prefs.set('pergaminhoIdade', +idade.value);
     }
 
     const fonte = achar('ctrl-fonte');

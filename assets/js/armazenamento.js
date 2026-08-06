@@ -50,6 +50,9 @@ const Prefs = {
     temperatura: 50,      // 0 = papel branco, 100 = sepia carregado; começa no meio
     fonte: 20,            // px do corpo do texto
     escuro: false,
+    estilo: 'tradicional',     // 'tradicional' = papel liso de sempre; 'historico' = pergaminho
+    pergaminhoIdade: 45,       // 0..100: idade da folha no estilo Histórico (queima/ambar)
+    historicoTema: 'marrom',   // encadernação no Histórico: 'marrom' | 'vermelho' | 'classico'
     versoesTirinha: ['ACF', 'NVI', 'NTLH'],
     versaoComparar: 'NVI',
     mostrarCategorias: true,   // painel de livros: com ou sem a camada do meio

@@ -78,6 +78,93 @@
   --rubrica-clara: #d8969d;
 }
 
+/* ======================================================= estilo Histórico
+ * Vem DEPOIS do modo escuro para vencer na cascata: o Histórico tem cores
+ * próprias (tinta ferrogálica amarronzada, vermelhão para a rubrica) e vale
+ * tanto no claro quanto no escuro. As cores do pergaminho em si (o âmbar, a
+ * queima) são pintadas pelo módulo Pergaminho na camada #perg-fundo. */
+[data-estilo='historico'] {
+  --papel: #efe3c6;             /* creme sólido para os painéis/sobreposições */
+  --tinta: #3a2a1a;             /* tinta ferrogálica: marrom quase preto */
+  --tinta-fraca: #7b6446;
+  --tinta-numero: #9a6b3e;
+  --rubrica: #a1301f;           /* vermelhão (cinábrio): o vermelho dos manuscritos */
+  --rubrica-clara: #b9584a;
+  /* o cromo (painéis, cabeçalhos) segue escuro como sempre — só as barras de
+     leitura ficam transparentes, tratadas à parte abaixo. */
+}
+
+/* a folha de pergaminho: uma camada fixa atrás de tudo, contínua de cima a
+ * baixo (atravessa as barras). Só aparece no estilo Histórico. */
+#perg-fundo {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  display: none;
+}
+[data-estilo='historico'] #perg-fundo { display: block; }
+
+/* no Histórico o corpo é transparente para o pergaminho aparecer, e as barras
+ * também — os ícones passam a tinta escura, com um leve halo claro para
+ * segurar a leitura sobre o âmbar irregular. */
+[data-estilo='historico'] html { background: #dcc79c; }  /* base clara, evita clarão sem escurecer a folha nova */
+[data-estilo='historico'] body { background: transparent; }
+/* a cor da encadernação vale para as DUAS BARRAS — a de cima (nome da bíblia,
+   versão, menus) e a de baixo (Anterior/Comparar/Próximo) — e para TODOS os seus
+   elementos internos. O truque: redefinimos as variáveis de cromo DENTRO das
+   barras, então tudo que está nelas (fundo, texto, ícones, a pílula da versão,
+   hovers) herda a cor do tema, enquanto o resto do sistema — o menu que abre, os
+   painéis, a barra de seleção com o "+", o player — continua no cromo escuro de
+   sempre, que combina com a folha e não fica estranho no vermelho. Padrão = marrom. */
+[data-estilo='historico'] .topo,
+[data-estilo='historico'] .rodape,
+[data-estilo='historico'] .painel > header {
+  --cromo: #6f4a2c;             /* marrom couro */
+  --cromo-alto: #835838;        /* hover, um tom acima */
+  --cromo-texto: #f2e6c9;       /* itens/texto em creme */
+  --cromo-fraco: color-mix(in srgb, #f2e6c9 45%, transparent);
+}
+[data-estilo='historico'][data-tema='vermelho'] .topo,
+[data-estilo='historico'][data-tema='vermelho'] .rodape,
+[data-estilo='historico'][data-tema='vermelho'] .painel > header {
+  --cromo: #6e1a17;             /* vermelhão de capa antiga */
+  --cromo-alto: #832320;
+  --cromo-texto: #cda349;       /* dourado */
+  --cromo-fraco: color-mix(in srgb, #cda349 55%, transparent);
+}
+[data-estilo='historico'][data-tema='classico'] .topo,
+[data-estilo='historico'][data-tema='classico'] .rodape,
+[data-estilo='historico'][data-tema='classico'] .painel > header {
+  --cromo: var(--papel);        /* creme, como na 1ª versão */
+  --cromo-alto: #e2d3ad;
+  --cromo-texto: #3a2a1a;       /* tinta escura */
+  --cromo-fraco: color-mix(in srgb, #3a2a1a 30%, transparent);
+}
+
+/* uma linha fina delimita as barras sobre a folha (a base não tem essa borda) */
+[data-estilo='historico'] .topo { border-bottom: 1.5px solid color-mix(in srgb, var(--cromo-texto) 22%, transparent); }
+[data-estilo='historico'] .rodape { border-top: 1.5px solid color-mix(in srgb, var(--cromo-texto) 22%, transparent); }
+
+/* na comparação escondemos o rodapé (Anterior/Comparar/Próximo): no Tradicional
+   o comparador opaco já o cobre; no Histórico o comparador é transparente para a
+   folha aparecer, então sem isto os botões vazariam sob o texto das metades. */
+[data-estilo='historico'] body.comparando .rodape { display: none; }
+
+/* a capitular no Histórico: maior e em vermelhão, no espírito da rubricação */
+[data-estilo='historico'] .capitular {
+  color: var(--rubrica);
+  font-size: 3.5em;
+  font-weight: 600;
+  text-shadow: 0 1px 0 rgba(247, 240, 214, .5);
+}
+
+/* no Histórico a comparação também roda sobre o pergaminho: o container fica
+   transparente para a folha (fixa, atrás de tudo) aparecer nas duas metades.
+   Os cabeçalhos das metades continuam no creme opaco, como as barras, para o
+   texto não vazar sob eles ao rolar. */
+[data-estilo='historico'] .comparador { background: transparent; }
+
 * { box-sizing: border-box; }
 
 html, body {
