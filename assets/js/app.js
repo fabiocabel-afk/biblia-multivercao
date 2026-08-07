@@ -150,7 +150,7 @@ const App = {
 
   /* ============================================================== navegar */
 
-  async ir(code, cap, vers, { registrar = true } = {}) {
+  async ir(code, cap, vers, { registrar = true, desliza = 0 } = {}) {
     // navegar por conta própria descarta a volta rápida; só o pulo para a
     // referência (que ativa a flag) a preserva, para poder voltar depois
     if (!this._pulandoDeReferencia && this.origemDaReferencia) {
@@ -197,6 +197,7 @@ const App = {
 
     this.atualizarBarra();
     Pergaminho.folha(code, cap);   // cada capítulo tem a sua folha no estilo Histórico
+    this._aplicarDeslize(folha, desliza);   // transição lateral ao trocar de capítulo
     window.scrollTo(0, 0);
     this._marcarCortados();   // no modo abreviar, marca as palavras que cortaram
 
@@ -222,6 +223,8 @@ const App = {
       this.destaque = vers || null;
       this.atualizarRefsFixas(vers || null);
     }
+
+    this._prefetchVizinhos();   // deixa anterior/próximo prontos para o arrasto
   },
 
   atualizarBarra() {
@@ -243,16 +246,68 @@ const App = {
     document.getElementById('btn-depois').disabled = !temDepois;
   },
 
+  /* transição de deslize ao trocar de capítulo: a página nova entra já pronta de
+   * um lado. Próximo (dir>0) entra pela esquerda; anterior (dir<0), pela direita.
+   * Respeita quem prefere menos animação. Vale para os botões E para o gesto —
+   * ambos passam por passo(). */
+  /* Para onde passo(dir) iria, SEM navegar — usado para pré-carregar o vizinho
+   * e para o arrasto saber o destino. Retorna {code, cap} ou null (sem vizinho). */
+  _alvoPasso(dir) {
+    const info = Dados.infoLivro(this.versao, this.code);
+    const cap = this.cap + dir;
+    if (info && cap >= 1 && cap <= info.chapters) return { code: this.code, cap };
+    const viz = Dados.vizinho(this.versao, this.code, dir);
+    if (!viz) return null;
+    const infoV = Dados.infoLivro(this.versao, viz);
+    return { code: viz, cap: dir > 0 ? 1 : (infoV ? infoV.chapters : 1) };
+  },
+
+  /* Monta o HTML de um capítulo a partir dos dados já carregados (mesma forma
+   * que ir() usa), para desenhar a folha vizinha durante o arrasto. */
+  _htmlCapitulo(r, cap) {
+    return `<p class="titulo-livro ${cap === 1 ? 'abertura' : ''}">${Leitura.escapar(r.livro.name)}</p>`
+      + Leitura.html(this.versao, r.livro, r.capitulo);
+  },
+
+  /* Pré-carrega os dados dos capítulos anterior e próximo, para o arrasto poder
+   * revelar a página vizinha instantaneamente. Guarda por versão|livro|capítulo. */
+  _vizCache: {},
+  async _prefetchVizinhos() {
+    const alvos = [this._alvoPasso(-1), this._alvoPasso(1)].filter(Boolean);
+    for (const a of alvos) {
+      const k = `${this.versao}|${a.code}|${a.cap}`;
+      if (this._vizCache[k]) continue;
+      try { const r = await Dados.capitulo(this.versao, a.code, a.cap); if (r) this._vizCache[k] = r; }
+      catch {}
+    }
+  },
+
+  /* Regra de "encaixar ou voltar" ao soltar: passou de ~30% da largura, ou foi
+   * um lance rápido e decidido. Pura, para poder testar. */
+  _decidirCommit(dx, larg, dt) {
+    if (Math.abs(dx) > larg * 0.30) return true;
+    if (dt < 300 && Math.abs(dx) > 60) return true;
+    return false;
+  },
+
+  _aplicarDeslize(folha, desliza) {
+    if (!desliza || !folha) return;
+    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    folha.classList.remove('desliza-prox', 'desliza-ant');
+    void folha.offsetWidth;                         // reinicia a animação
+    folha.classList.add(desliza > 0 ? 'desliza-prox' : 'desliza-ant');
+  },
+
   async passo(dir) {
     const info = Dados.infoLivro(this.versao, this.code);
     let cap = this.cap + dir;
 
-    if (info && cap >= 1 && cap <= info.chapters) return this.ir(this.code, cap);
+    if (info && cap >= 1 && cap <= info.chapters) return this.ir(this.code, cap, undefined, { desliza: dir });
 
     const vizinho = Dados.vizinho(this.versao, this.code, dir);
     if (!vizinho) return;
     const infoV = Dados.infoLivro(this.versao, vizinho);
-    return this.ir(vizinho, dir > 0 ? 1 : (infoV ? infoV.chapters : 1));
+    return this.ir(vizinho, dir > 0 ? 1 : (infoV ? infoV.chapters : 1), undefined, { desliza: dir });
   },
 
   async trocarVersao(code) {
@@ -3674,28 +3729,103 @@ const App = {
      * escolhendo um trecho e nao quer trocar de capitulo; e o gesto precisa ser
      * decidido — curto demais ou demorado demais nao conta. */
     const folha = q('folha');
-    let toque = null;
+    const viz = q('folha-vizinho');
+    let arr = null;   // estado do arrasto em curso
+    const largura = () => window.innerWidth;
+    const semAnim = () => window.matchMedia
+      && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    const limparArraste = () => {
+      folha.style.transition = 'none';
+      folha.style.transform = '';
+      if (viz) { viz.hidden = true; viz.style.transition = 'none'; viz.style.transform = ''; }
+    };
 
     folha.addEventListener('touchstart', e => {
-      if (e.touches.length !== 1) { toque = null; return; }
+      if (e.touches.length !== 1) { arr = null; return; }
+      if (!window.getSelection().isCollapsed) { arr = null; return; }  // selecionando texto
       const t = e.touches[0];
-      toque = { x: t.clientX, y: t.clientY, hora: Date.now() };
+      arr = { x0: t.clientX, y0: t.clientY, dx: 0, eixo: null, dir: 0,
+              alvo: null, r: null, hora: Date.now() };
     }, { passive: true });
 
-    folha.addEventListener('touchend', e => {
-      if (!toque) return;
-      const t = e.changedTouches[0];
-      const dx = t.clientX - toque.x;
-      const dy = t.clientY - toque.y;
-      const tempo = Date.now() - toque.hora;
-      toque = null;
+    folha.addEventListener('touchmove', e => {
+      if (!arr || e.touches.length !== 1) return;
+      const t = e.touches[0];
+      const dx = t.clientX - arr.x0;
+      const dy = t.clientY - arr.y0;
 
-      if (tempo > 700) return;                       // demorado: nao e virada
-      if (Math.abs(dx) < 70) return;                 // curto: nao e virada
-      if (Math.abs(dx) < Math.abs(dy) * 1.6) return; // mais vertical: e rolagem
-      if (!window.getSelection().isCollapsed) return; // esta selecionando texto
+      // decide o eixo uma única vez
+      if (!arr.eixo) {
+        if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+        if (Math.abs(dx) < Math.abs(dy) * 1.3) { arr.eixo = 'v'; return; }  // rolagem
+        arr.eixo = 'h';
+        arr.dir = dx > 0 ? 1 : -1;                 // direita = próximo; esquerda = anterior
+        arr.alvo = this._alvoPasso(arr.dir);
+        const k = arr.alvo ? `${this.versao}|${arr.alvo.code}|${arr.alvo.cap}` : null;
+        arr.r = k ? (this._vizCache[k] || null) : null;
+        if (arr.alvo && arr.r && viz && !semAnim()) {
+          viz.innerHTML = this._htmlCapitulo(arr.r, arr.alvo.cap);
+          viz.hidden = false;
+          viz.style.transition = 'none';
+          folha.style.transition = 'none';
+        }
+      }
+      if (arr.eixo !== 'h') return;
+      e.preventDefault();                          // trava a rolagem no arrasto lateral
 
-      this.passo(dx < 0 ? 1 : -1);
+      // sem destino (fim da Bíblia) ou sem vizinho pronto: resistência
+      let d = dx;
+      if (!arr.alvo || !arr.r || semAnim()) d = dx * 0.28;
+      arr.dx = d;
+      folha.style.transform = `translateX(${d}px)`;
+      if (arr.alvo && arr.r && viz && !viz.hidden) {
+        const W = largura();
+        const base = arr.dir > 0 ? -W : W;         // próximo entra pela esquerda; anterior pela direita
+        viz.style.transform = `translateX(${base + d}px)`;
+      }
+    }, { passive: false });
+
+    folha.addEventListener('touchend', () => {
+      if (!arr) return;
+      const st = arr; arr = null;
+      if (st.eixo !== 'h') return;                 // não foi virada de página
+
+      const W = largura();
+      const commit = !!st.alvo && this._decidirCommit(st.dx, W, Date.now() - st.hora);
+
+      // caso simples: sem vizinho pré-carregado (ou menos-animação) — usa o
+      // deslize da etapa 1 no commit, e apenas volta a folha se cancelar
+      if (!st.r || semAnim() || !viz) {
+        limparArraste();
+        if (commit && st.alvo) this.ir(st.alvo.code, st.alvo.cap, undefined, { desliza: st.dir });
+        return;
+      }
+
+      folha.style.transition = 'transform .22s ease';
+      viz.style.transition = 'transform .22s ease';
+
+      if (commit) {
+        const fim = st.dir > 0 ? W : -W;           // folha sai; vizinho encaixa em 0
+        folha.style.transform = `translateX(${fim}px)`;
+        viz.style.transform = 'translateX(0)';
+        let feito = false;
+        const finalizar = async () => {
+          if (feito) return; feito = true;
+          await this.ir(st.alvo.code, st.alvo.cap);   // reconstrói a folha real por baixo
+          limparArraste();
+        };
+        viz.addEventListener('transitionend', finalizar, { once: true });
+        setTimeout(finalizar, 320);                // rede de segurança
+      } else {
+        folha.style.transform = 'translateX(0)';
+        const base = st.dir > 0 ? -W : W;
+        viz.style.transform = `translateX(${base}px)`;
+        let feito = false;
+        const voltar = () => { if (feito) return; feito = true; limparArraste(); };
+        viz.addEventListener('transitionend', voltar, { once: true });
+        setTimeout(voltar, 320);
+      }
     }, { passive: true });
 
     let atraso;
