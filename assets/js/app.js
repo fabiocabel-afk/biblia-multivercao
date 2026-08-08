@@ -817,10 +817,20 @@ const App = {
     if (!arv.testaments.some(t => t.id === this.estanteT))
       this.estanteT = arv.testaments[0] && arv.testaments[0].id;
 
-    const capas = arv.testaments.map(t =>
-      `<button class="estante-capa ${t.id === this.estanteT ? 'sel' : ''}" data-est-t="${t.id}">
-        ${t.name}
-      </button>`).join('');
+    const capas = arv.testaments.map(t => {
+      let totalCaps = 0;
+      for (const c of (t.categories || [])) {
+        for (const b of (c.books || [])) {
+          totalCaps += b.chapters || 0;
+        }
+      }
+      const caps = comCapitulos && totalCaps
+        ? `<span class="lc-caps">${totalCaps} cap.</span>` : '';
+      return `<button class="estante-capa ${t.id === this.estanteT ? 'sel' : ''}" data-est-t="${t.id}">
+        <span class="lc-nome">${t.name}</span>
+        ${caps}
+      </button>`;
+    }).join('');;
 
     const t = arv.testaments.find(x => x.id === this.estanteT);
     const celulas = [];
@@ -858,7 +868,7 @@ const App = {
 
     // Aplicar background do pergaminho aos botões
     this._aplicarBackgroundPergaminho(corpo.querySelectorAll('.livro-cartao'));
-    this._aplicarBackgroundPergaminho(corpo.querySelectorAll('.estante-capa'));
+    this._aplicarBackgroundPergaminho(corpo.querySelectorAll('.estante-capa.sel'));
   },
 
   _cartaoLivro(b, comCapitulos) {
