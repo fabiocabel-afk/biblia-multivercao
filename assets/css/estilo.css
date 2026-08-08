@@ -303,6 +303,11 @@ html, body { overflow-x: hidden; }
 }
 .folha-vizinho[hidden] { display: none; }
 
+/* modo Contínuo: os capítulos do livro empilhados; a capitular (número grande)
+   de cada bloco marca o início do capítulo, sem repetir o nome do livro. Um
+   respiro entre um capítulo e o próximo. */
+.cap-bloco + .cap-bloco { margin-top: 1.5em; }
+
 .folha .titulo-livro {
   font-size: .8em;
   letter-spacing: .18em;
@@ -633,12 +638,32 @@ html, body { overflow-x: hidden; }
   font-weight: 600;
   border-bottom: 1px solid color-mix(in srgb, var(--tinta) 12%, transparent);
   border-radius: var(--raio) var(--raio) 0 0;
+  /* header fixo: o Testamento fica preso no alto enquanto os livros rolam */
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  height: 46px;
+  box-sizing: border-box;
+  background: var(--papel);
 }
 
 .dobra.categoria {
   font-size: 14px;
   padding: 10px 12px 10px 6px;
   color: var(--tinta);
+  /* a categoria aberta fica presa logo abaixo do Testamento (46px) */
+  position: sticky;
+  top: 46px;
+  z-index: 2;
+  background: var(--papel);
+}
+
+/* como agora os headers têm fundo sólido (para cobrir o texto que rola por
+   baixo), o hover precisa mesclar sobre o papel — e não sobre transparente,
+   que deixaria o conteúdo aparecer através do header preso. */
+.dobra.testamento:hover,
+.dobra.categoria:hover {
+  background: color-mix(in srgb, var(--tinta) 7%, var(--papel));
 }
 
 .dobra .seta {
@@ -684,6 +709,137 @@ html, body { overflow-x: hidden; }
 }
 
 .marco .soma { font-family: var(--fonte-sigla); letter-spacing: 0; }
+
+/* ---------------------------------------------- Modo Estante (grade de livros)
+ * A metáfora é um livro: as capas dos Testamentos usam a cor da encadernação
+ * quando fechadas e "abrem" na cor da página quando selecionadas; os livros são
+ * páginas de mesmo tamanho, no máximo duas por linha. */
+.estante { display: flex; flex-direction: column; gap: 16px; }
+
+/* seletor de Testamentos — as duas "capas", lado a lado, presas no topo */
+.estante-seletor {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  padding-bottom: 6px;
+  background: var(--papel);
+}
+
+.estante-capa {
+  --capa-bg: var(--cromo);
+  --capa-txt: var(--cromo-texto);
+  padding: 16px 12px;
+  border-radius: var(--raio);
+  font-size: 15px;
+  font-weight: 600;
+  text-align: center;
+  text-transform: uppercase;
+  line-height: 1.25;
+  background: var(--capa-bg);
+  color: var(--capa-txt);
+  border: 1px solid color-mix(in srgb, var(--capa-bg) 68%, #000 32%);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 12%, transparent);
+  transition: box-shadow .16s ease, border-radius .16s ease;
+  /* capa fechada: cantos arredondados como livro */
+}
+
+/* capa selecionada: "abre" na cor da página, como uma página aberta */
+.estante-capa.sel {
+  background: var(--papel);
+  color: var(--tinta);
+  border: none;
+  border-radius: 0;
+  font-family: var(--fonte-texto);
+  position: relative;
+}
+
+/* no estilo Histórico, a capa selecionada recebe as sombras de envelhecimento
+   — apenas nas laterais, como na página de leitura */
+[data-estilo='historico'] .estante-capa.sel {
+  box-shadow:
+    inset 30px 0 30px -15px rgba(0,0,0,.16),
+    inset -30px 0 30px -15px rgba(0,0,0,.16);
+}
+
+/* nos livros também: sombras apenas nas laterais */
+[data-estilo='historico'] .livro-cartao {
+  box-shadow:
+    inset 30px 0 30px -15px rgba(0,0,0,.16),
+    inset -30px 0 30px -15px rgba(0,0,0,.16);
+}
+
+/* cores da encadernação por tema — só valem no estilo Histórico */
+[data-estilo='historico'] .estante-capa { --capa-bg: #6f4a2c; --capa-txt: #f2e6c9; }
+[data-estilo='historico'][data-tema='vermelho'] .estante-capa { --capa-bg: #6e1a17; --capa-txt: #cda349; }
+[data-estilo='historico'][data-tema='classico'] .estante-capa { --capa-bg: #e6d9b8; --capa-txt: #3a2a1a; }
+
+/* a grade em si: no máximo dois livros por linha */
+.estante-grade {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  align-items: stretch;
+}
+
+/* divisória de categoria: uma linha com o nome, ocupando a largura toda */
+.estante-divisor {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 8px 2px 0;
+  font-size: 11px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--tinta-fraca);
+  font-weight: 600;
+}
+.estante-divisor::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: color-mix(in srgb, var(--tinta) 16%, transparent);
+}
+
+/* cada livro é uma "página" de mesmo tamanho (altura uniformizada no JS) */
+.livro-cartao {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 18px 14px;
+  border-radius: 0;
+  background: var(--papel);
+  border: none;
+  text-align: center;
+  font-size: 15px;
+  font-family: var(--fonte-texto);
+  color: var(--tinta);
+}
+.livro-cartao:hover { background: var(--papel); opacity: 0.92; }
+.livro-cartao.ativa {
+  border: none;
+  background: var(--papel);
+  font-weight: 600;
+  box-shadow: inset 0 0 0 1.5px var(--rubrica);
+}
+.lc-nome { 
+  line-height: 1.25; 
+  text-transform: uppercase;
+  font-size: 19px;
+  font-weight: 500;
+}
+.lc-caps {
+  font-size: 11px;
+  font-family: var(--fonte-sigla);
+  color: var(--tinta-fraca);
+  font-weight: 400;
+}
+.livro-cartao .selo { margin-top: 2px; }
 
 /* grade de capitulos */
 .grade {
@@ -3859,6 +4015,23 @@ body.ouvindo .folha { padding-bottom: 200px; }
 .player-lista-conta { font-size: 11.5px; color: var(--cromo-fraco); flex: none; }
 
 .player-lista-rol { display: flex; flex-direction: column; }
+
+/* acordeão de capítulos na lista do Ouvir (modo Contínuo): cada capítulo é uma
+   linha; abrir mostra os versículos. A seta é LARANJA para distinguir do "+" da
+   seleção de versículo; gira para cima quando o capítulo está aberto. */
+.cap-item + .cap-item { border-top: 1px solid color-mix(in srgb, var(--cromo-texto) 10%, transparent); }
+.cap-linha {
+  display: flex; align-items: center; gap: 9px; width: 100%;
+  padding: 11px 8px; background: transparent; color: var(--cromo-texto);
+  border: none; cursor: pointer; text-align: left; font: inherit;
+}
+.cap-seta { display: inline-flex; color: #e8842b; transition: transform .18s ease; flex: none; }
+.cap-seta .icone { width: 18px; height: 18px; }
+.cap-item.aberto .cap-seta { transform: rotate(180deg); }
+.cap-linha-nome { flex: 1; font-weight: 600; }
+.cap-linha-conta { color: var(--cromo-fraco); font-variant-numeric: tabular-nums; }
+.cap-linha.tocando .cap-linha-nome { color: #e8842b; }
+.cap-versos { padding: 0 0 8px 20px; }
 
 /* cada linha: número, versão no retângulo padrão, e a referência */
 .faixa {

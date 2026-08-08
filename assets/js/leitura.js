@@ -214,8 +214,10 @@ const Leitura = {
       + ` aria-label="Ver anotações" title="Anotações"><svg><use href="#i-nota"/></svg></span>`;
   },
 
+  _raiz() { return (this.escopo ? this.escopo() : document.getElementById('folha')) || document; },
+
   pintarMarca(vers, texto, faixas) {
-    document.querySelectorAll(`#folha .v[data-vers="${vers}"]`).forEach(el => {
+    this._raiz().querySelectorAll(`.v[data-vers="${vers}"]`).forEach(el => {
       // no interlinear o versículo são blocos empilhados; repintar por dentro
       // apagaria as palavras. A marcação de cor não se aplica a esse modo.
       if (el.classList.contains('interlinear')) return;
@@ -232,7 +234,7 @@ const Leitura = {
   pintarPonto(vers, posto) {
     document.querySelectorAll('.v.ponto').forEach(el => el.classList.remove('ponto'));
     if (!posto) return;
-    document.querySelectorAll(`.v[data-vers="${vers}"]`)
+    this._raiz().querySelectorAll(`.v[data-vers="${vers}"]`)
       .forEach(el => el.classList.add('ponto'));
   },
 

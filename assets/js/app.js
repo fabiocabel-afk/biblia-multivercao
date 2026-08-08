@@ -151,6 +151,7 @@ const App = {
   /* ============================================================== navegar */
 
   async ir(code, cap, vers, { registrar = true, desliza = 0 } = {}) {
+    if (Prefs.get('paginaModo') === 'continuo') return this._abrirContinuo(code, cap, vers, desliza);
     // navegar por conta própria descarta a volta rápida; só o pulo para a
     // referência (que ativa a flag) a preserva, para poder voltar depois
     if (!this._pulandoDeReferencia && this.origemDaReferencia) {
@@ -227,6 +228,99 @@ const App = {
     this._prefetchVizinhos();   // deixa anterior/próximo prontos para o arrasto
   },
 
+  /* Modo Contínuo: empilha TODOS os capítulos do livro numa folha só, para rolar
+   * um debaixo do outro. O nome do livro aparece uma vez no topo; cada capítulo
+   * começa pela sua capitular (o número grande). O deslize lateral troca de livro
+   * (ver passo/_alvoPasso). A edição de versículo fica no modo com quebra (3b). */
+  async _abrirContinuo(code, capAlvo, vers, desliza = 0) {
+    if (!this._pulandoDeReferencia && this.origemDaReferencia) this.esconderVoltarOrigem();
+    const folha = document.getElementById('folha');
+    folha.innerHTML = '<div class="estado">Abrindo…</div>';
+
+    const info = Dados.infoLivro(this.versao, code);
+    const total = info ? info.chapters : 1;
+    let primeiro = null;
+    const blocos = [];
+    for (let n = 1; n <= total; n++) {
+      let r;
+      try { r = await Dados.capitulo(this.versao, code, n); } catch { r = null; }
+      if (!r) continue;
+      if (!primeiro) {
+        primeiro = r;
+        if (Dados.ehOriginal(this.versao)) { try { await Dados.carregarLexico(r.livro.lang); } catch {} }
+      }
+      blocos.push(`<section class="cap-bloco" data-cap="${n}">`
+        + Leitura.html(this.versao, r.livro, r.capitulo) + `</section>`);
+    }
+    if (!primeiro) {
+      folha.innerHTML = `<div class="estado">Não foi possível abrir ${Dados.nomeCurto(this.versao, code)}.</div>`;
+      return;
+    }
+
+    this.code = code;
+    this.cap = capAlvo || 1;
+    this.destaque = vers || null;
+    this._blocoAtivo = null;
+    this.resetarMulti();
+    this.pontoAtual = null;
+    this.esconderMais();
+    this.selecao = null;
+    this.renderBarraSelecao();
+
+    folha.innerHTML = `<p class="titulo-livro abertura">${Leitura.escapar(primeiro.livro.name)}</p>`
+      + blocos.join('');
+    this.atualizarBarra();
+    Pergaminho.folha(code, this.cap);
+    this._aplicarDeslize(folha, desliza);
+
+    // rola até o capítulo alvo (topo logo abaixo da barra)
+    const alvoBloco = folha.querySelector(`.cap-bloco[data-cap="${this.cap}"]`);
+    const topoBarra = (document.querySelector('.topo') && document.querySelector('.topo').offsetHeight) || 52;
+    if (this.cap > 1 && alvoBloco) {
+      const y = alvoBloco.getBoundingClientRect().top + window.scrollY - topoBarra - 8;
+      window.scrollTo(0, Math.max(0, y));
+    } else {
+      window.scrollTo(0, 0);
+    }
+    if (vers && alvoBloco) {
+      const alvo = alvoBloco.querySelector(`.v[data-vers="${vers}"]`);
+      if (alvo) { alvo.classList.add('foco'); alvo.scrollIntoView({ block: 'center' }); }
+    }
+    this._marcarCortados();
+    this._prefetchVizinhos();
+  },
+
+  /* Rolando no Contínuo, atualiza a referência do topo e o capítulo atual para o
+   * capítulo que está no alto da tela. No modo com quebra é um no-op. */
+  _spyCapitulo() {
+    if (Prefs.get('paginaModo') !== 'continuo') return;
+    const blocos = document.querySelectorAll('#folha .cap-bloco');
+    if (!blocos.length) return;
+    const topoBarra = (document.querySelector('.topo') && document.querySelector('.topo').offsetHeight) || 52;
+    let atual = blocos[0];
+    for (const bl of blocos) {
+      if (bl.getBoundingClientRect().top <= topoBarra + 12) atual = bl; else break;
+    }
+    const cap = +atual.dataset.cap;
+    if (cap !== this.cap) {
+      this.cap = cap;
+      const ref = document.getElementById('btn-ref');
+      if (ref) ref.textContent = Dados.referencia(this.versao, this.code, cap);
+    }
+  },
+
+  /* Onde os versículos "atuais" vivem: no modo com quebra é a folha inteira; no
+   * Contínuo é o bloco do capítulo com que a pessoa está interagindo (definido no
+   * toque e pela rolagem). Assim seleção/marcação/anotação endereçam o versículo
+   * certo mesmo com vários capítulos empilhados. */
+  _blocoAtivo: null,
+  _escopoVersos() {
+    if (Prefs.get('paginaModo') === 'continuo' && this._blocoAtivo && this._blocoAtivo.isConnected)
+      return this._blocoAtivo;
+    return document.getElementById('folha');
+  },
+  _qv(vers) { return this._escopoVersos().querySelector(`.v[data-vers="${vers}"]`); },
+
   atualizarBarra() {
     this.atualizarAtalhoFixado();
     document.getElementById('btn-ref').textContent =
@@ -240,8 +334,11 @@ const App = {
     if (caixa) caixa.classList.toggle('com-engrenagem', ehInter);
 
     const info = Dados.infoLivro(this.versao, this.code);
-    const temAntes = this.cap > 1 || Dados.vizinho(this.versao, this.code, -1);
-    const temDepois = (info && this.cap < info.chapters) || Dados.vizinho(this.versao, this.code, 1);
+    const continuo = Prefs.get('paginaModo') === 'continuo';
+    const temAntes = continuo ? Dados.vizinho(this.versao, this.code, -1)
+                              : (this.cap > 1 || Dados.vizinho(this.versao, this.code, -1));
+    const temDepois = continuo ? Dados.vizinho(this.versao, this.code, 1)
+                               : ((info && this.cap < info.chapters) || Dados.vizinho(this.versao, this.code, 1));
     document.getElementById('btn-antes').disabled = !temAntes;
     document.getElementById('btn-depois').disabled = !temDepois;
   },
@@ -253,6 +350,10 @@ const App = {
   /* Para onde passo(dir) iria, SEM navegar — usado para pré-carregar o vizinho
    * e para o arrasto saber o destino. Retorna {code, cap} ou null (sem vizinho). */
   _alvoPasso(dir) {
+    if (Prefs.get('paginaModo') === 'continuo') {
+      const viz = Dados.vizinho(this.versao, this.code, dir);
+      return viz ? { code: viz, cap: 1 } : null;
+    }
     const info = Dados.infoLivro(this.versao, this.code);
     const cap = this.cap + dir;
     if (info && cap >= 1 && cap <= info.chapters) return { code: this.code, cap };
@@ -299,6 +400,11 @@ const App = {
   },
 
   async passo(dir) {
+    if (Prefs.get('paginaModo') === 'continuo') {         // horizontal troca de LIVRO
+      const viz = Dados.vizinho(this.versao, this.code, dir);
+      if (!viz) return;
+      return this.ir(viz, 1, undefined, { desliza: dir });
+    }
     const info = Dados.infoLivro(this.versao, this.code);
     let cap = this.cap + dir;
 
@@ -605,17 +711,21 @@ const App = {
     const selo = b.deuterocanonical
       ? '<span class="selo">Deutero</span>'
       : (b.deutero_sections ? '<span class="selo">Cap. extras</span>' : '');
+    const capsVisiveis = Prefs.get('mostrarCapitulos');
+    const sub = capsVisiveis ? `<span class="sub">${b.chapters || ''}</span>` : '';
     return `<button class="linha ${b.code === this.code ? 'ativa' : ''}"
       data-livro="${b.code}">
       <span>${b.name}</span>${selo}
-      <span class="sub">${b.chapters || ''}</span>
+      ${sub}
     </button>`;
   },
 
   desenharArvore() {
+    if (Prefs.get('painelLayout') === 'estante') return this._desenharEstante();
     const corpo = document.getElementById('corpo-arvore');
     const arv = Dados.arvore(this.versao);
     const comCategorias = Prefs.get('mostrarCategorias');
+    const comCapitulos = Prefs.get('mostrarCapitulos');
 
     // so na primeirissima vez o app escancara onde o leitor esta agora.
     // Depois disso, fechado e fechado — se a pessoa recolheu o Testamento, e
@@ -636,20 +746,19 @@ const App = {
         aria-expanded="${abertoT}">
         <span class="seta">▶</span>
         <span>${t.name}</span>
-        <span class="soma">${this.rotuloSoma(this.somaCapitulos(livrosT))}</span>
+        ${comCapitulos ? `<span class="soma">${this.rotuloSoma(this.somaCapitulos(livrosT))}</span>` : ''}
       </button>`);
 
       partes.push(`<div class="dentro ${abertoT ? '' : 'fechada'}">`);
 
       for (const c of t.categories) {
         if (comCategorias) {
-          const somaC = this.rotuloSoma(this.somaCapitulos(c.books));
           const abertoC = abertoT && this.dobraC === c.id;
           partes.push(`<button class="dobra categoria" data-c="${c.id}"
             aria-expanded="${abertoC}">
             <span class="seta">▶</span>
             <span>${c.name}</span>
-            <span class="soma">${somaC}</span>
+            ${comCapitulos ? `<span class="soma">${this.rotuloSoma(this.somaCapitulos(c.books))}</span>` : ''}
           </button>`);
           partes.push(`<div class="dentro ${abertoC ? '' : 'fechada'}">`);
           partes.push(c.books.map(b => this.linhaLivro(b)).join(''));
@@ -684,6 +793,92 @@ const App = {
 
     corpo.querySelectorAll('[data-livro]').forEach(el => {
       el.onclick = () => this.desenharCapitulos(el.dataset.livro);
+    });
+  },
+
+  /* Modo Estante: a grade de livros, no máximo dois por linha, com um seletor
+   * de Testamentos no alto (as "capas") e divisórias de categoria entre os
+   * livros. A capa não selecionada mostra a cor da encadernação; a selecionada
+   * "abre" na cor da página. */
+  estanteT: null,   // qual Testamento está aberto na estante
+
+  _desenharEstante() {
+    const corpo = document.getElementById('corpo-arvore');
+    const arv = Dados.arvore(this.versao);
+    const comCategorias = Prefs.get('mostrarCategorias');
+    const comCapitulos = Prefs.get('mostrarCapitulos');
+
+    // na primeira vez, abre no Testamento do livro atual; depois respeita a
+    // escolha. Se o Testamento guardado não existe neste cânone, cai no 1º.
+    if (this.estanteT == null) {
+      const atual = Dados.infoLivro(this.versao, this.code);
+      this.estanteT = atual ? atual.testament : (arv.testaments[0] && arv.testaments[0].id);
+    }
+    if (!arv.testaments.some(t => t.id === this.estanteT))
+      this.estanteT = arv.testaments[0] && arv.testaments[0].id;
+
+    const capas = arv.testaments.map(t =>
+      `<button class="estante-capa ${t.id === this.estanteT ? 'sel' : ''}" data-est-t="${t.id}">
+        ${t.name}
+      </button>`).join('');
+
+    const t = arv.testaments.find(x => x.id === this.estanteT);
+    const celulas = [];
+    for (const c of (t ? t.categories : [])) {
+      if (comCategorias)
+        celulas.push(`<div class="estante-divisor"><span>${c.name}</span></div>`);
+      for (const b of c.books) celulas.push(this._cartaoLivro(b, comCapitulos));
+    }
+
+    corpo.innerHTML =
+      `<div class="estante">
+        <div class="estante-seletor">${capas}</div>
+        <div class="estante-grade">${celulas.join('')}</div>
+      </div>`;
+
+    document.getElementById('titulo-arvore').textContent = 'Livros';
+
+    corpo.querySelectorAll('[data-est-t]').forEach(el => {
+      el.onclick = () => { this.estanteT = el.dataset.estT; this._desenharEstante(); };
+    });
+    corpo.querySelectorAll('[data-livro]').forEach(el => {
+      el.onclick = () => this.desenharCapitulos(el.dataset.livro);
+    });
+
+    // todos os cartões com a mesma altura (a do mais alto), como folhas iguais
+    this._uniformizarEstante();
+
+    // ao girar/redimensionar o aparelho, remede uma vez (só se a estante estiver na tela)
+    if (!this._estanteResizeLigado) {
+      this._estanteResizeLigado = true;
+      window.addEventListener('resize', () => {
+        if (document.querySelector('#corpo-arvore .estante-grade')) this._uniformizarEstante();
+      });
+    }
+  },
+
+  _cartaoLivro(b, comCapitulos) {
+    const selo = b.deuterocanonical
+      ? '<span class="selo">Deutero</span>'
+      : (b.deutero_sections ? '<span class="selo">Cap. extras</span>' : '');
+    const caps = comCapitulos && b.chapters
+      ? `<span class="lc-caps">${b.chapters} cap.</span>` : '';
+    return `<button class="livro-cartao ${b.code === this.code ? 'ativa' : ''}" data-livro="${b.code}">
+      <span class="lc-nome">${b.name.toUpperCase()}</span>
+      ${caps}${selo}
+    </button>`;
+  },
+
+  _uniformizarEstante() {
+    const grade = document.querySelector('#corpo-arvore .estante-grade');
+    if (!grade) return;
+    const cartoes = [...grade.querySelectorAll('.livro-cartao')];
+    if (!cartoes.length) return;
+    cartoes.forEach(c => { c.style.minHeight = ''; });   // zera para medir no natural
+    requestAnimationFrame(() => {
+      let maxA = 0;
+      cartoes.forEach(c => { maxA = Math.max(maxA, c.offsetHeight); });
+      if (maxA > 0) cartoes.forEach(c => { c.style.minHeight = maxA + 'px'; });
     });
   },
 
@@ -2104,6 +2299,20 @@ const App = {
         <span id="rot-fonte">${p.fonte}px</span></div>
       <input class="deslizador" type="range" id="ctrl-fonte" min="15" max="34" value="${p.fonte}">
 
+      <div class="rotulo-controle" style="margin-top:22px"><span>Modo de leitura</span></div>
+      <div class="escolha-radio">
+        <label class="opcao-radio">
+          <input type="radio" name="pagina-modo" value="quebra" ${p.paginaModo !== 'continuo' ? 'checked' : ''}>
+          <span class="marca-radio"></span>
+          <span class="rotulo-radio"><strong>Com quebra de capítulo</strong><span>Um capítulo por vez; deslizar troca de capítulo</span></span>
+        </label>
+        <label class="opcao-radio">
+          <input type="radio" name="pagina-modo" value="continuo" ${p.paginaModo === 'continuo' ? 'checked' : ''}>
+          <span class="marca-radio"></span>
+          <span class="rotulo-radio"><strong>Contínuo</strong><span>Capítulos do livro em sequência; deslizar troca de livro</span></span>
+        </label>
+      </div>
+
       <div class="rotulo-controle" style="margin-top:22px"><span>Exibição do versículo</span></div>
       <div class="escolha-radio">
         <label class="opcao-radio">
@@ -2134,11 +2343,31 @@ const App = {
       ${p.escuro ? '<p class="contagem">A temperatura do papel só vale no modo claro.</p>' : ''}`;
 
     const livros = `
-      <label class="interruptor"><span>Mostrar categorias</span>
+      <div class="rotulo-controle"><span>Layout do painel</span></div>
+      <div class="escolha-radio">
+        <label class="opcao-radio">
+          <input type="radio" name="painel-layout" value="lista" ${p.painelLayout === 'estante' ? '' : 'checked'}>
+          <span class="marca-radio"></span>
+          <span class="rotulo-radio"><strong>Lista</strong><span>Sanfona por Testamento e categoria, um nível de cada vez</span></span>
+        </label>
+        <label class="opcao-radio">
+          <input type="radio" name="painel-layout" value="estante" ${p.painelLayout === 'estante' ? 'checked' : ''}>
+          <span class="marca-radio"></span>
+          <span class="rotulo-radio"><strong>Estante</strong><span>Grade de livros, dois por linha, como uma estante</span></span>
+        </label>
+      </div>
+
+      <label class="interruptor" style="margin-top:16px"><span>Mostrar categorias</span>
         <input type="checkbox" id="ctrl-categorias" ${p.mostrarCategorias ? 'checked' : ''}></label>
-      <p class="contagem">Ligado, o painel abre em três camadas: Testamento,
-      categoria e livro — uma de cada vez. Desligado, os livros vêm direto sob
-      cada Testamento, sem nomes de categoria.</p>`;
+      <p class="contagem">Na Lista, abre a camada do meio (Testamento → categoria →
+      livro). Na Estante, vira uma divisória com o nome da categoria entre os livros.
+      Desligado, os livros vêm direto, sem categorias.</p>
+
+      <label class="interruptor"><span>Mostrar capítulos</span>
+        <input type="checkbox" id="ctrl-capitulos" ${p.mostrarCapitulos ? 'checked' : ''}></label>
+      <p class="contagem">A quantidade de capítulos ao lado (ou abaixo, na Estante) de
+      cada livro, e as somas por Testamento e categoria na Lista. Desligado, os nomes
+      ficam sozinhos.</p>`;
 
     const comparar = `
       <p class="contagem">Versão que aparece na metade de baixo. Dentro da
@@ -2279,6 +2508,13 @@ const App = {
       fonte.onchange = () => Prefs.set('fonte', +fonte.value);
     }
 
+    corpo.querySelectorAll('input[name="pagina-modo"]').forEach(el => {
+      el.onchange = () => {
+        Prefs.set('paginaModo', el.value);
+        this.ir(this.code, this.cap, null, { registrar: false });   // re-renderiza mantendo a posição
+      };
+    });
+
     corpo.querySelectorAll('input[name="modo-versiculo"]').forEach(el => {
       el.onchange = () => {
         const porLinha = el.value === 'linha';
@@ -2334,6 +2570,15 @@ const App = {
       Prefs.set('mostrarCategorias', e.target.checked);
       this.dobraC = null;
     };
+
+    const caps = achar('ctrl-capitulos');
+    if (caps) caps.onchange = e => {
+      Prefs.set('mostrarCapitulos', e.target.checked);
+    };
+
+    corpo.querySelectorAll('input[name="painel-layout"]').forEach(el => {
+      el.onchange = () => Prefs.set('painelLayout', el.value);
+    });
 
     corpo.querySelectorAll('[data-comparar]').forEach(el => {
       el.onclick = () => {
@@ -2426,7 +2671,7 @@ const App = {
    * o capítulo inteiro nem pular o scroll. */
   repintarMarcasVisiveis() {
     const versificacao = Dados.versificacaoDe(this.versao);
-    document.querySelectorAll('#folha .v').forEach(el => {
+    this._escopoVersos().querySelectorAll('.v').forEach(el => {
       const vers = +el.dataset.vers;
       const faixas = Marcadores.faixas(versificacao, this.code, this.cap, vers);
       Leitura.pintarMarca(vers, this.textoDoVersiculo(el), faixas);
@@ -2446,7 +2691,7 @@ const App = {
   repintarNotasVisiveis() {
     const versificacao = Dados.versificacaoDe(this.versao);
     const comNota = Anotacoes.noCapitulo(versificacao, this.code, this.cap);
-    document.querySelectorAll('#folha .v').forEach(el => {
+    this._escopoVersos().querySelectorAll('.v').forEach(el => {
       const vers = +el.dataset.vers;
       const tem = el.querySelector('.marca-nota');
       if (comNota.has(vers) && !tem) {
@@ -3195,7 +3440,7 @@ const App = {
   construirSelecaoMulti() {
     const versos = [...(this.multiVers || [])].sort((a, b) => a - b);
     const pedacos = versos.map(v => {
-      const el = document.querySelector(`#folha .v[data-vers="${v}"]`);
+      const el = this._qv(v);
       const texto = el ? this.textoDoVersiculo(el) : '';
       return { vers: v, i: 0, f: texto.length, texto };
     }).filter(p => p.texto.length);
@@ -3207,15 +3452,18 @@ const App = {
   pintarMultiSel() {
     document.querySelectorAll('#folha .v.multi-sel, #folha .v.multi-inicio')
       .forEach(el => el.classList.remove('multi-sel', 'multi-inicio'));
+    // o realce do "parei aqui" (.ponto) é substituído pela seleção múltipla; limpa
+    // global para não deixar um versículo de outro capítulo parecendo selecionado
+    document.querySelectorAll('#folha .v.ponto').forEach(el => el.classList.remove('ponto'));
     for (const v of (this.multiVers || [])) {
-      const el = document.querySelector(`#folha .v[data-vers="${v}"]`);
+      const el = this._qv(v);
       if (el) el.classList.add('multi-sel');
     }
     // o traço à esquerda (início da seleção) fica SEMPRE no menor número —
     // isto é, no primeiro versículo do grupo, mesmo quando se seleciona para cima
     if (this.multiVers && this.multiVers.size) {
       const menor = Math.min(...this.multiVers);
-      const ini = document.querySelector(`#folha .v[data-vers="${menor}"]`);
+      const ini = this._qv(menor);
       if (ini) ini.classList.add('multi-inicio');
     }
   },
@@ -3245,16 +3493,31 @@ const App = {
   },
 
   /** Com o modo ligado, tocar num versículo o adiciona; tocar de novo o tira. */
+  /** Capítulo a que a seleção múltipla atual pertence (Contínuo). */
+  _capSelecao: null,
+
   alternarVersiculoMulti(vers) {
     this.multiVers = this.multiVers || new Set();
+    const capAtual = Prefs.get('paginaModo') === 'continuo' ? this.cap : null;
+    // a seleção múltipla é por capítulo: tocar num versículo de OUTRO capítulo
+    // limpa as demais e passa a selecionar apenas este
+    if (capAtual != null && this._capSelecao != null && capAtual !== this._capSelecao) {
+      this.multiVers.clear();
+      this.multiVers.add(vers);
+      this._capSelecao = capAtual;
+      this.atualizarSelecaoMulti();
+      return;
+    }
     if (this.multiVers.has(vers)) this.multiVers.delete(vers);
     else this.multiVers.add(vers);
+    this._capSelecao = capAtual;
     this.atualizarSelecaoMulti();
   },
 
   resetarMulti() {
     this.multiAtivo = false;
     this.multiSelecao = false;
+    this._capSelecao = null;
     if (this.multiVers) this.multiVers.clear();
     document.querySelectorAll('#folha .v.multi-sel, #folha .v.multi-inicio')
       .forEach(el => el.classList.remove('multi-sel', 'multi-inicio'));
@@ -3265,7 +3528,7 @@ const App = {
    *  Se todos já estão selecionados, um novo toque limpa a seleção. Havendo apenas
    *  alguns marcados, passa a marcar o capítulo inteiro. Atalho do modo de vários. */
   selecionarCapitulo() {
-    const todos = [...document.querySelectorAll('#folha .v[data-vers]')]
+    const todos = [...this._escopoVersos().querySelectorAll('.v[data-vers]')]
       .map(el => +el.dataset.vers)
       .filter(n => !Number.isNaN(n));
     if (!todos.length) return;
@@ -3280,6 +3543,7 @@ const App = {
       window.getSelection()?.removeAllRanges();   // larga qualquer seleção de texto
       this.multiAtivo = true;                      // fica no modo de vários para ajustar depois
       this.multiVers = new Set(todos);
+      this._capSelecao = Prefs.get('paginaModo') === 'continuo' ? this.cap : null;
       this.atualizarSelecaoMulti();
     }
   },
@@ -3728,6 +3992,17 @@ const App = {
      * vertical, e rolagem e nao virada; se ha texto selecionado, a pessoa esta
      * escolhendo um trecho e nao quer trocar de capitulo; e o gesto precisa ser
      * decidido — curto demais ou demorado demais nao conta. */
+    // rolagem no Contínuo: atualiza a referência do topo conforme o capítulo
+    let spyPend = false;
+    window.addEventListener('scroll', () => {
+      if (spyPend) return;
+      spyPend = true;
+      requestAnimationFrame(() => { spyPend = false; this._spyCapitulo(); });
+    }, { passive: true });
+
+    // a Leitura pinta marca/ponto dentro do mesmo escopo (folha ou bloco ativo)
+    Leitura.escopo = () => this._escopoVersos();
+
     const folha = q('folha');
     const viz = q('folha-vizinho');
     let arr = null;   // estado do arrasto em curso
@@ -3855,9 +4130,34 @@ const App = {
     let espera = null;
 
     q('folha').onclick = e => {
+      if (Prefs.get('paginaModo') === 'continuo') {
+        // define o capítulo ativo pelo bloco tocado, para seleção/marcação/anotação
+        const bloco = e.target.closest('.cap-bloco');
+        if (bloco) {
+          this._blocoAtivo = bloco;
+          const c = +bloco.dataset.cap;
+          if (c !== this.cap) {
+            this.cap = c;
+            const ref = document.getElementById('btn-ref');
+            if (ref) ref.textContent = Dados.referencia(this.versao, this.code, c);
+          }
+        }
+      }
       if (this.ouvindo) {                // modo player: o toque só reposiciona a leitura
         const v = e.target.closest('.v');
         if (v) {
+          // no Contínuo, tocar num versículo de outro capítulo move a leitura para lá
+          if (Prefs.get('paginaModo') === 'continuo' && !this.modoFila) {
+            const bl = v.closest('.cap-bloco');
+            if (bl && bl !== this._blocoLendo) {
+              this._blocoLendo = bl;
+              this._capLendo = +bl.dataset.cap;
+              this.cap = this._capLendo;
+              this._execColapsada = false;
+              if (this._capExplorando === this._capLendo) this._capExplorando = null;
+              if (this._listaAberta) this.desenharListaPlayer();
+            }
+          }
           if (this.modoFila) this._tocarVersoFila(+v.dataset.vers);
           else this.lerVersiculo(+v.dataset.vers);
         }
@@ -3953,7 +4253,7 @@ const App = {
   /** O texto do versículo (pelo número) como está na tela, sem o número, para
    *  servir de amostra na linha do histórico. */
   amostraDoVersiculo(vers) {
-    const el = document.querySelector(`#folha .v[data-vers="${vers}"]`);
+    const el = this._qv(vers);
     return el ? this.textoDoVersiculo(el).trim() : '';
   },
 
@@ -3987,6 +4287,7 @@ const App = {
     // o "+" (seleção de vários) aparece quando há um versículo em foco
     if (posto) {
       this.pontoAtual = vers;
+      this._capSelecao = Prefs.get('paginaModo') === 'continuo' ? this.cap : null;
       this.mostrarMais();
     } else {
       this.pontoAtual = null;
@@ -4012,9 +4313,23 @@ const App = {
   lendoVers: null,
   leituraGen: 0,
 
-  /** Os números de versículo do capítulo na tela, em ordem. */
+  /* Escopo de LEITURA do player: no Contínuo é o bloco do capítulo que está sendo
+   * lido (avança sozinho, independente da rolagem e do toque); no com quebra é a
+   * folha inteira. Distinto do _blocoAtivo (que é o da interação por toque). */
+  _blocoLendo: null,
+  _capLendo: null,
+  _escopoLeitura() {
+    if (Prefs.get('paginaModo') === 'continuo' && this._blocoLendo && this._blocoLendo.isConnected)
+      return this._blocoLendo;
+    return document.getElementById('folha');
+  },
+  _capLeitura() {
+    return (Prefs.get('paginaModo') === 'continuo' && this._capLendo) ? this._capLendo : this.cap;
+  },
+
+  /** Os números de versículo do capítulo que está sendo lido, em ordem. */
   versiculosNaTela() {
-    return [...document.querySelectorAll('#folha .v[data-vers]')]
+    return [...this._escopoLeitura().querySelectorAll('.v[data-vers]')]
       .map(el => +el.dataset.vers)
       .filter(n => !Number.isNaN(n));
   },
@@ -4045,6 +4360,8 @@ const App = {
     this.pausado = false;
     this.modoFila = false;
     this._listaAberta = false;
+    this._capExplorando = null;   // capítulo aberto manualmente (exploração)
+    this._execColapsada = false;  // usuário recolheu o capítulo em execução?
     if (this.seguirCapitulos == null) this.seguirCapitulos = true;
     this.repetir = this.repetir || 'nao';
     this._cancelarAutoFechar();
@@ -4061,6 +4378,11 @@ const App = {
     this._configurarMediaSession();  // controles na tela de bloqueio
     this.manterTelaAcesa();
 
+    if (Prefs.get('paginaModo') === 'continuo') {
+      this._blocoLendo = document.querySelector(`#folha .cap-bloco[data-cap="${this.cap}"]`)
+        || document.querySelector('#folha .cap-bloco');
+      this._capLendo = this._blocoLendo ? +this._blocoLendo.dataset.cap : this.cap;
+    }
     const lista = this.versiculosNaTela();
     this.lerVersiculo(lista[0] || 1, { anunciarCap: true });
   },
@@ -4074,6 +4396,10 @@ const App = {
     this.ouvindo = false;
     this.pausado = false;
     this.lendoVers = null;
+    this._blocoLendo = null;
+    this._capLendo = null;
+    this._capExplorando = null;
+    this._execColapsada = false;
     this.lendoNota = false;
     this.modoFila = false;
     this.fila = [];
@@ -4107,9 +4433,9 @@ const App = {
     this.rolarAteVersiculo(vers);
     this.atualizarPlayer();
 
-    const el = document.querySelector(`#folha .v[data-vers="${vers}"]`);
+    const el = this._escopoLeitura().querySelector(`.v[data-vers="${vers}"]`);
     const texto = el ? this.textoDoVersiculo(el).trim() : '';
-    const prefixo = anunciarCap ? `Capítulo ${this.cap}. ` : '';
+    const prefixo = anunciarCap ? `Capítulo ${this._capLeitura()}. ` : '';
 
     const gen = ++this.leituraGen;
     Locutor.parar();
@@ -4138,6 +4464,22 @@ const App = {
     }
     if (this.repetir === 'cap') {              // fim do capítulo: recomeça do início
       this.lerVersiculo(lista[0] || 1, { anunciarCap: true });
+      return;
+    }
+    if (this.seguirCapitulos && Prefs.get('paginaModo') === 'continuo') {
+      const prox = this._blocoLendo && this._blocoLendo.nextElementSibling;
+      if (prox && prox.classList && prox.classList.contains('cap-bloco')) {
+        this._blocoLendo = prox;
+        this._capLendo = +prox.dataset.cap;
+        this.cap = this._capLendo;
+        this._execColapsada = false;   // o novo capítulo em execução abre sozinho
+        if (this._listaAberta) this.desenharListaPlayer();
+        this._configurarMediaSession();
+        const nova = this.versiculosNaTela();
+        this.lerVersiculo(nova[0] || 1, { anunciarCap: true });
+        return;
+      }
+      this.finalizarLeitura();   // fim do livro no Contínuo
       return;
     }
     const info = Dados.infoLivro(this.versao, this.code);
@@ -4504,7 +4846,19 @@ const App = {
     const j = i + dir;
     if (j >= 0 && j < lista.length) { this.lerVersiculo(lista[j]); return; }
 
-    if (dir > 0) {
+    if (Prefs.get('paginaModo') === 'continuo') {
+      const irmao = dir > 0 ? (this._blocoLendo && this._blocoLendo.nextElementSibling)
+                            : (this._blocoLendo && this._blocoLendo.previousElementSibling);
+      if (irmao && irmao.classList && irmao.classList.contains('cap-bloco')) {
+        this._blocoLendo = irmao;
+        this._capLendo = +irmao.dataset.cap;
+        this.cap = this._capLendo;
+        this._execColapsada = false;
+        if (this._listaAberta) this.desenharListaPlayer();
+        const nova = this.versiculosNaTela();
+        this.lerVersiculo(dir > 0 ? (nova[0] || 1) : (nova[nova.length - 1] || 1), { anunciarCap: true });
+      }
+    } else if (dir > 0) {
       const info = Dados.infoLivro(this.versao, this.code);
       if (info && this.cap < info.chapters) {
         this.ir(this.code, this.cap + 1).then(() => {
@@ -4524,7 +4878,7 @@ const App = {
 
   pintarLendo(vers) {
     this.despintarLendo();
-    document.querySelectorAll(`#folha .v[data-vers="${vers}"]`)
+    this._escopoLeitura().querySelectorAll(`.v[data-vers="${vers}"]`)
       .forEach(el => el.classList.add('lendo'));
   },
 
@@ -4533,7 +4887,7 @@ const App = {
   },
 
   rolarAteVersiculo(vers) {
-    const el = document.querySelector(`#folha .v[data-vers="${vers}"]`);
+    const el = this._escopoLeitura().querySelector(`.v[data-vers="${vers}"]`);
     if (el) el.scrollIntoView({ block: 'center', behavior: 'smooth' });
   },
 
@@ -4581,7 +4935,11 @@ const App = {
     }
     if (lista) lista.hidden = !this._listaAberta;
     document.getElementById('player-voz')?.classList.toggle('expandido', this._listaAberta);
-    if (this._listaAberta) this.desenharListaPlayer();
+    if (this._listaAberta) {
+      this._capExplorando = null;    // reabrir a lista começa com tudo fechado, exceto a execução
+      this._execColapsada = false;
+      this.desenharListaPlayer();
+    }
   },
 
   /** Deixa a alça/lista no estado fechado (ao (re)abrir o player num modo). */
@@ -4652,17 +5010,40 @@ const App = {
     b.title = t;
   },
 
-  desenharListaPlayer() {
+  desenharListaPlayer(opts = {}) {
     const lista = document.getElementById('player-lista');
     if (!lista || !this._listaAberta) return;
+    const acordeao = !this.modoFila && Prefs.get('paginaModo') === 'continuo';
+
+    // "seguir o foco" (rolar até o que está tocando) só vale quando NÃO se está
+    // explorando um capítulo; ao explorar, mantém a posição (âncora = o capítulo
+    // aberto), para o avanço da leitura não puxar a tela de volta.
+    const seguir = opts.seguir != null ? opts.seguir
+      : (acordeao ? (this._capExplorando == null) : true);
+    const ancora = opts.ancora != null ? opts.ancora
+      : (acordeao && !seguir ? this._capExplorando : null);
+
+    const topoDe = (c) => {
+      const h = lista.querySelector(`[data-cap-toggle="${c}"]`);
+      return h ? h.getBoundingClientRect().top - lista.getBoundingClientRect().top : null;
+    };
+    const topoAntes = ancora != null ? topoDe(ancora) : null;
+    const scrollAntes = lista.scrollTop;
 
     lista.innerHTML = this.modoFila
       ? this._htmlListaFila()
-      : this._htmlListaCapitulo();
+      : (acordeao ? this._htmlListaLivroContinuo() : this._htmlListaCapitulo());
 
-    // rola até a faixa que está tocando, para ela ficar à vista
-    const ativo = lista.querySelector('.faixa.tocando');
-    if (ativo) ativo.scrollIntoView({ block: 'center' });
+    if (seguir) {
+      const ativo = lista.querySelector('.faixa.tocando');
+      if (ativo) ativo.scrollIntoView({ block: 'center' });
+    } else if (ancora != null && topoAntes != null) {
+      const topoDepois = topoDe(ancora);
+      if (topoDepois != null) lista.scrollTop += (topoDepois - topoAntes);
+      else lista.scrollTop = scrollAntes;
+    } else {
+      lista.scrollTop = scrollAntes;   // avanço da leitura enquanto explora: fica parado
+    }
 
     // modo fila: tocar num versículo salta a leitura direto para ele
     lista.querySelectorAll('[data-faixa]').forEach(el => {
@@ -4676,6 +5057,82 @@ const App = {
     lista.querySelectorAll('[data-verso]').forEach(el => {
       el.onclick = () => this.lerVersiculo(+el.dataset.verso);
     });
+    // acordeão (Contínuo): abrir/fechar capítulo (exploração) e escolher versículo
+    lista.querySelectorAll('[data-cap-toggle]').forEach(el => {
+      el.onclick = () => this._alternarCapLista(+el.dataset.capToggle);
+    });
+    lista.querySelectorAll('[data-vcap]').forEach(el => {
+      el.onclick = () => this._escolherVersoLista(+el.dataset.vcap, +el.dataset.vnum);
+    });
+  },
+
+  /* A lista do Ouvir no Contínuo é um ACORDEÃO do livro inteiro: cada capítulo é
+   * uma linha; um capítulo aberto mostra seus versículos. Dois estados de abertura
+   * coexistem e são independentes:
+   *   • execução  — o capítulo que está tocando abre sozinho e fecha ao virar;
+   *   • exploração — o usuário abre UM capítulo por vez para navegar, sem tocar na
+   *     execução. Tocar num versículo ASSUME a execução a partir dali. */
+  _htmlListaLivroContinuo() {
+    const nome = Dados.nomeCurto(this.versao, this.code);
+    const blocos = [...document.querySelectorAll('#folha .cap-bloco')];
+    const itens = blocos.map(bl => {
+      const cap = +bl.dataset.cap;
+      const versos = [...bl.querySelectorAll('.v[data-vers]')]
+        .map(el => +el.dataset.vers).filter(n => !Number.isNaN(n));
+      const tocandoCap = cap === this._capLendo;
+      const aberto = (tocandoCap && !this._execColapsada) || cap === this._capExplorando;
+      let corpo = '';
+      if (aberto) {
+        let ordem = 0;
+        const linhas = versos.map(v => {
+          let estado = '';
+          if (tocandoCap && v === this.lendoVers) estado = 'tocando';
+          else if (tocandoCap && this.lendoVers != null && v < this.lendoVers) estado = 'passou';
+          return this._faixaHTML({ ordem: ++ordem, versao: this.versao, nome, cap, vers: v, estado,
+            attrs: `data-vcap="${cap}" data-vnum="${v}"` });
+        }).join('');
+        corpo = `<div class="cap-versos">${linhas}</div>`;
+      }
+      return `<div class="cap-item ${aberto ? 'aberto' : ''}">
+        <button class="cap-linha ${tocandoCap ? 'tocando' : ''}" data-cap-toggle="${cap}" aria-expanded="${aberto}">
+          <span class="cap-seta"><svg class="icone"><use href="#i-tri-baixo"/></svg></span>
+          <span class="cap-linha-nome">Capítulo ${cap}</span>
+          <span class="cap-linha-conta">${versos.length}</span>
+          ${tocandoCap ? '<span class="faixa-agora">tocando</span>' : ''}
+        </button>${corpo}</div>`;
+    }).join('');
+    return `<div class="player-lista-topo">
+        <span class="player-lista-nome">${nome}</span>
+        <span class="player-lista-conta">${blocos.length} capítulo${blocos.length > 1 ? 's' : ''}</span>
+      </div>
+      <div class="player-lista-rol">${itens}</div>`;
+  },
+
+  /** Abrir/fechar um capítulo na lista. Só a EXPLORAÇÃO obedece "um por vez"; o
+   *  capítulo em execução tem estado próprio (o usuário pode recolhê-lo, mas o
+   *  trâmite automático continua mandando nele). */
+  _alternarCapLista(cap) {
+    if (cap === this._capLendo) {
+      this._execColapsada = !this._execColapsada;       // recolhe/expande o de execução
+      this.desenharListaPlayer({ ancora: cap, seguir: false });
+    } else if (cap === this._capExplorando) {
+      this._capExplorando = null;                        // fecha a exploração → foco volta ao tocando
+      this.desenharListaPlayer({ seguir: true });
+    } else {
+      this._capExplorando = cap;                         // abre esta (fecha a anterior), mantendo o ponto
+      this.desenharListaPlayer({ ancora: cap, seguir: false });
+    }
+  },
+
+  /** Escolher um versículo na lista TRANSFERE a execução para aquele capítulo,
+   *  a partir do versículo tocado, fechando o capítulo que estava em execução. */
+  _escolherVersoLista(cap, vers) {
+    const bl = document.querySelector(`#folha .cap-bloco[data-cap="${cap}"]`);
+    if (bl) { this._blocoLendo = bl; this._capLendo = cap; this.cap = cap; }
+    this._execColapsada = false;
+    if (this._capExplorando === cap) this._capExplorando = null;   // funde exploração → execução
+    this.desenharListaPlayer();
+    this.lerVersiculo(vers, { anunciarCap: true });
   },
 
   /** Uma linha da lista: número de ordem, versão no retângulo padrão, e a
@@ -4743,7 +5200,7 @@ const App = {
       let estado = '';
       if (v === this.lendoVers) estado = 'tocando';
       else if (this.lendoVers != null && v < this.lendoVers) estado = 'passou';
-      return this._faixaHTML({ ordem: ++ordem, versao: this.versao, nome, cap: this.cap, vers: v, estado, attrs: `data-verso="${v}"` });
+      return this._faixaHTML({ ordem: ++ordem, versao: this.versao, nome, cap: this._capLeitura(), vers: v, estado, attrs: `data-verso="${v}"` });
     }).join('');
 
     const rodape = this._temProximoCapitulo()
@@ -4751,7 +5208,7 @@ const App = {
       : '';
 
     return `<div class="player-lista-topo">
-        <span class="player-lista-nome">${nome} ${this.cap}</span>
+        <span class="player-lista-nome">${nome} ${this._capLeitura()}</span>
         <span class="player-lista-conta">${versos.length} versículo${versos.length > 1 ? 's' : ''}</span>
       </div>
       <div class="player-lista-rol">${linhas}${rodape}</div>`;
@@ -4761,7 +5218,7 @@ const App = {
   _temProximoCapitulo() {
     try {
       const info = Dados.infoLivro(this.versao, this.code);
-      return (info && this.cap < info.chapters) || !!Dados.vizinho(this.versao, this.code, 1);
+      return (info && this._capLeitura() < info.chapters) || !!Dados.vizinho(this.versao, this.code, 1);
     } catch (e) { return false; }
   },
 

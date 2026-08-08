@@ -53,9 +53,12 @@ const Prefs = {
     estilo: 'historico',       // padrão inicial = Histórico; 'tradicional' = papel liso
     pergaminhoIdade: 45,       // 0..100: idade da folha no estilo Histórico (queima/ambar)
     historicoTema: 'marrom',   // encadernação no Histórico: 'marrom' | 'vermelho' | 'classico'
+    paginaModo: 'quebra',      // 'quebra' = um capítulo por vez (padrão); 'continuo' = livro em sequência
     versoesTirinha: ['ACF', 'NVI', 'NTLH'],
     versaoComparar: 'NVI',
     mostrarCategorias: true,   // painel de livros: com ou sem a camada do meio
+    mostrarCapitulos: true,    // painel de livros: exibir a quantidade de capítulos
+    painelLayout: 'lista',     // painel de livros: 'lista' (sanfona) | 'estante' (grade)
     versiculoPorLinha: false,  // false = texto corrido; true = um versiculo por linha
     refsFixas: false,          // painel de referências dividindo a tela; desligado por padrão
     mostrarNotas: true,        // sinalzinho no versículo quando há anotação no caderno
