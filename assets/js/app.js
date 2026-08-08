@@ -720,6 +720,14 @@ const App = {
     </button>`;
   },
 
+  // Redesenha o painel de livros só se ele estiver aberto na tela. Usado pelos
+  // controles do popup contextual, pra a mudança aparecer ao vivo por trás do
+  // cartão (trocar Lista/Estante, ligar categorias, etc.).
+  _redesenharArvoreSeAberta() {
+    const painel = document.getElementById('painel-arvore');
+    if (painel && painel.classList.contains('aberto')) this.desenharArvore();
+  },
+
   desenharArvore() {
     if (Prefs.get('painelLayout') === 'estante') return this._desenharEstante();
     const corpo = document.getElementById('corpo-arvore');
@@ -2311,10 +2319,12 @@ const App = {
     }
   },
 
-  desenharAjustes() {
-    const corpo = document.getElementById('corpo-ajustes');
+  // Monta os blocos de conteúdo dos Ajustes e devolve um objeto indexado por id.
+  // Fica separado do desenho pra que TANTO o painel de Ajustes completo QUANTO
+  // os popups contextuais (engrenagem em cada painel) possam pegar o mesmo bloco,
+  // sem duplicar código. A fiação dos controles é a mesma (ligarAjustes).
+  _blocosAjustes() {
     const p = Prefs.todas();
-
     const historico = p.estilo === 'historico';
     const folha = `
       <div class="rotulo-controle"><span>Estilo da página</span></div>
@@ -2501,14 +2511,30 @@ const App = {
       ? 'O histórico e os marcadores estão sendo gravados neste dispositivo.'
       : 'Atenção: este navegador não está permitindo gravar. O histórico vai durar só até fechar o aplicativo.'}</p>`;
 
+
+    return {
+      folha:      { titulo: 'Página',            html: folha },
+      livros:     { titulo: 'Painel de livros',  html: livros },
+      comparar:   { titulo: 'Comparar',          html: comparar },
+      tirinha:    { titulo: 'Versões empilhadas', html: tirinha },
+      ouvir:      { titulo: 'Ouvir',             html: ouvir },
+      marcadores: { titulo: 'Marcadores',        html: marcadores },
+      guarda:     { titulo: 'Armazenamento',     html: guarda },
+    };
+  },
+
+  desenharAjustes() {
+    const corpo = document.getElementById('corpo-ajustes');
+    const blocos = this._blocosAjustes();
+
     corpo.innerHTML =
-      this.secao('folha', 'Página', folha) +
-      this.secao('livros', 'Painel de livros', livros) +
-      this.secao('comparar', 'Comparar', comparar) +
-      this.secao('tirinha', 'Versões empilhadas', tirinha) +
-      this.secao('ouvir', 'Ouvir', ouvir) +
-      this.secao('marcadores', 'Marcadores', marcadores) +
-      this.secao('guarda', 'Armazenamento', guarda);
+      this.secao('folha', blocos.folha.titulo, blocos.folha.html) +
+      this.secao('livros', blocos.livros.titulo, blocos.livros.html) +
+      this.secao('comparar', blocos.comparar.titulo, blocos.comparar.html) +
+      this.secao('tirinha', blocos.tirinha.titulo, blocos.tirinha.html) +
+      this.secao('ouvir', blocos.ouvir.titulo, blocos.ouvir.html) +
+      this.secao('marcadores', blocos.marcadores.titulo, blocos.marcadores.html) +
+      this.secao('guarda', blocos.guarda.titulo, blocos.guarda.html);
 
     corpo.querySelectorAll('[data-s]').forEach(el => {
       el.onclick = () => {
@@ -2520,9 +2546,14 @@ const App = {
     this.ligarAjustes();
   },
 
-  ligarAjustes() {
-    const corpo = document.getElementById('corpo-ajustes');
-    const achar = id => document.getElementById(id);
+  ligarAjustes(escopo) {
+    // escopo: onde procurar os controles. Por padrão é o painel de Ajustes
+    // completo (#corpo-ajustes); os popups contextuais passam o próprio container.
+    // Assim a MESMA fiação serve os dois lugares, sem duplicar nada.
+    const corpo = escopo || document.getElementById('corpo-ajustes');
+    // busca por id restrita ao escopo (evita achar um controle de mesmo id no
+    // painel completo quando o popup está aberto)
+    const achar = id => corpo.querySelector('#' + id);
 
     const temp = achar('ctrl-temp');
     if (temp) {
@@ -2637,15 +2668,20 @@ const App = {
     if (cats) cats.onchange = e => {
       Prefs.set('mostrarCategorias', e.target.checked);
       this.dobraC = null;
+      this._redesenharArvoreSeAberta();   // reflete ao vivo (popup contextual)
     };
 
     const caps = achar('ctrl-capitulos');
     if (caps) caps.onchange = e => {
       Prefs.set('mostrarCapitulos', e.target.checked);
+      this._redesenharArvoreSeAberta();   // reflete ao vivo (popup contextual)
     };
 
     corpo.querySelectorAll('input[name="painel-layout"]').forEach(el => {
-      el.onchange = () => Prefs.set('painelLayout', el.value);
+      el.onchange = () => {
+        Prefs.set('painelLayout', el.value);
+        this._redesenharArvoreSeAberta();   // reflete ao vivo (popup contextual)
+      };
     });
 
     corpo.querySelectorAll('[data-comparar]').forEach(el => {
@@ -2710,6 +2746,65 @@ const App = {
         });
       };
     });
+  },
+
+  /* ============================================== popup contextual de ajuste
+   *
+   * Abre um cartão flutuante no centro da tela com APENAS o módulo de ajuste
+   * pedido (ex.: 'livros', 'folha', 'ouvir'). Reaproveita o mesmo HTML de
+   * _blocosAjustes() e a mesma fiação de ligarAjustes() — nada é recriado.
+   * Como o cartão é pequeno e central, sobra tela em cima e embaixo, e a pessoa
+   * vê a mudança acontecendo ao vivo no texto por trás. */
+  abrirAjustePopup(id) {
+    const blocos = this._blocosAjustes();
+    const bloco = blocos[id];
+    if (!bloco) return;
+
+    // remove qualquer popup anterior (não empilha)
+    this.fecharAjustePopup();
+
+    const fundo = document.createElement('div');
+    fundo.className = 'ajuste-popup-fundo';
+    fundo.id = 'ajuste-popup-fundo';
+
+    const cartao = document.createElement('div');
+    cartao.className = 'ajuste-popup';
+    cartao.setAttribute('role', 'dialog');
+    cartao.setAttribute('aria-modal', 'true');
+    cartao.innerHTML = `
+      <header class="ajuste-popup-cabeca">
+        <h3>${bloco.titulo}</h3>
+        <button class="ajuste-popup-x" aria-label="Fechar">
+          <svg class="icone"><use href="#i-fechar"/></svg>
+        </button>
+      </header>
+      <div class="ajuste-popup-corpo" id="ajuste-popup-corpo">${bloco.html}</div>`;
+
+    fundo.appendChild(cartao);
+    document.body.appendChild(fundo);
+
+    // liga os controles usando o próprio corpo do popup como escopo —
+    // a MESMA fiação do painel completo, mas restrita a este cartão
+    const corpoPopup = cartao.querySelector('#ajuste-popup-corpo');
+    this.ligarAjustes(corpoPopup);
+
+    // fechar: no x, tocando no fundo (fora do cartão), ou Esc
+    cartao.querySelector('.ajuste-popup-x').onclick = () => this.fecharAjustePopup();
+    fundo.onclick = (e) => { if (e.target === fundo) this.fecharAjustePopup(); };
+    this._escAjustePopup = (e) => { if (e.key === 'Escape') this.fecharAjustePopup(); };
+    document.addEventListener('keydown', this._escAjustePopup);
+
+    // entra com uma animaçãozinha
+    requestAnimationFrame(() => fundo.classList.add('visivel'));
+  },
+
+  fecharAjustePopup() {
+    const fundo = document.getElementById('ajuste-popup-fundo');
+    if (fundo) fundo.remove();
+    if (this._escAjustePopup) {
+      document.removeEventListener('keydown', this._escAjustePopup);
+      this._escAjustePopup = null;
+    }
   },
 
 
@@ -3973,7 +4068,7 @@ const App = {
       caderno: () => { this.desenharCaderno(); this.abrir('painel-caderno'); },
       referencias: () => this.abrirReferenciasCruzadas(),
       ouvir: () => this.iniciarOuvir(),
-      ajustes: () => { this.desenharAjustes(); this.abrir('painel-ajustes'); },
+      ajustes: () => { this.dobraA = null; this.desenharAjustes(); this.abrir('painel-ajustes'); },
       compartilhar: () => { this.desenharCompartilhar(); this.abrir('painel-compartilhar'); },
       'fechar-app': () => this.fecharAplicativo(),
     };
@@ -4181,6 +4276,13 @@ const App = {
     q('veu').onclick = () => this.fecharPaineis();
     document.querySelectorAll('[data-fechar]').forEach(el => {
       el.onclick = () => { this._volta = null; this.fecharPaineis(); };
+    });
+    // engrenagem nos cabeçalhos: abre o popup contextual com só aquele módulo
+    document.querySelectorAll('[data-ajuste-popup]').forEach(el => {
+      el.onclick = (e) => {
+        e.stopPropagation();
+        this.abrirAjustePopup(el.dataset.ajustePopup);
+      };
     });
     document.querySelectorAll('[data-voltar]').forEach(el => {
       el.onclick = e => {

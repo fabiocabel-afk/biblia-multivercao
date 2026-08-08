@@ -537,6 +537,80 @@ html, body { overflow-x: hidden; }
   margin-bottom: 16px;
 }
 
+/* ---- Popup contextual de ajuste (engrenagem nos cabeçalhos) ----------------
+ * Cartão flutuante no centro da tela com só o módulo de ajuste pedido. Segue o
+ * mesmo visual do .dialogo (pergaminho, sombra), mas fica menor e centralizado
+ * de propósito: sobra tela em cima e embaixo pra ver a mudança acontecendo ao
+ * vivo no texto por trás. */
+.ajuste-popup-fundo {
+  position: fixed;
+  inset: 0;
+  z-index: 92;                 /* acima dos painéis; irmão do .dialogo-veu */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(12, 10, 8, .42);
+  opacity: 0;
+  transition: opacity .18s ease;
+}
+.ajuste-popup-fundo.visivel { opacity: 1; }
+
+.ajuste-popup {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 340px;
+  max-height: min(70dvh, 560px);   /* central: deixa respiro em cima e embaixo */
+  background: var(--papel);
+  background-image: var(--perg-img, none);
+  background-size: var(--perg-size, auto);
+  background-repeat: var(--perg-repeat, auto);
+  background-blend-mode: var(--perg-blend, normal);
+  color: var(--tinta);
+  border-radius: 14px;
+  box-shadow: 0 12px 40px rgb(0 0 0 / .35);
+  transform: translateY(8px) scale(.98);
+  transition: transform .18s ease;
+  overflow: hidden;
+}
+.ajuste-popup-fundo.visivel .ajuste-popup { transform: none; }
+
+.ajuste-popup-cabeca {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 14px 8px 12px 18px;
+  border-bottom: 1px solid color-mix(in srgb, var(--tinta) 14%, transparent);
+}
+.ajuste-popup-cabeca h3 {
+  flex: 1;
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+.ajuste-popup-x {
+  height: 40px;
+  min-width: 40px;
+  border-radius: var(--raio);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.ajuste-popup-x:hover { background: color-mix(in srgb, var(--tinta) 8%, transparent); }
+
+.ajuste-popup-corpo {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 16px 18px 18px;
+}
+/* o primeiro rótulo do bloco não precisa do respiro de cima que ele teria
+   dentro da sanfona de Ajustes */
+.ajuste-popup-corpo > .rotulo-controle:first-child { margin-top: 0; }
+
 .painel {
   position: fixed;
   inset: 0 0 0 auto;
