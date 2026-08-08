@@ -855,6 +855,10 @@ const App = {
         if (document.querySelector('#corpo-arvore .estante-grade')) this._uniformizarEstante();
       });
     }
+
+    // Aplicar background do pergaminho aos botões
+    this._aplicarBackgroundPergaminho(corpo.querySelectorAll('.livro-cartao'));
+    this._aplicarBackgroundPergaminho(corpo.querySelectorAll('.estante-capa'));
   },
 
   _cartaoLivro(b, comCapitulos) {
@@ -879,6 +883,19 @@ const App = {
       let maxA = 0;
       cartoes.forEach(c => { maxA = Math.max(maxA, c.offsetHeight); });
       if (maxA > 0) cartoes.forEach(c => { c.style.minHeight = maxA + 'px'; });
+    });
+  },
+
+  _aplicarBackgroundPergaminho(elementos) {
+    const perg = document.getElementById('perg-fundo');
+    if (!perg) return;
+    // Copiar o background do pergaminho pra cada elemento
+    elementos.forEach(el => {
+      el.style.backgroundImage = perg.style.backgroundImage;
+      el.style.backgroundSize = perg.style.backgroundSize;
+      el.style.backgroundRepeat = perg.style.backgroundRepeat;
+      el.style.backgroundBlendMode = perg.style.backgroundBlendMode;
+      el.style.backgroundColor = perg.style.backgroundColor;
     });
   },
 
