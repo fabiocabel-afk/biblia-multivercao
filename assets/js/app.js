@@ -774,6 +774,7 @@ const App = {
 
     corpo.innerHTML = partes.join('');
     document.getElementById('titulo-arvore').textContent = 'Livros';
+    corpo.scrollTop = 0;   // ao abrir/redesenhar, começa no topo pra ver o rótulo "Livros"
 
     corpo.querySelectorAll('[data-t]').forEach(el => {
       el.onclick = () => {
@@ -825,12 +826,15 @@ const App = {
         }
       }
       const caps = comCapitulos && totalCaps
-        ? `<span class="lc-caps">${totalCaps} cap.</span>` : '';
+        ? `<span class="lc-caps lc-caps-test">${totalCaps} cap.</span>` : '';
+      // quebra de linha SEMPRE garantida no nome do Testamento (destaque de título):
+      // cada palavra em sua própria linha, em qualquer tela, pros dois ficarem simétricos.
+      const nomeQuebrado = this._nomeTestamentoQuebrado(t.name);
       return `<button class="estante-capa ${t.id === this.estanteT ? 'sel' : ''}" data-est-t="${t.id}">
-        <span class="lc-nome">${t.name}</span>
+        <span class="lc-nome lc-nome-test">${nomeQuebrado}</span>
         ${caps}
       </button>`;
-    }).join('');;
+    }).join('');
 
     const t = arv.testaments.find(x => x.id === this.estanteT);
     const celulas = [];
@@ -842,7 +846,11 @@ const App = {
 
     corpo.innerHTML =
       `<div class="estante">
-        <div class="estante-seletor">${capas}</div>
+        <div class="estante-seletor">
+          <div class="estante-rotulo estante-rotulo-test">Testamentos</div>
+          <div class="estante-capas-linha">${capas}</div>
+        </div>
+        <div class="estante-rotulo estante-rotulo-livros">Livros</div>
         <div class="estante-grade">${celulas.join('')}</div>
       </div>`;
 
@@ -871,6 +879,15 @@ const App = {
     this._aplicarBackgroundPergaminho(corpo.querySelectorAll('.estante-capa.sel'));
   },
 
+  // Quebra o nome do Testamento em linhas fixas — cada palavra numa linha —
+  // pra garantir que "Antigo Testamento" e "Novo Testamento" quebrem SEMPRE do
+  // mesmo jeito, em qualquer tela, e nunca fiquem um em 1 linha e outro em 2.
+  _nomeTestamentoQuebrado(nome) {
+    const esc = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    return String(nome).trim().split(/\s+/)
+      .map(p => `<span class="lc-linha">${esc(p)}</span>`).join('');
+  },
+
   _cartaoLivro(b, comCapitulos) {
     const selo = b.deuterocanonical
       ? '<span class="selo">Deutero</span>'
@@ -884,15 +901,22 @@ const App = {
   },
 
   _uniformizarEstante() {
+    const corpo = document.getElementById('corpo-arvore');
     const grade = document.querySelector('#corpo-arvore .estante-grade');
     if (!grade) return;
     const cartoes = [...grade.querySelectorAll('.livro-cartao')];
     if (!cartoes.length) return;
     cartoes.forEach(c => { c.style.minHeight = ''; });   // zera para medir no natural
+    const capas = [...document.querySelectorAll('#corpo-arvore .estante-capa')];
     requestAnimationFrame(() => {
       let maxA = 0;
       cartoes.forEach(c => { maxA = Math.max(maxA, c.offsetHeight); });
-      if (maxA > 0) cartoes.forEach(c => { c.style.minHeight = maxA + 'px'; });
+      if (maxA > 0) {
+        cartoes.forEach(c => { c.style.minHeight = maxA + 'px'; });
+        // as capas (Testamentos) nunca podem ser mais baixas que um livro:
+        // usam a altura do livro como piso; se o conteúdo for maior, crescem.
+        if (corpo) corpo.style.setProperty('--alt-livro', maxA + 'px');
+      }
     });
   },
 

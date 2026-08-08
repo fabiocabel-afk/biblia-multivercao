@@ -739,16 +739,39 @@ html, body { overflow-x: hidden; }
 
 /* seletor de Testamentos — as duas "capas", lado a lado, presas no topo */
 .estante-seletor {
+  position: sticky;
+  top: -12px;              /* compensa o padding-top do corpo: gruda colado no header */
+  z-index: 9999;
+  /* estende o fundo pra cima (fecha a brecha superior) e pros lados, cobrindo
+     o padding do corpo — nada passa por trás do bloco fixo ao rolar */
+  margin: -12px -16px 0;
+  padding: 12px 16px 8px;
+  background: var(--papel);
+  border-bottom: 2px solid color-mix(in srgb, var(--tinta) 18%, transparent);
+}
+
+/* rótulo "Testamentos" — centralizado, acima das duas capas, dentro do bloco fixo */
+.estante-rotulo {
+  text-align: center;
+  font-size: 11px;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--tinta-fraca);
+  font-weight: 600;
+}
+.estante-rotulo-test { margin-bottom: 8px; }
+
+/* rótulo "Livros" — centralizado, abaixo das capas; rola junto com a grade */
+.estante-rotulo-livros {
+  margin: 14px 0 10px;
+}
+
+/* as duas capas lado a lado */
+.estante-capas-linha {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 10px;
-  position: sticky;
-  top: 0;
-  z-index: 9999;
-  padding-bottom: 8px;
-  margin-bottom: 0;
-  background: var(--papel);
-  border-bottom: 2px solid color-mix(in srgb, var(--tinta) 18%, transparent);
+  align-items: stretch;
 }
 
 .estante-capa {
@@ -884,6 +907,33 @@ html, body { overflow-x: hidden; }
   font-weight: 400;
 }
 .livro-cartao .selo { margin-top: 2px; }
+
+/* ---- Destaque dos Testamentos (capas) como "título" ---------------------- */
+/* nome do Testamento: fonte maior que a dos livros, com quebra por linha fixa */
+.lc-nome-test {
+  font-size: 16px;          /* maior que o .lc-nome dos livros (12px) */
+  line-height: 1.15;
+  letter-spacing: .01em;
+}
+/* cada palavra numa linha própria — quebra garantida em qualquer tela */
+.lc-nome-test .lc-linha {
+  display: block;
+}
+
+/* contagem de capítulos do Testamento: é o total (soma), então destaca-se —
+   maior que a contagem dos livros e menos apagada */
+.lc-caps-test {
+  font-size: 13px;          /* maior que o .lc-caps comum (11px) */
+  font-weight: 600;
+  opacity: 0.9;
+  margin-top: 2px;
+}
+
+/* a capa nunca pode ser MAIS BAIXA que um livro — é destaque, a soma de todos.
+   a altura real (uniforme dos livros) é aplicada no JS via --alt-livro */
+.estante-capa {
+  min-height: var(--alt-livro, auto);
+}
 
 /* grade de capitulos */
 .grade {
