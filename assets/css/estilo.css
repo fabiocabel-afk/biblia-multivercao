@@ -651,10 +651,6 @@ html, body { overflow-x: hidden; }
   font-weight: 600;
   border-bottom: 2px solid color-mix(in srgb, var(--tinta) 22%, transparent);
   border-radius: var(--raio) var(--raio) 0 0;
-  /* header fixo: o Testamento fica preso no alto enquanto os livros rolam */
-  position: sticky;
-  top: 0;
-  z-index: 3;
   height: 46px;
   box-sizing: border-box;
   background: var(--papel);
@@ -662,15 +658,17 @@ html, body { overflow-x: hidden; }
   background-size: var(--perg-size, auto);
   background-repeat: var(--perg-repeat, auto);
   background-blend-mode: var(--perg-blend, normal);
+  /* a cabeça é o "rédeo": nunca encolhe, fica sempre visível na seção */
+  flex: 0 0 auto;
 }
 
 .dobra.categoria {
   font-size: 12px;
   padding: 10px 12px 10px 6px;
   color: var(--tinta);
-  /* a categoria aberta fica presa logo abaixo do Testamento (46px) */
+  /* a categoria gruda no topo do corpo da seção (que rola por dentro) */
   position: sticky;
-  top: 46px;
+  top: 0;
   z-index: 2;
   background: var(--papel);
   background-image: var(--perg-img, none);
@@ -709,6 +707,45 @@ html, body { overflow-x: hidden; }
 
 .dentro { padding: 4px 0 10px 10px; }
 .dentro.fechada { display: none; }
+
+/* ---- Modo Lista: seções de Testamento com scroll interno ------------------
+ * A metáfora: cada Testamento é uma "caixa" com uma cabeça fixa (o rédeo) e um
+ * corpo que rola por dentro. O container externo NÃO rola — ele apenas divide o
+ * espaço entre as duas caixas. Assim as duas cabeças ficam SEMPRE na tela e os
+ * livros rolam confinados dentro da seção aberta, sem vazar por trás das cabeças. */
+
+/* só no Modo Lista (accordion): o corpo do painel não rola; ele é a moldura.
+   A classe .modo-lista é aplicada via JS — mais robusta que :has() em navegadores antigos */
+.painel .corpo.modo-lista {
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  padding: 12px 16px;
+  gap: 6px;
+}
+
+.secao-testamento {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;   /* permite que o filho encolha e role, em vez de estourar */
+}
+
+/* a seção ABERTA cresce e ocupa o espaço livre; a recolhida fica só na cabeça */
+.secao-testamento.aberta { flex: 1 1 auto; min-height: 0; }
+.secao-testamento.recolhida { flex: 0 0 auto; }
+
+/* o corpo interno da seção: é ISTO que rola, confinado, com as bordas cortadas
+   (overflow) pra nenhum livro escapar por trás da cabeça nem por baixo */
+.secao-corpo {
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0;
+  padding: 0 0 8px;   /* sem respiro no topo: a categoria sticky gruda colada na cabeça */
+}
+
+/* na seção recolhida, o corpo some por completo — sobra só a cabeça na tela */
+.secao-testamento.recolhida .secao-corpo { display: none; }
+
 
 /* marco de categoria quando a camada do meio esta desligada */
 .marco {

@@ -730,17 +730,28 @@ const App = {
     // so na primeirissima vez o app escancara onde o leitor esta agora.
     // Depois disso, fechado e fechado — se a pessoa recolheu o Testamento, e
     // porque queria o outro subindo para perto do dedo.
+    // na primeirissima vez, abre no Testamento do livro atual; depois respeita a escolha
     if (this.dobraT === undefined) {
       const atual = Dados.infoLivro(this.versao, this.code);
-      this.dobraT = atual ? atual.testament : arv.testaments[0].id;
+      this.dobraT = atual ? atual.testament : (arv.testaments[0] && arv.testaments[0].id);
       this.dobraC = atual ? atual.category : null;
+    }
+    // garante que sempre há um Testamento aberto (nunca os dois fechados)
+    if (!arv.testaments.some(t => t.id === this.dobraT)) {
+      this.dobraT = arv.testaments[0] && arv.testaments[0].id;
     }
 
     const partes = [];
 
+    // Cada Testamento é uma SEÇÃO: cabeça fixa (o "rédeo") + corpo com scroll
+    // interno próprio. Só a seção aberta tem o corpo visível e rolando; a fechada
+    // mostra só a cabeça. Assim as duas cabeças ficam SEMPRE na tela e a rolagem
+    // dos livros acontece confinada dentro da seção aberta — nada vaza por trás.
     for (const t of arv.testaments) {
       const livrosT = t.categories.flatMap(c => c.books);
       const abertoT = this.dobraT === t.id;
+
+      partes.push(`<section class="secao-testamento ${abertoT ? 'aberta' : 'recolhida'}" data-secao="${t.id}">`);
 
       partes.push(`<button class="dobra testamento" data-t="${t.id}"
         aria-expanded="${abertoT}">
@@ -749,7 +760,8 @@ const App = {
         ${comCapitulos ? `<span class="soma">${this.rotuloSoma(this.somaCapitulos(livrosT))}</span>` : ''}
       </button>`);
 
-      partes.push(`<div class="dentro ${abertoT ? '' : 'fechada'}">`);
+      // corpo interno da seção — este é o que rola (quando aberto)
+      partes.push(`<div class="secao-corpo">`);
 
       for (const c of t.categories) {
         if (comCategorias) {
@@ -769,17 +781,20 @@ const App = {
         }
       }
 
-      partes.push('</div>');
+      partes.push('</div>');   // fecha .secao-corpo
+      partes.push('</section>');
     }
 
     corpo.innerHTML = partes.join('');
+    corpo.classList.add('modo-lista');
+    corpo.classList.remove('modo-estante');
     document.getElementById('titulo-arvore').textContent = 'Livros';
-    corpo.scrollTop = 0;   // ao abrir/redesenhar, começa no topo pra ver o rótulo "Livros"
 
     corpo.querySelectorAll('[data-t]').forEach(el => {
       el.onclick = () => {
-        // abrir um fecha o outro
-        this.dobraT = this.dobraT === el.dataset.t ? null : el.dataset.t;
+        // um de cada vez: abrir um Testamento fecha o outro. As duas cabeças
+        // continuam sempre visíveis; só troca qual seção tem o corpo aberto.
+        this.dobraT = el.dataset.t;
         this.dobraC = null;
         this.desenharArvore();
       };
@@ -853,6 +868,8 @@ const App = {
         <div class="estante-rotulo estante-rotulo-livros">Livros</div>
         <div class="estante-grade">${celulas.join('')}</div>
       </div>`;
+    corpo.classList.add('modo-estante');
+    corpo.classList.remove('modo-lista');
 
     document.getElementById('titulo-arvore').textContent = 'Livros';
 
