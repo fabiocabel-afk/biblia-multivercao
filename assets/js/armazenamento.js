@@ -51,6 +51,7 @@ const Prefs = {
     fonte: 16,            // px do corpo do texto
     escuro: false,
     estilo: 'historico',       // padrão inicial = Histórico; 'tradicional' = papel liso
+    estiloAntesEscuro: null,   // guarda o estilo de origem quando o escuro força o Tradicional
     pergaminhoIdade: 45,       // 0..100: idade da folha no estilo Histórico (queima/ambar)
     historicoTema: 'marrom',   // encadernação no Histórico: 'marrom' | 'vermelho' | 'classico'
     paginaModo: 'quebra',      // 'quebra' = um capítulo por vez (padrão); 'continuo' = livro em sequência

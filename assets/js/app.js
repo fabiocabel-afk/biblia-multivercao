@@ -2575,10 +2575,18 @@ const App = {
     corpo.querySelectorAll('input[name="estilo-folha"]').forEach(el => {
       el.onchange = () => {
         Prefs.set('estilo', el.value);
+        // Se o usuário escolhe um estilo de propósito, o escuro deixa de ser uma
+        // "visita": escolher Histórico desliga o escuro (que não vale lá);
+        // escolher Tradicional só limpa a memória de retorno.
+        if (el.value === 'historico' && Prefs.get('escuro')) {
+          Prefs.set('escuro', false);
+          Leitura.aplicarEscuro(false);
+        }
+        Prefs.set('estiloAntesEscuro', null);
         Pergaminho.aplicarIdade(Prefs.get('pergaminhoIdade'));
         Pergaminho.aplicarEstilo(el.value);
         if (el.value === 'historico') Pergaminho.folha(this.code, this.cap);
-        this.desenharAjustes();   // mostra ou esconde o controle de idade
+        this._redesenharAjustesContextual();   // mostra/esconde o controle de idade (no popup ou no painel)
       };
     });
 
@@ -2638,9 +2646,32 @@ const App = {
 
     const escuro = achar('ctrl-escuro');
     if (escuro) escuro.onchange = e => {
-      Prefs.set('escuro', e.target.checked);
-      Leitura.aplicarEscuro(e.target.checked);
-      this.desenharAjustes();
+      const ligar = e.target.checked;
+      Prefs.set('escuro', ligar);
+
+      // O modo escuro só tem efeito no estilo Tradicional (no Histórico, o
+      // pergaminho impõe as próprias cores). Pra simplificar pro usuário, ligar
+      // o escuro leva pro Tradicional automaticamente; desligar volta pro
+      // Histórico de onde veio.
+      if (ligar) {
+        if (Prefs.get('estilo') === 'historico') {
+          Prefs.set('estiloAntesEscuro', 'historico');   // lembra pra onde voltar
+          Prefs.set('estilo', 'tradicional');
+          Pergaminho.aplicarEstilo('tradicional');
+        }
+        Leitura.aplicarEscuro(true);
+      } else {
+        Leitura.aplicarEscuro(false);
+        // volta pro estilo de onde veio (se o escuro tinha forçado o Tradicional)
+        if (Prefs.get('estiloAntesEscuro') === 'historico') {
+          Prefs.set('estilo', 'historico');
+          Prefs.set('estiloAntesEscuro', null);
+          Pergaminho.aplicarIdade(Prefs.get('pergaminhoIdade'));
+          Pergaminho.aplicarEstilo('historico');
+          Pergaminho.folha(this.code, this.cap);
+        }
+      }
+      this._redesenharAjustesContextual();   // reflete estilo + aviso ao vivo
     };
 
     const voz = achar('ctrl-voz');
@@ -2762,6 +2793,7 @@ const App = {
 
     // remove qualquer popup anterior (não empilha)
     this.fecharAjustePopup();
+    this._popupAjusteId = id;   // lembra o módulo aberto, pra redesenhar ao vivo
 
     const fundo = document.createElement('div');
     fundo.className = 'ajuste-popup-fundo';
@@ -2799,12 +2831,36 @@ const App = {
   },
 
   fecharAjustePopup() {
+    this._popupAjusteId = null;
     const fundo = document.getElementById('ajuste-popup-fundo');
     if (fundo) fundo.remove();
     if (this._escAjustePopup) {
       document.removeEventListener('keydown', this._escAjustePopup);
       this._escAjustePopup = null;
     }
+  },
+
+  // Redesenha só o conteúdo do popup (sem fechar/reabrir), atualizando o HTML do
+  // módulo e religando os controles. Usado quando um controle precisa mostrar ou
+  // esconder outro ao vivo — ex.: no modo Histórico aparece o controle de idade.
+  _redesenharPopupAjuste() {
+    const corpoPopup = document.getElementById('ajuste-popup-corpo');
+    if (!corpoPopup || !this._popupAjusteId) return;
+    const blocos = this._blocosAjustes();
+    const bloco = blocos[this._popupAjusteId];
+    if (!bloco) return;
+    const scroll = corpoPopup.scrollTop;   // preserva a posição de rolagem
+    corpoPopup.innerHTML = bloco.html;
+    this.ligarAjustes(corpoPopup);
+    corpoPopup.scrollTop = scroll;
+  },
+
+  // Redesenha o contexto certo: se o popup está aberto, atualiza o popup;
+  // senão, atualiza o painel de Ajustes completo. Substitui as chamadas diretas
+  // a desenharAjustes() dentro da fiação, pra os controles funcionarem nos dois.
+  _redesenharAjustesContextual() {
+    if (this._popupAjusteId) this._redesenharPopupAjuste();
+    else this.desenharAjustes();
   },
 
 
