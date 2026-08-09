@@ -3579,28 +3579,7 @@ body.ouvindo .folha { padding-bottom: 200px; }
   color: var(--cromo-texto);
   border: 1px solid color-mix(in srgb, var(--cromo-texto) 26%, transparent);
   cursor: pointer;
-  position: relative;
   transition: background .15s ease, transform .15s ease;
-}
-
-/* círculo minúsculo no canto do botão de repetição: mostra ∞ ou quantas
-   repetições faltam (só nos modos "Repetindo o capítulo/versículo") */
-.repetir-selo {
-  position: absolute;
-  top: -2px;
-  right: -2px;
-  min-width: 16px;
-  height: 16px;
-  padding: 0 3px;
-  border-radius: 8px;
-  background: var(--rubrica);
-  color: #fff;
-  font-size: 10px;
-  font-weight: 700;
-  line-height: 16px;
-  text-align: center;
-  box-sizing: border-box;
-  pointer-events: none;
 }
 .player-bt:hover { background: color-mix(in srgb, var(--cromo-texto) 12%, transparent); }
 .player-bt:active { transform: scale(.94); }

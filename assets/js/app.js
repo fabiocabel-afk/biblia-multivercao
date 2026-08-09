@@ -2498,16 +2498,6 @@ const App = {
         <span id="rot-vel">${(+p.vozVel || 1).toFixed(1)}×</span></div>
       <input class="deslizador" type="range" id="ctrl-vel" min="0.5" max="2" step="0.1" value="${+p.vozVel || 1}">
 
-      <div class="rotulo-controle" style="margin-top:16px"><span>Modo repetição</span></div>
-      <select class="campo" id="ctrl-repeticao">
-        <option value="0" ${(+p.repeticaoLimite || 0) === 0 ? 'selected' : ''}>Infinito</option>
-        ${[1,2,3,4,5,6,7,8,9,10].map(n =>
-          `<option value="${n}" ${(+p.repeticaoLimite || 0) === n ? 'selected' : ''}>${n} ${n === 1 ? 'vez' : 'vezes'}</option>`).join('')}
-      </select>
-      <p class="contagem">Quantas vezes os modos <strong>Repetindo o capítulo</strong> e
-      <strong>Repetindo o versículo</strong> repetem antes de encerrar. No botão de
-      repetição aparece quantas faltam.</p>
-
       <button class="botao secundario" id="ouvir-amostra" style="margin-top:18px">Ouvir a voz</button>
 
       <button class="link-ajuda" id="voz-ajuda">
@@ -2698,14 +2688,6 @@ const App = {
       vel.oninput = () => { achar('rot-vel').textContent = (+vel.value).toFixed(1) + '×'; };
       vel.onchange = () => Prefs.set('vozVel', +vel.value);
     }
-
-    const repeticao = achar('ctrl-repeticao');
-    if (repeticao) repeticao.onchange = () => {
-      Prefs.set('repeticaoLimite', +repeticao.value);
-      // se já está ouvindo com um modo de repetição ligado, reinicia a contagem
-      this._reiniciarContagemRepeticao();
-      this._atualizarRepetirBotao();
-    };
 
     const amostra = achar('ouvir-amostra');
     if (amostra) amostra.onclick = () => this.ouvirAmostra();
@@ -3839,38 +3821,6 @@ const App = {
     }
   },
 
-  /* Tocar a seleção em voz. Dois comportamentos, conforme o que a pessoa marcou:
-   *  - UM versículo: começa a leitura ali e SEGUE em frente (livro afora), como
-   *    um "começar a ouvir a partir daqui". Ninguém costuma querer ouvir um
-   *    versículo isolado; o mais útil é partir de um ponto do texto.
-   *  - DOIS OU MAIS: toca só aquele conjunto, confinado. Os controles de repetir
-   *    (nenhum / capítulo / versículo) passam a valer sobre esse grupo. */
-  tocarSelecao() {
-    if (!Locutor.disponivel()) {
-      this.avisoRapido('Este navegador não oferece leitura em voz');
-      return;
-    }
-    if (Dados.ehOriginal(this.versao)) {
-      this.avisoRapido('Áudio indisponível nas versões em hebraico e grego');
-      return;
-    }
-    const sel = this.selecao;
-    if (!sel || !sel.pedacos || !sel.pedacos.length) return;
-
-    const versos = sel.pedacos.map(p => p.vers).sort((a, b) => a - b);
-
-    if (versos.length === 1) {
-      // um só: começa dali e segue a sequência normal do livro
-      this.iniciarOuvir({ comecarEm: versos[0] });
-    } else {
-      // vários: toca só o conjunto selecionado, confinado, com o repetir agindo nele
-      const seg = { versao: this.versao, code: this.code, cap: this.cap,
-                    versos, de: null, ate: null };
-      const nome = this.referenciaDaSelecao(sel.pedacos);
-      this.tocarFila([seg], nome);
-    }
-  },
-
   async copiarSelecao() {
     const texto = this.textoParaCitar();
     if (!texto) return;
@@ -4218,7 +4168,6 @@ const App = {
     });
 
     q('sel-copiar').onclick = () => this.copiarSelecao();
-    q('sel-tocar').onclick = () => this.tocarSelecao();
     q('sel-compartilhar').onclick = () => this.compartilharSelecao();
     q('sel-marcar').onclick = () => this.abrirCoresDaSelecao();
     q('sel-estudo').onclick = () => this.abrirSalvarEstudo();
@@ -4481,7 +4430,7 @@ const App = {
     };
 
     q('player-anterior').onclick = () => this.pularVers(-1);
-    q('player-play').onclick = () => this.alternarPausa({ explicito: true });
+    q('player-play').onclick = () => this.alternarPausa();
     q('player-proximo').onclick = () => this.pularVers(1);
     q('player-fechar').onclick = () => this.pararOuvir();
     q('player-alca').onclick = () => this.alternarListaPlayer();
@@ -4611,7 +4560,7 @@ const App = {
       .filter(n => !Number.isNaN(n));
   },
 
-  iniciarOuvir({ comecarEm = null } = {}) {
+  iniciarOuvir() {
     if (!Locutor.disponivel()) {
       return this.confirmar({
         titulo: 'Ouvir a Bíblia',
@@ -4633,19 +4582,14 @@ const App = {
     this.selecao = null;
     this.renderBarraSelecao();
 
-    this.leituraGen++;   // invalida QUALQUER leitura/callback pendente de antes
-    Locutor.parar();     // corta fala em andamento pra não sobrepor sessões
     this.ouvindo = true;
     this.pausado = false;
     this.modoFila = false;
-    this.lendoVers = null;
     this._listaAberta = false;
     this._capExplorando = null;   // capítulo aberto manualmente (exploração)
     this._execColapsada = false;  // usuário recolheu o capítulo em execução?
     if (this.seguirCapitulos == null) this.seguirCapitulos = true;
-    this.repetir = 'nao';   // cada sessão começa sem repetição; o usuário liga no botão se quiser
-    this._repsRestantes = null;   // zera o contador de repetições da sessão anterior
-    this._filaEncerrada = false;   // nova sessão: ainda não terminou
+    this.repetir = this.repetir || 'nao';
     this._cancelarAutoFechar();
     document.body.classList.add('ouvindo');
     const player = document.getElementById('player-voz');
@@ -4666,12 +4610,7 @@ const App = {
       this._capLendo = this._blocoLendo ? +this._blocoLendo.dataset.cap : this.cap;
     }
     const lista = this.versiculosNaTela();
-    // se veio um versículo de partida (tocar a partir da seleção), começa nele;
-    // senão, começa no primeiro da tela, como sempre
-    const inicio = (comecarEm && lista.includes(comecarEm)) ? comecarEm : (lista[0] || 1);
-    this._ultimoVersLido = null;   // nova sessão: não há "anterior" pra comparar salto
-    this._filaEncerrada = false;   // nova sessão: ainda não terminou
-    this.lerVersiculo(inicio, { anunciarCap: true });
+    this.lerVersiculo(lista[0] || 1, { anunciarCap: true });
   },
 
   /** Sai do modo ouvir e devolve o app ao normal. */
@@ -4714,37 +4653,15 @@ const App = {
     if (!lista.includes(vers)) return;
 
     this._cancelarAutoFechar();
-
-    // Decide se o NÚMERO do versículo deve ser falado. Normalmente não é (a
-    // leitura flui melhor sem), mas há duas exceções que fariam a pessoa se
-    // perder: (1) começar num versículo que não é o 1 — ela ouviria o capítulo
-    // e já emendaria um texto do meio; (2) um salto — o versículo atual não é o
-    // que vinha logo depois do anterior (playlists e seleções geram buracos).
-    const contiguo = this._ultimoVersLido != null
-      && this.code === this._ultimoCodeLido
-      && this._capLeitura() === this._ultimoCapLido
-      && vers === this._ultimoVersLido + 1;
-    const anunciarVers = anunciarCap
-      ? vers !== 1                 // ao anunciar o capítulo, só diz o versículo se não for o 1
-      : !contiguo;                 // sem trocar de capítulo: anuncia quando houve salto
-
     this.lendoVers = vers;
     this.pausado = false;
-    this._filaEncerrada = false;   // está lendo: sessão viva
     this.pintarLendo(vers);
     this.rolarAteVersiculo(vers);
     this.atualizarPlayer();
 
-    // registra o ponto lido, pra próxima chamada saber se houve salto
-    this._ultimoVersLido = vers;
-    this._ultimoCapLido = this._capLeitura();
-    this._ultimoCodeLido = this.code;
-
     const el = this._escopoLeitura().querySelector(`.v[data-vers="${vers}"]`);
     const texto = el ? this.textoDoVersiculo(el).trim() : '';
-    const capPrefixo = anunciarCap ? `Capítulo ${this._capLeitura()}. ` : '';
-    const versPrefixo = anunciarVers ? `Versículo ${vers}. ` : '';
-    const prefixo = capPrefixo + versPrefixo;
+    const prefixo = anunciarCap ? `Capítulo ${this._capLeitura()}. ` : '';
 
     const gen = ++this.leituraGen;
     Locutor.parar();
@@ -4762,8 +4679,7 @@ const App = {
   /** Passou o último versículo: vira a página; no fim do livro, encerra. */
   avancarLeitura() {
     if (this.repetir === 'vers' && this.lendoVers != null) {   // repete o mesmo versículo
-      if (this._consumirRepeticao()) { this.lerVersiculo(this.lendoVers); }
-      else { this.finalizarLeitura(); }
+      this.lerVersiculo(this.lendoVers);
       return;
     }
     const lista = this.versiculosNaTela();
@@ -4773,11 +4689,7 @@ const App = {
       return;
     }
     if (this.repetir === 'cap') {              // fim do capítulo: recomeça do início
-      if (this._consumirRepeticao()) {
-        this.lerVersiculo(lista[0] || 1, { anunciarCap: true });
-      } else {
-        this.finalizarLeitura();
-      }
+      this.lerVersiculo(lista[0] || 1, { anunciarCap: true });
       return;
     }
     if (this.seguirCapitulos && Prefs.get('paginaModo') === 'continuo') {
@@ -4817,7 +4729,6 @@ const App = {
     this.pausado = true;
     this.despintarLendo();
     this.lendoVers = null;
-    this._filaEncerrada = true;   // fim do livro: play automático não deve reiniciar
     this.atualizarPlayer();
     this._agendarAutoFechar();   // acabou: some sozinho e libera a tela
   },
@@ -4922,24 +4833,18 @@ const App = {
     this.selecao = null;
     this.renderBarraSelecao();
 
-    this.leituraGen++;   // invalida QUALQUER leitura/callback pendente de antes
-    Locutor.parar();     // corta fala em andamento pra não sobrepor sessões
     this.modoFila = true;
     this.ouvindo = true;
     this.pausado = false;
     this.lendoNota = false;
-    this.lendoVers = null;
     this._listaAberta = false;
-    this.repetir = 'nao';   // cada sessão começa sem repetição; o usuário liga no botão se quiser
-    this._repsRestantes = null;   // zera o contador de repetições da sessão anterior
-    this._filaEncerrada = false;   // nova fila: ainda não terminou
+    this.repetir = this.repetir || 'nao';
     this._cancelarAutoFechar();
     this.fila = fila;
     this.filaNome = nome || 'Lista';
     this.filaIdx = 0;
     this.filaVersos = [];
     this.filaVersoIdx = 0;
-    this._ultimoVersLido = null;   // nova sessão: sem "anterior" pra comparar salto
 
     document.body.classList.add('ouvindo');
     const player = document.getElementById('player-voz');
@@ -4954,23 +4859,15 @@ const App = {
     this._configurarMediaSession();
     this.manterTelaAcesa();
 
-    this._irParaSegmento(0, { anunciar: true, reinicioOk: true });
+    this._irParaSegmento(0, { anunciar: true });
   },
 
   /** Navega até o capítulo do segmento idx e começa a ler seus versículos.
    *  `versoAlvo` (opcional) posiciona num versículo específico do segmento. */
-  async _irParaSegmento(idx, { anunciar = false, aoFim = false, versoAlvo = null, reinicioOk = false } = {}) {
+  async _irParaSegmento(idx, { anunciar = false, aoFim = false, versoAlvo = null } = {}) {
     if (!this.modoFila) return;
     if (idx < 0) idx = 0;
     if (idx >= this.fila.length) { this._fimDaFila(); return; }
-    // Trava anti-loop: voltar ao começo (idx 0) só é permitido por uma origem
-    // autorizada (início da fila, repetição de lista ligada, ou play explícito).
-    // Qualquer outra tentativa de recomeçar do zero é um disparo-fantasma
-    // (áudio de fundo, media session) e é ignorada — senão a lista fica em loop.
-    if (idx === 0 && this._filaEncerrada && !reinicioOk) {
-      try { console.warn('[fila] reinício-fantasma bloqueado (lista encerrada, sem repetição)'); } catch (e) {}
-      return;
-    }
 
     const seg = this.fila[idx];
     this.filaIdx = idx;
@@ -5028,7 +4925,6 @@ const App = {
   _lerPassoFila({ anunciarCap = false } = {}) {
     if (!this.modoFila) return;
     this._cancelarAutoFechar();
-    this._filaEncerrada = false;   // está lendo: a fila está viva
     if (this.filaVersoIdx >= this.filaVersos.length) {
       this._irParaSegmento(this.filaIdx + 1, { anunciar: true });
       return;
@@ -5043,7 +4939,6 @@ const App = {
       this.pausado = false;
       this.despintarLendo();
       this.atualizarPlayer();
-      this._ultimoVersLido = null;   // depois de uma nota, o próximo versículo se anuncia
       fala = 'Nota. ' + (seg.texto || '');
     } else {
       const vers = this.filaVersos[this.filaVersoIdx];
@@ -5055,34 +4950,9 @@ const App = {
       this.atualizarPlayer();
       const el = document.querySelector(`#folha .v[data-vers="${vers}"]`);
       const texto = el ? this.textoDoVersiculo(el).trim() : '';
-
-      // Nas playlists, cada faixa é um segmento próprio (um versículo por faixa),
-      // então a contiguidade tem que ATRAVESSAR as faixas: comparo sempre com o
-      // último versículo tocado, não importa se mudou de segmento.
-      const contiguo = this._ultimoVersLido != null
-        && seg.code === this._ultimoCodeLido
-        && seg.cap === this._ultimoCapLido
-        && vers === this._ultimoVersLido + 1;
-
-      // O capítulo se anuncia quando MUDA de fato o livro/capítulo (não a cada
-      // faixa). Em sequência dentro do mesmo capítulo, não repete o cabeçalho.
-      const trocouCap = seg.code !== this._ultimoCodeLido
-        || seg.cap !== this._ultimoCapLido;
-      const anunciarCabeca = anunciarCap && trocouCap;
-
-      // O versículo se anuncia quando a pessoa se perderia: começo sem anterior
-      // fora do v.1, ou salto. Quando anuncia o capítulo, só diz o versículo se
-      // não for o 1 (início natural do capítulo).
-      const anunciarVers = anunciarCabeca ? (vers !== 1) : !contiguo;
-
-      this._ultimoVersLido = vers;
-      this._ultimoCapLido = seg.cap;
-      this._ultimoCodeLido = seg.code;
-
-      const capPrefixo = anunciarCabeca
+      const prefixo = anunciarCap
         ? `${Dados.nomeCurto(seg.versao, seg.code)}, capítulo ${seg.cap}. ` : '';
-      const versPrefixo = anunciarVers ? `Versículo ${vers}. ` : '';
-      fala = capPrefixo + versPrefixo + texto;
+      fala = prefixo + texto;
     }
 
     const gen = ++this.leituraGen;
@@ -5091,22 +4961,13 @@ const App = {
       if (!this.modoFila || gen !== this.leituraGen) return;
       const seguir = () => {
         if (!this.modoFila || gen !== this.leituraGen) return;
-        if (this.repetir === 'vers') {
-          // repete o mesmo versículo enquanto houver repetições restantes
-          if (this._consumirRepeticao()) { this._lerPassoFila(); }
-          else { this._fimDaFila(); }
-          return;
-        }
+        if (this.repetir === 'vers') { this._lerPassoFila(); return; }   // mesmo passo
         this.filaVersoIdx++;
         // fim da fila com repetição de "capítulo" (= lista inteira): recomeça
         if (this.repetir === 'cap'
           && this.filaIdx >= this.fila.length - 1
           && this.filaVersoIdx >= this.filaVersos.length) {
-          if (this._consumirRepeticao()) {
-            this._irParaSegmento(0, { anunciar: true, reinicioOk: true });
-          } else {
-            this._fimDaFila();
-          }
+          this._irParaSegmento(0, { anunciar: true });
           return;
         }
         this._lerPassoFila();
@@ -5137,17 +4998,9 @@ const App = {
   },
 
   /** Play/pausa no modo fila (retomar re-lê o versículo atual, como no capítulo). */
-  alternarPausaFila({ explicito = false } = {}) {
+  alternarPausaFila() {
     if (!this.modoFila) return;
-    // Fila terminada: só recomeça do zero por toque EXPLÍCITO no botão. Um "play"
-    // que chegue sozinho (keep-alive da voz, sessão de mídia da tela de bloqueio)
-    // NÃO deve reiniciar a lista — senão ela fica repetindo sem repetição ligada.
-    if (this.lendoVers == null && !this.lendoNota) {
-      if (explicito && this._filaEncerrada) {
-        this._irParaSegmento(0, { anunciar: true, reinicioOk: true });
-      }
-      return;
-    }
+    if (this.lendoVers == null && !this.lendoNota) { this._irParaSegmento(0, { anunciar: true }); return; }
     if (this.pausado) {
       this.pausado = false;
       this._lerPassoFila();
@@ -5166,7 +5019,6 @@ const App = {
     this.pausado = true;
     this.despintarLendo();
     this.lendoVers = null;
-    this._filaEncerrada = true;   // encerrou sozinha: um "play" automático não deve reiniciar
     this.atualizarPlayer();
     this._agendarAutoFechar();   // acabou a sequência: some e libera a tela
   },
@@ -5189,16 +5041,12 @@ const App = {
   /** Play/pausa. Retomar re-lê o versículo atual do começo — é o jeito que
    *  funciona igual em todos os navegadores (o pause/resume nativo falha em
    *  vários aparelhos). Como o versículo é curto, mal se nota. */
-  alternarPausa({ explicito = false } = {}) {
-    if (this.modoFila) return this.alternarPausaFila({ explicito });
+  alternarPausa() {
+    if (this.modoFila) return this.alternarPausaFila();
     if (!this.ouvindo) return;
-    if (this.lendoVers == null) {            // parado (fim do livro): só recomeça por toque explícito
-      if (explicito && this._filaEncerrada) {
-        this._filaEncerrada = false;
-        const lista = this.versiculosNaTela();
-        this._ultimoVersLido = null;
-        this.lerVersiculo(lista[0] || 1, { anunciarCap: true });
-      }
+    if (this.lendoVers == null) {            // parado (fim do livro): recomeça o capítulo
+      const lista = this.versiculosNaTela();
+      this.lerVersiculo(lista[0] || 1, { anunciarCap: true });
       return;
     }
     if (this.pausado) {
@@ -5363,44 +5211,16 @@ const App = {
    *   'nao'  ⊘  não repete (segue o fluxo normal)
    *   'cap'  ⟳  ao acabar, recomeça o capítulo / a fila do começo
    *   'vers' ↻  repete sempre o mesmo versículo
-   * Sem texto no botão: cada toque mostra um aviso rápido do que ligou.
-   * O quanto repete vem do Ajuste "Modo repetição" (Infinito ou 1–10). */
+   * Sem texto no botão: cada toque mostra um aviso rápido do que ligou. */
   alternarRepetir() {
     const ordem = ['nao', 'cap', 'vers'];
     const i = ordem.indexOf(this.repetir || 'nao');
     this.repetir = ordem[(i + 1) % ordem.length];
-    this._reiniciarContagemRepeticao();   // liga/troca o modo → reinicia a contagem
     this._atualizarRepetirBotao();
-    const lim = +Prefs.get('repeticaoLimite') || 0;
-    const sufixo = (this.repetir !== 'nao' && lim > 0) ? ` (${lim}×)` : '';
     this.avisoRapido(
-      this.repetir === 'cap' ? (this.modoFila ? 'Repetir a lista' : 'Repetir o capítulo') + sufixo
-      : this.repetir === 'vers' ? 'Repetir o versículo' + sufixo
+      this.repetir === 'cap' ? (this.modoFila ? 'Repetir a lista' : 'Repetir o capítulo')
+      : this.repetir === 'vers' ? 'Repetir o versículo'
       : 'Sem repetição');
-  },
-
-  /* Reinicia o contador de repetições restantes conforme o Ajuste. Chamado ao
-   * ligar/trocar o modo de repetição ou ao mudar o número no Ajuste. Para
-   * "Sem repetição" ou "Infinito" (limite 0), não há contagem. */
-  _reiniciarContagemRepeticao() {
-    const lim = +Prefs.get('repeticaoLimite') || 0;
-    this._repsRestantes = (this.repetir !== 'nao' && lim > 0) ? lim : null;
-  },
-
-  /* Consome uma repetição no fim de um ciclo (capítulo/versículo). Devolve true
-   * se ainda há repetições a fazer, false se esgotou (aí quem chama encerra).
-   * No Infinito (_repsRestantes === null) sempre devolve true.
-   *
-   * Semântica: o número escolhido é o total de execuções. Ex.: "3" toca o
-   * versículo/capítulo 3 vezes ao todo — o círculo mostra 3 na 1ª, 2 na 2ª,
-   * 1 na 3ª, e encerra. Como a 1ª execução já aconteceu antes de chamar aqui,
-   * esgota quando o restante chega a 1 (não a 0). */
-  _consumirRepeticao() {
-    if (this._repsRestantes == null) return true;   // infinito
-    if (this._repsRestantes <= 1) { return false; }  // esta era a última execução
-    this._repsRestantes--;
-    this._atualizarRepetirBotao();
-    return true;
   },
 
   _atualizarRepetirBotao() {
@@ -5414,23 +5234,6 @@ const App = {
       : this.repetir === 'vers' ? 'Repetindo o versículo' : 'Sem repetição';
     b.setAttribute('aria-label', t);
     b.title = t;
-
-    // círculo contador no canto: ∞ no infinito, o número restante quando é 1–10.
-    // Só nos modos de repetição (nunca em "Sem repetição").
-    let selo = b.querySelector('.repetir-selo');
-    const lim = +Prefs.get('repeticaoLimite') || 0;
-    const mostrar = this.repetir !== 'nao';
-    if (mostrar) {
-      if (!selo) {
-        selo = document.createElement('span');
-        selo.className = 'repetir-selo';
-        b.appendChild(selo);
-      }
-      selo.textContent = lim === 0 ? '∞'
-        : String(this._repsRestantes != null ? this._repsRestantes : lim);
-    } else if (selo) {
-      selo.remove();
-    }
   },
 
   desenharListaPlayer(opts = {}) {
