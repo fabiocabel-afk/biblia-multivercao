@@ -89,8 +89,15 @@ const Locutor = {
     this._keep = setInterval(() => {
       try {
         const s = window.speechSynthesis;
-        if (s.speaking || s.pending) { if (s.paused) s.resume(); s.resume(); }
-        else this._pararKeepAlive();
+        if (s.speaking || s.pending) {
+          // Só religa se o motor caiu em pausa sozinho (tela apagada). Um
+          // resume() INCONDICIONAL pode fazer o motor RE-FALAR o trecho atual
+          // em alguns aparelhos (Android/Chrome) — é a origem da "repetição
+          // fantasma" que aparece depois de horas/ciclos de segundo plano.
+          if (s.paused) s.resume();
+        } else {
+          this._pararKeepAlive();
+        }
       } catch (e) { this._pararKeepAlive(); }
     }, 4000);
   },

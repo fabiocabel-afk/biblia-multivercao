@@ -276,11 +276,24 @@ const App = {
     // rola até o capítulo alvo (topo logo abaixo da barra)
     const alvoBloco = folha.querySelector(`.cap-bloco[data-cap="${this.cap}"]`);
     const topoBarra = (document.querySelector('.topo') && document.querySelector('.topo').offsetHeight) || 52;
-    if (this.cap > 1 && alvoBloco) {
+    const irAoTopo = !(this.cap > 1 && alvoBloco);
+    if (!irAoTopo) {
       const y = alvoBloco.getBoundingClientRect().top + window.scrollY - topoBarra - 8;
       window.scrollTo(0, Math.max(0, y));
     } else {
       window.scrollTo(0, 0);
+      // Ao trocar de LIVRO, toda a folha é substituída e o navegador tende a
+      // "re-ancorar" na posição vertical antiga logo depois — empurrando a
+      // página de volta ao ponto de onde se veio. Reafirmar o topo nos quadros
+      // seguintes vence essa ancoragem e mantém no topo, como esperado. Só
+      // quando NÃO há versículo-alvo: com versículo, o scrollIntoView abaixo é
+      // que deve mandar (pulo por referência para um versículo do cap. 1).
+      if (!vers) {
+        requestAnimationFrame(() => {
+          window.scrollTo(0, 0);
+          requestAnimationFrame(() => window.scrollTo(0, 0));
+        });
+      }
     }
     if (vers && alvoBloco) {
       const alvo = alvoBloco.querySelector(`.v[data-vers="${vers}"]`);
@@ -4305,7 +4318,7 @@ const App = {
         if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
         if (Math.abs(dx) < Math.abs(dy) * 1.3) { arr.eixo = 'v'; return; }  // rolagem
         arr.eixo = 'h';
-        arr.dir = dx > 0 ? 1 : -1;                 // direita = próximo; esquerda = anterior
+        arr.dir = dx > 0 ? -1 : 1;                 // esquerda = próximo; direita = anterior
         arr.alvo = this._alvoPasso(arr.dir);
         const k = arr.alvo ? `${this.versao}|${arr.alvo.code}|${arr.alvo.cap}` : null;
         arr.r = k ? (this._vizCache[k] || null) : null;
@@ -4326,7 +4339,7 @@ const App = {
       folha.style.transform = `translateX(${d}px)`;
       if (arr.alvo && arr.r && viz && !viz.hidden) {
         const W = largura();
-        const base = arr.dir > 0 ? -W : W;         // próximo entra pela esquerda; anterior pela direita
+        const base = arr.dir > 0 ? W : -W;         // próximo entra pela direita; anterior pela esquerda
         viz.style.transform = `translateX(${base + d}px)`;
       }
     }, { passive: false });
@@ -4351,7 +4364,7 @@ const App = {
       viz.style.transition = 'transform .22s ease';
 
       if (commit) {
-        const fim = st.dir > 0 ? W : -W;           // folha sai; vizinho encaixa em 0
+        const fim = st.dir > 0 ? -W : W;           // folha sai; vizinho encaixa em 0
         folha.style.transform = `translateX(${fim}px)`;
         viz.style.transform = 'translateX(0)';
         let feito = false;
@@ -4364,7 +4377,7 @@ const App = {
         setTimeout(finalizar, 320);                // rede de segurança
       } else {
         folha.style.transform = 'translateX(0)';
-        const base = st.dir > 0 ? -W : W;
+        const base = st.dir > 0 ? W : -W;
         viz.style.transform = `translateX(${base}px)`;
         let feito = false;
         const voltar = () => { if (feito) return; feito = true; limparArraste(); };
@@ -4522,6 +4535,51 @@ const App = {
         setTimeout(() => document.getElementById('campo-busca').focus(), 220);
       }
     };
+
+    // Religa a leitura em sincronia quando a página volta do segundo plano
+    // (celular bloqueado, app minimizado, virada de dia). Sem isso, a memória
+    // do app e o motor de voz vão se desencontrando a cada congelamento — é a
+    // causa da degradação que só aparece depois de horas/dias de uso.
+    this._ligarReconciliacaoVoz();
+  },
+
+  /* Registrado UMA vez (guardado por _reconVozLigada). Ao voltar à tela, dá um
+   * instante pro motor de voz se assentar e então reconcilia o estado. */
+  _ligarReconciliacaoVoz() {
+    if (this._reconVozLigada) return;
+    this._reconVozLigada = true;
+    const aoVoltar = () => {
+      if (document.visibilityState !== 'visible') return;
+      // pequena espera: logo após voltar, speaking/pending às vezes vêm com
+      // valor velho; 300ms deixa o motor reportar o estado real.
+      setTimeout(() => this._reconciliarVoz(), 300);
+    };
+    document.addEventListener('visibilitychange', aoVoltar);
+    // pageshow cobre o retorno do bfcache em alguns navegadores mobile.
+    window.addEventListener('pageshow', aoVoltar);
+  },
+
+  /* Reconciliação: quando a página volta do segundo plano, o app pode ACHAR que
+   * está lendo enquanto o motor de voz foi morto pelo congelamento. Se for esse
+   * o caso, paramos LIMPO no versículo atual — nunca reiniciamos sozinhos (é o
+   * reinício automático que faz a lista entrar em loop). A pessoa retoma no
+   * play quando quiser; aí é um toque explícito e seguro. */
+  _reconciliarVoz() {
+    if (!this.ouvindo || !this.modoFila) return;   // só interessa no modo fila ativo
+    if (this.pausado) return;                       // já parado: nada a fazer
+    if (this.lendoVers == null && !this.lendoNota) return;  // não estava lendo
+    let vivo = false;
+    try {
+      const s = window.speechSynthesis;
+      vivo = !!(s && (s.speaking || s.pending));
+    } catch (e) { vivo = false; }
+    if (vivo) return;   // motor ainda falando de verdade: deixa seguir
+    // motor morreu por baixo do app: para limpo no ponto atual, sem reiniciar
+    try { console.warn('[fila] voz morta no retorno ao 1º plano — pausando limpo (sem reiniciar)'); } catch (e) {}
+    this.leituraGen++;             // invalida qualquer callback pendente de antes
+    Locutor.parar();               // zera o motor de voz global
+    this.pausado = true;
+    this.atualizarPlayer();
   },
 
   /* =========================================================== marcadores */
@@ -4692,6 +4750,15 @@ const App = {
     this.fila = [];
     this.filaVersos = [];
     this._listaAberta = false;
+    // Reset COMPLETO da fila ao encerrar: sem isso, estas marcações sobram e
+    // contaminam a PRÓXIMA lista (repetição fantasma, contador travado, cabeçalho
+    // que não anuncia). Garante que cada sessão comece de fato do zero.
+    this._filaEncerrada = false;
+    this._repsRestantes = null;
+    this.repetir = 'nao';
+    this._ultimoVersLido = null;
+    this._ultimoCapLido = null;
+    this._ultimoCodeLido = null;
     document.body.classList.remove('ouvindo');
     const player = document.getElementById('player-voz');
     player.classList.remove('aberto');
@@ -4940,6 +5007,8 @@ const App = {
     this.filaVersos = [];
     this.filaVersoIdx = 0;
     this._ultimoVersLido = null;   // nova sessão: sem "anterior" pra comparar salto
+    this._ultimoCapLido = null;    // idem: sem capítulo/livro "anterior" da sessão passada
+    this._ultimoCodeLido = null;   // (senão o cabeçalho pode não anunciar na 1ª faixa)
 
     document.body.classList.add('ouvindo');
     const player = document.getElementById('player-voz');
