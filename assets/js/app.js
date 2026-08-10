@@ -276,24 +276,11 @@ const App = {
     // rola até o capítulo alvo (topo logo abaixo da barra)
     const alvoBloco = folha.querySelector(`.cap-bloco[data-cap="${this.cap}"]`);
     const topoBarra = (document.querySelector('.topo') && document.querySelector('.topo').offsetHeight) || 52;
-    const irAoTopo = !(this.cap > 1 && alvoBloco);
-    if (!irAoTopo) {
+    if (this.cap > 1 && alvoBloco) {
       const y = alvoBloco.getBoundingClientRect().top + window.scrollY - topoBarra - 8;
       window.scrollTo(0, Math.max(0, y));
     } else {
       window.scrollTo(0, 0);
-      // Ao trocar de LIVRO, toda a folha é substituída e o navegador tende a
-      // "re-ancorar" na posição vertical antiga logo depois — empurrando a
-      // página de volta ao ponto de onde se veio. Reafirmar o topo nos quadros
-      // seguintes vence essa ancoragem e mantém no topo, como esperado. Só
-      // quando NÃO há versículo-alvo: com versículo, o scrollIntoView abaixo é
-      // que deve mandar (pulo por referência para um versículo do cap. 1).
-      if (!vers) {
-        requestAnimationFrame(() => {
-          window.scrollTo(0, 0);
-          requestAnimationFrame(() => window.scrollTo(0, 0));
-        });
-      }
     }
     if (vers && alvoBloco) {
       const alvo = alvoBloco.querySelector(`.v[data-vers="${vers}"]`);
@@ -410,6 +397,28 @@ const App = {
     folha.classList.remove('desliza-prox', 'desliza-ant');
     void folha.offsetWidth;                         // reinicia a animação
     folha.classList.add(desliza > 0 ? 'desliza-prox' : 'desliza-ant');
+  },
+
+  /* Virar a página pelo ARRASTO nunca mira um versículo: deve começar no topo.
+   * Algo (reflow tardio de fonte/fundo, ou a restauração de rolagem do próprio
+   * navegador) empurra a página de volta à posição antiga ALGUNS instantes
+   * depois — os reforços de poucos quadros não alcançam. Então reafirmamos o
+   * topo numa janela maior (até ~350ms) e também quando as fontes terminam de
+   * carregar. Logo após soltar o dedo a pessoa não está rolando, então prender
+   * o topo por esse tempinho não atrapalha. */
+  _irAoTopoPaginaVirada() {
+    const topo = () => {
+      try { window.scrollTo(0, 0); } catch (e) {}
+      const se = document.scrollingElement || document.documentElement;
+      if (se) se.scrollTop = 0;
+      if (document.body) document.body.scrollTop = 0;
+    };
+    topo();
+    requestAnimationFrame(() => { topo(); requestAnimationFrame(topo); });
+    [60, 160, 350].forEach(ms => setTimeout(topo, ms));
+    if (document.fonts && document.fonts.ready) {
+      document.fonts.ready.then(topo).catch(() => {});
+    }
   },
 
   async passo(dir) {
@@ -4356,7 +4365,10 @@ const App = {
       // deslize da etapa 1 no commit, e apenas volta a folha se cancelar
       if (!st.r || semAnim() || !viz) {
         limparArraste();
-        if (commit && st.alvo) this.ir(st.alvo.code, st.alvo.cap, undefined, { desliza: st.dir });
+        if (commit && st.alvo) {
+          this.ir(st.alvo.code, st.alvo.cap, undefined, { desliza: st.dir })
+            .then(() => this._irAoTopoPaginaVirada());   // virada por arrasto sempre no topo
+        }
         return;
       }
 
@@ -4372,6 +4384,7 @@ const App = {
           if (feito) return; feito = true;
           await this.ir(st.alvo.code, st.alvo.cap);   // reconstrói a folha real por baixo
           limparArraste();
+          this._irAoTopoPaginaVirada();               // virada por arrasto sempre no topo
         };
         viz.addEventListener('transitionend', finalizar, { once: true });
         setTimeout(finalizar, 320);                // rede de segurança
@@ -5466,7 +5479,11 @@ const App = {
    * esgota quando o restante chega a 1 (não a 0). */
   _consumirRepeticao() {
     if (this._repsRestantes == null) return true;   // infinito
-    if (this._repsRestantes <= 1) { return false; }  // esta era a última execução
+    if (this._repsRestantes <= 1) {
+      this._repsRestantes = 0;          // esgotou: marca "concluído"
+      this._atualizarRepetirBotao();     // apaga o selo do contador (terminou)
+      return false;
+    }
     this._repsRestantes--;
     this._atualizarRepetirBotao();
     return true;
@@ -5488,7 +5505,7 @@ const App = {
     // Só nos modos de repetição (nunca em "Sem repetição").
     let selo = b.querySelector('.repetir-selo');
     const lim = +Prefs.get('repeticaoLimite') || 0;
-    const mostrar = this.repetir !== 'nao';
+    const mostrar = this.repetir !== 'nao' && this._repsRestantes !== 0;
     if (mostrar) {
       if (!selo) {
         selo = document.createElement('span');

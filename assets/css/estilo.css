@@ -178,6 +178,12 @@ html, body {
   margin: 0;
   height: 100%;
   overscroll-behavior-y: none;
+  /* Desliga a "ancoragem de rolagem" do navegador: sem isto, ao trocar toda a
+     folha (virar página/livro), um reflow tardio (fonte/fundo do pergaminho)
+     faz o navegador reajustar a rolagem sozinho para "manter a posição" — e
+     empurra a página de volta ao ponto de onde se veio, em vez de ficar no
+     topo. Aqui o texto carrega de uma vez, então a ancoragem só atrapalha. */
+  overflow-anchor: none;
 }
 
 body {
@@ -278,14 +284,15 @@ button {
   hyphens: auto;
 }
 
-/* transição de deslize ao trocar de capítulo: a página entra já pronta de um
-   lado, sem folha simulada. Próximo entra pela esquerda; anterior, pela direita.
-   overflow-x escondido no corpo para o deslize não gerar barra horizontal. */
+/* transição de deslize ao trocar de capítulo pelos BOTÕES: a página entra já
+   pronta de um lado, no mesmo sentido do arrasto — próximo entra pela direita;
+   anterior, pela esquerda. overflow-x escondido no corpo para o deslize não
+   gerar barra horizontal. */
 html, body { overflow-x: hidden; }
 @keyframes entra-esquerda { from { transform: translateX(-100%); } to { transform: translateX(0); } }
 @keyframes entra-direita  { from { transform: translateX(100%);  } to { transform: translateX(0); } }
-.folha.desliza-prox { animation: entra-esquerda .3s cubic-bezier(.22,.61,.36,1); }
-.folha.desliza-ant  { animation: entra-direita  .3s cubic-bezier(.22,.61,.36,1); }
+.folha.desliza-prox { animation: entra-direita  .3s cubic-bezier(.22,.61,.36,1); }
+.folha.desliza-ant  { animation: entra-esquerda .3s cubic-bezier(.22,.61,.36,1); }
 @media (prefers-reduced-motion: reduce) {
   .folha.desliza-prox, .folha.desliza-ant { animation: none; }
 }
