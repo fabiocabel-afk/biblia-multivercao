@@ -757,88 +757,93 @@ const App = {
     const comCategorias = Prefs.get('mostrarCategorias');
     const comCapitulos = Prefs.get('mostrarCapitulos');
 
-    // so na primeirissima vez o app escancara onde o leitor esta agora.
-    // Depois disso, fechado e fechado — se a pessoa recolheu o Testamento, e
-    // porque queria o outro subindo para perto do dedo.
-    // na primeirissima vez, abre no Testamento do livro atual; depois respeita a escolha
-    if (this.dobraT === undefined) {
+    // Filtro do campo suspenso: 'tudo' (Toda a Bíblia) ou um Testamento. Na
+    // primeira vez reflete o cenário atual — o Testamento aberto na Estante ou,
+    // na falta dele, o do livro que está sendo lido. Depois respeita a escolha.
+    if (this.listaFiltro == null) {
       const atual = Dados.infoLivro(this.versao, this.code);
-      this.dobraT = atual ? atual.testament : (arv.testaments[0] && arv.testaments[0].id);
-      this.dobraC = atual ? atual.category : null;
+      this.listaFiltro = this.estanteT || (atual ? atual.testament : 'tudo');
     }
-    // garante que sempre há um Testamento aberto (nunca os dois fechados)
-    if (!arv.testaments.some(t => t.id === this.dobraT)) {
-      this.dobraT = arv.testaments[0] && arv.testaments[0].id;
+    // se o Testamento guardado não existe neste cânone, cai em "Toda a Bíblia"
+    if (this.listaFiltro !== 'tudo' && !arv.testaments.some(t => t.id === this.listaFiltro)) {
+      this.listaFiltro = 'tudo';
     }
 
-    const partes = [];
+    const opcoes = [{ id: 'tudo', nome: 'Toda a Bíblia' }]
+      .concat(arv.testaments.map(t => ({ id: t.id, nome: t.name })));
+    const nomeAtual = (opcoes.find(o => o.id === this.listaFiltro) || opcoes[0]).nome;
 
-    // Cada Testamento é uma SEÇÃO: cabeça fixa (o "rédeo") + corpo com scroll
-    // interno próprio. Só a seção aberta tem o corpo visível e rolando; a fechada
-    // mostra só a cabeça. Assim as duas cabeças ficam SEMPRE na tela e a rolagem
-    // dos livros acontece confinada dentro da seção aberta — nada vaza por trás.
-    for (const t of arv.testaments) {
-      const livrosT = t.categories.flatMap(c => c.books);
-      const abertoT = this.dobraT === t.id;
+    // quais Testamentos entram na lista, conforme o filtro
+    const mostrarT = this.listaFiltro === 'tudo'
+      ? arv.testaments
+      : arv.testaments.filter(t => t.id === this.listaFiltro);
 
-      partes.push(`<section class="secao-testamento ${abertoT ? 'aberta' : 'recolhida'}" data-secao="${t.id}">`);
-
-      partes.push(`<button class="dobra testamento" data-t="${t.id}"
-        aria-expanded="${abertoT}">
-        <span class="seta">▶</span>
-        <span>${t.name}</span>
-        ${comCapitulos ? `<span class="soma">${this.rotuloSoma(this.somaCapitulos(livrosT))}</span>` : ''}
-      </button>`);
-
-      // corpo interno da seção — este é o que rola (quando aberto)
-      partes.push(`<div class="secao-corpo">`);
-
+    // corpo: livros em lista corrida; categorias viram divisória fixa (não retrátil)
+    const linhas = [];
+    for (const t of mostrarT) {
       for (const c of t.categories) {
-        if (comCategorias) {
-          const abertoC = abertoT && this.dobraC === c.id;
-          partes.push(`<button class="dobra categoria" data-c="${c.id}"
-            aria-expanded="${abertoC}">
-            <span class="seta">▶</span>
-            <span>${c.name}</span>
-            ${comCapitulos ? `<span class="soma">${this.rotuloSoma(this.somaCapitulos(c.books))}</span>` : ''}
-          </button>`);
-          partes.push(`<div class="dentro ${abertoC ? '' : 'fechada'}">`);
-          partes.push(c.books.map(b => this.linhaLivro(b)).join(''));
-          partes.push('</div>');
-        } else {
-          // flag desligado: os livros vem direto, sem nomenclatura nenhuma
-          partes.push(c.books.map(b => this.linhaLivro(b)).join(''));
-        }
+        if (comCategorias) linhas.push(`<div class="estante-divisor"><span>${c.name}</span></div>`);
+        linhas.push(c.books.map(b => this.linhaLivro(b)).join(''));
       }
-
-      partes.push('</div>');   // fecha .secao-corpo
-      partes.push('</section>');
     }
 
-    corpo.innerHTML = partes.join('');
+    corpo.innerHTML = `
+      <div class="lista-seletor">
+        <div class="lista-campo-wrap">
+          <button class="lista-campo" type="button" aria-haspopup="listbox" aria-expanded="false">
+            <span class="lista-campo-nome">${nomeAtual}</span>
+            <span class="lista-campo-seta">▾</span>
+          </button>
+          <div class="lista-opcoes" role="listbox" hidden>
+            ${opcoes.map(o => `<button class="lista-opcao${o.id === this.listaFiltro ? ' sel' : ''}" type="button" role="option" data-f="${o.id}">${o.nome}</button>`).join('')}
+          </div>
+        </div>
+      </div>
+      <div class="lista-corpo">${linhas.join('')}</div>`;
     corpo.classList.add('modo-lista');
     corpo.classList.remove('modo-estante');
     document.getElementById('titulo-arvore').textContent = 'Livros';
 
-    corpo.querySelectorAll('[data-t]').forEach(el => {
-      el.onclick = () => {
-        // um de cada vez: abrir um Testamento fecha o outro. As duas cabeças
-        // continuam sempre visíveis; só troca qual seção tem o corpo aberto.
-        this.dobraT = el.dataset.t;
-        this.dobraC = null;
+    // abrir/fechar o campo suspenso
+    const campo = corpo.querySelector('.lista-campo');
+    const menu = corpo.querySelector('.lista-opcoes');
+    campo.onclick = (e) => {
+      e.stopPropagation();
+      const abrir = menu.hidden;
+      menu.hidden = !abrir;
+      campo.setAttribute('aria-expanded', String(abrir));
+    };
+    // escolher uma opção
+    corpo.querySelectorAll('.lista-opcao').forEach(el => {
+      el.onclick = (e) => {
+        e.stopPropagation();
+        this.listaFiltro = el.dataset.f;
+        // mantém a Estante em sincronia: um Testamento vale nos dois modos
+        // ("Toda a Bíblia" é exclusivo da Lista e não altera a Estante).
+        if (this.listaFiltro !== 'tudo') this.estanteT = this.listaFiltro;
         this.desenharArvore();
       };
     });
-
-    corpo.querySelectorAll('[data-c]').forEach(el => {
-      el.onclick = () => {
-        this.dobraC = this.dobraC === el.dataset.c ? null : el.dataset.c;
-        this.desenharArvore();
-      };
-    });
+    // um clique fora do campo fecha o menu (registrado uma única vez)
+    this._ligarFechaMenuLista();
 
     corpo.querySelectorAll('[data-livro]').forEach(el => {
       el.onclick = () => this.desenharCapitulos(el.dataset.livro);
+    });
+  },
+
+  /* Fecha o menu do campo suspenso da Lista ao clicar fora dele. O clique no
+   * próprio campo/opções faz stopPropagation, então este handler só dispara
+   * para cliques de fora. Registrado uma única vez. */
+  _ligarFechaMenuLista() {
+    if (this._fechaMenuListaLigado) return;
+    this._fechaMenuListaLigado = true;
+    document.addEventListener('click', () => {
+      const menu = document.querySelector('#corpo-arvore .lista-opcoes');
+      if (!menu || menu.hidden) return;
+      menu.hidden = true;
+      const campo = document.querySelector('#corpo-arvore .lista-campo');
+      if (campo) campo.setAttribute('aria-expanded', 'false');
     });
   },
 
@@ -904,7 +909,11 @@ const App = {
     document.getElementById('titulo-arvore').textContent = 'Livros';
 
     corpo.querySelectorAll('[data-est-t]').forEach(el => {
-      el.onclick = () => { this.estanteT = el.dataset.estT; this._desenharEstante(); };
+      el.onclick = () => {
+        this.estanteT = el.dataset.estT;
+        this.listaFiltro = this.estanteT;   // Lista acompanha o Testamento da Estante
+        this._desenharEstante();
+      };
     });
     corpo.querySelectorAll('[data-livro]').forEach(el => {
       el.onclick = () => this.desenharCapitulos(el.dataset.livro);
@@ -2448,7 +2457,7 @@ const App = {
         <label class="opcao-radio">
           <input type="radio" name="painel-layout" value="lista" ${p.painelLayout === 'estante' ? '' : 'checked'}>
           <span class="marca-radio"></span>
-          <span class="rotulo-radio"><strong>Lista</strong><span>Sanfona por Testamento e categoria, um nível de cada vez</span></span>
+          <span class="rotulo-radio"><strong>Lista</strong><span>Um campo no topo escolhe Toda a Bíblia, Antigo ou Novo; os livros vêm numa lista corrida</span></span>
         </label>
         <label class="opcao-radio">
           <input type="radio" name="painel-layout" value="estante" ${p.painelLayout === 'estante' ? 'checked' : ''}>
@@ -2459,9 +2468,9 @@ const App = {
 
       <label class="interruptor" style="margin-top:16px"><span>Mostrar categorias</span>
         <input type="checkbox" id="ctrl-categorias" ${p.mostrarCategorias ? 'checked' : ''}></label>
-      <p class="contagem">Na Lista, abre a camada do meio (Testamento → categoria →
-      livro). Na Estante, vira uma divisória com o nome da categoria entre os livros.
-      Desligado, os livros vêm direto, sem categorias.</p>
+      <p class="contagem">Na Lista e na Estante, vira uma divisória com o nome da
+      categoria entre os livros (sem recolher). Desligado, os livros vêm direto,
+      sem categorias.</p>
 
       <label class="interruptor"><span>Mostrar capítulos</span>
         <input type="checkbox" id="ctrl-capitulos" ${p.mostrarCapitulos ? 'checked' : ''}></label>
