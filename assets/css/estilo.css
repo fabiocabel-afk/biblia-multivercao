@@ -857,7 +857,7 @@ html, body { overflow-x: hidden; }
   background: transparent;
   color: var(--tinta);
   font-family: var(--fonte-texto);
-  font-size: 15px;
+  font-size: 17px;
   cursor: pointer;
   border: none;
   border-bottom: 1px solid color-mix(in srgb, var(--tinta) 10%, transparent);
@@ -865,6 +865,22 @@ html, body { overflow-x: hidden; }
 .lista-opcao:last-child { border-bottom: none; }
 .lista-opcao:hover { background: color-mix(in srgb, var(--tinta) 7%, transparent); }
 .lista-opcao.sel { font-weight: 700; background: color-mix(in srgb, var(--tinta) 10%, transparent); }
+/* "Toda a Bíblia" é o conjunto dos Testamentos: ganha letra maior e mais peso,
+   destacando-se das opções (Antigo/Novo) logo abaixo. */
+.lista-opcao[data-f="tudo"] { font-size: 20px; font-weight: 700; }
+
+/* Tipografia do painel de navegação, espelhando a página de leitura: os livros
+   usam a fonte do título do livro; a contagem de capítulos ao lado ganha a
+   fonte e a cor de capítulo (a rubrica), para o olho associar "isto é capítulo".
+   Tudo por tokens de tema, então acompanha o tema ativo (no Histórico, o
+   vermelhão da rubricação). */
+.lista-corpo .linha { font-family: var(--fonte-texto); }
+.lista-corpo .linha .sub {
+  font-family: var(--fonte-texto);
+  color: var(--rubrica);
+  font-weight: 600;
+  font-size: 13px;
+}
 
 .secao-testamento {
   display: flex;
@@ -1125,8 +1141,10 @@ html, body { overflow-x: hidden; }
   aspect-ratio: 1;
   border-radius: var(--raio);
   border: 1px solid color-mix(in srgb, var(--tinta) 16%, transparent);
-  font-family: var(--fonte-sigla);
-  font-size: 12px;
+  font-family: var(--fonte-texto);
+  font-size: 19px;
+  font-weight: 600;
+  color: var(--rubrica);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2565,8 +2583,8 @@ body.selecionando .rodape { transform: translateY(110%); }
   justify-content: center;
   border-radius: var(--raio);
   border: 1px solid color-mix(in srgb, var(--tinta) 16%, transparent);
-  font-family: var(--fonte-sigla);
-  font-size: 16px;
+  font-family: var(--fonte-texto);
+  font-size: 15px;
   color: var(--tinta);
   background: color-mix(in srgb, var(--papel) 100%, transparent);
 }
@@ -3627,6 +3645,7 @@ body.ouvindo .folha { padding-bottom: 200px; }
   color: var(--cromo-fraco);
   margin-bottom: 10px;
   min-height: 16px;
+  padding: 0 46px;          /* respiro nas laterais: livra a engrenagem do canto */
 }
 
 .player-botoes {
@@ -4314,6 +4333,30 @@ body.ouvindo .folha { padding-bottom: 200px; }
 .player-x:active { transform: scale(.94); }
 .player-x .icone { width: 18px; height: 18px; stroke: #fff; }
 
+/* engrenagem de ajustes do player (atalho pro bloco "Ouvir"): círculo neutro
+   e discreto — não compete com o X vermelho de fechar. Fica ABAIXO do X, com
+   um respiro claro entre os dois pra nunca encavalar. */
+.player-config {
+  position: absolute;
+  top: 30px;              /* X vai de -18 a +18; começa em +30 => ~12px de folga */
+  right: 18px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--cromo-texto) 16%, transparent);
+  color: var(--cromo-texto);
+  border: none;
+  cursor: pointer;
+  z-index: 2;
+  transition: filter .15s ease, transform .12s ease;
+}
+.player-config:hover { filter: brightness(1.12); }
+.player-config:active { transform: scale(.94); }
+.player-config .icone { width: 17px; height: 17px; stroke: currentColor; }
+
 /* botões pequenos e discretos (repetir / seguir) ao lado do transporte */
 .player-bt.player-bt-peq {
   width: 34px;
@@ -4339,9 +4382,9 @@ body.ouvindo .folha { padding-bottom: 200px; }
 .player-lista-topo {
   display: flex;
   align-items: baseline;
-  justify-content: space-between;
-  gap: 4px;
-  padding: 2px 4px 8px;
+  justify-content: flex-start;
+  gap: 8px;
+  padding: 2px 58px 8px 4px;   /* folga à direita: não passa sob a engrenagem */
   position: sticky;
   top: 0;
   background: var(--cromo);
@@ -4354,8 +4397,11 @@ body.ouvindo .folha { padding-bottom: 200px; }
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  flex: 0 1 auto;
+  min-width: 0;
 }
 .player-lista-conta { font-size: 11.5px; color: var(--cromo-fraco); flex: none; }
+.player-lista-conta::before { content: "·"; margin-right: 8px; color: var(--cromo-fraco); }
 
 .player-lista-rol { display: flex; flex-direction: column; }
 
@@ -4453,6 +4499,12 @@ body.ouvindo .folha { padding-bottom: 200px; }
   padding: 10px 8px 4px;
   font-size: 12.5px;
   color: var(--cromo-fraco);
+  width: 100%;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
 }
 .player-lista-proximo .mais-cap {
   display: inline-flex;

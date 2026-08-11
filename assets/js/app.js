@@ -1053,8 +1053,6 @@ const App = {
       <button class="linha" id="voltar-caps" style="margin-bottom:12px">
         ← Capítulos de ${nome}</button>
       <div class="grupo"><h3>${nome} ${cap} — de onde começar?</h3>
-      <p class="contagem" style="margin-bottom:10px">Toque no versículo de
-      partida. Tocando em outros abaixo, o registro se estende até o último.</p>
       <div class="grade-num">${grade.join('')}</div></div>`;
 
     document.getElementById('voltar-caps').onclick = () => this.desenharCapitulos(code);
@@ -3882,7 +3880,7 @@ const App = {
       return;
     }
     if (Dados.ehOriginal(this.versao)) {
-      this.avisoRapido('Áudio indisponível nas versões em hebraico e grego');
+      this.avisoRapido('Áudio disponível apenas em português');
       return;
     }
     const sel = this.selecao;
@@ -4458,8 +4456,10 @@ const App = {
       if (this.ouvindo) {                // modo player: o toque só reposiciona a leitura
         const v = e.target.closest('.v');
         if (v) {
-          // no Contínuo, tocar num versículo de outro capítulo move a leitura para lá
-          if (Prefs.get('paginaModo') === 'continuo' && !this.modoFila) {
+          // no Contínuo, tocar num versículo de outro capítulo move a leitura para lá.
+          // Na combinação do motor novo o toque é ignorado — então NÃO mexe no bloco.
+          if (Prefs.get('paginaModo') === 'continuo' && !this.modoFila
+            && !(this._naAtivo && !this._naNatural)) {
             const bl = v.closest('.cap-bloco');
             if (bl && bl !== this._blocoLendo) {
               this._blocoLendo = bl;
@@ -4470,7 +4470,8 @@ const App = {
               if (this._listaAberta) this.desenharListaPlayer();
             }
           }
-          if (this.modoFila) this._tocarVersoFila(+v.dataset.vers);
+          if (this._MOTOR_NOVO && this._naAtivo) this._naTocarVerso(+v.dataset.vers);
+          else if (this.modoFila) this._tocarVersoFila(+v.dataset.vers);
           else this.lerVersiculo(+v.dataset.vers);
         }
         return;
@@ -4703,8 +4704,19 @@ const App = {
     // a voz do navegador não pronuncia hebraico/grego; ler a transliteração
     // soletra os pontos e não fica bom — por ora, avisa e não entra no modo.
     if (Dados.ehOriginal(this.versao)) {
-      this.avisoRapido('Áudio indisponível nas versões em hebraico e grego');
+      this.avisoRapido('Áudio disponível apenas em português');
       return;
+    }
+    // MOTOR NOVO (Etapa 1): sequência natural. Monta a fila de faixas com o
+    // texto já resolvido (a partir de Dados, sem ler o DOM) e toca só ela.
+    if (this._MOTOR_NOVO) {
+      return this._naFilaNatural(this.versao, this.code, this.cap, comecarEm || 1)
+        .then(faixas => {
+          if (!faixas.length) { this.avisoRapido('Nada para tocar'); return; }
+          this._naAbrirPlayer('');
+          this._naFila = faixas; this._naIdx = 0; this._naNatural = true;
+          this._naTocar();
+        });
     }
     this.fecharPaineis();
     this.resetarMulti();
@@ -4757,6 +4769,10 @@ const App = {
   /** Sai do modo ouvir e devolve o app ao normal. */
   pararOuvir() {
     this.leituraGen++;
+    this._naAtivo = false;   // desliga o motor novo (callbacks pendentes caem pelo gen)
+    this._naFila = [];
+    this._naIdx = 0;
+    this._naUltVers = this._naUltCap = this._naUltCode = null;
     this._cancelarAutoFechar();
     Locutor.parar();
     Locutor.encerrarSessao();
@@ -5003,6 +5019,17 @@ const App = {
       });
     }
     if (!fila || !fila.length) { this.avisoRapido('Nada para tocar nesta lista'); return; }
+
+    // MOTOR NOVO (Etapa 1): combinação/lista/estudo. Resolve os segmentos em
+    // faixas com texto pronto (via Dados, sem DOM) e toca a fila fechada.
+    if (this._MOTOR_NOVO) {
+      return this._naFilaDeSegmentos(fila).then(faixas => {
+        if (!faixas.length) { this.avisoRapido('Nada para tocar nesta lista'); return; }
+        this._naAbrirPlayer(nome || 'Lista');
+        this._naFila = faixas; this._naIdx = 0; this._naNatural = false;
+        this._naTocar();
+      });
+    }
 
     this.fecharPaineis();
     this.resetarMulti();
@@ -5281,6 +5308,7 @@ const App = {
    *  funciona igual em todos os navegadores (o pause/resume nativo falha em
    *  vários aparelhos). Como o versículo é curto, mal se nota. */
   alternarPausa({ explicito = false } = {}) {
+    if (this._MOTOR_NOVO && this._naAtivo) return this._naAlternarPausa({ explicito });
     if (this.modoFila) return this.alternarPausaFila({ explicito });
     if (!this.ouvindo) return;
     if (this.lendoVers == null) {            // parado (fim do livro): só recomeça por toque explícito
@@ -5306,6 +5334,7 @@ const App = {
   /** Pular para o versículo anterior/seguinte (atravessa capítulos do mesmo
    *  livro; para nas bordas do livro). */
   pularVers(dir) {
+    if (this._MOTOR_NOVO && this._naAtivo) return this._naPular(dir);
     if (this.modoFila) return this._pularFila(dir);
     if (!this.ouvindo) return;
     const lista = this.versiculosNaTela();
@@ -5531,7 +5560,9 @@ const App = {
   desenharListaPlayer(opts = {}) {
     const lista = document.getElementById('player-lista');
     if (!lista || !this._listaAberta) return;
-    const acordeao = !this.modoFila && Prefs.get('paginaModo') === 'continuo';
+    // o motor novo tem sua própria lista (plana, com salto de faixa); o acordeão
+    // do Contínuo não se aplica a ele.
+    const acordeao = !this._naAtivo && !this.modoFila && Prefs.get('paginaModo') === 'continuo';
 
     // "seguir o foco" (rolar até o que está tocando) só vale quando NÃO se está
     // explorando um capítulo; ao explorar, mantém a posição (âncora = o capítulo
@@ -5548,9 +5579,11 @@ const App = {
     const topoAntes = ancora != null ? topoDe(ancora) : null;
     const scrollAntes = lista.scrollTop;
 
-    lista.innerHTML = this.modoFila
-      ? this._htmlListaFila()
-      : (acordeao ? this._htmlListaLivroContinuo() : this._htmlListaCapitulo());
+    lista.innerHTML = this._naAtivo
+      ? this._naHtmlLista()
+      : this.modoFila
+        ? this._htmlListaFila()
+        : (acordeao ? this._htmlListaLivroContinuo() : this._htmlListaCapitulo());
 
     if (seguir) {
       const ativo = lista.querySelector('.faixa.tocando');
@@ -5563,6 +5596,14 @@ const App = {
       lista.scrollTop = scrollAntes;   // avanço da leitura enquanto explora: fica parado
     }
 
+    // motor novo: tocar numa faixa salta direto pra ela; "próximo capítulo +"
+    // pula pra primeira faixa do capítulo seguinte
+    lista.querySelectorAll('[data-nafaixa]').forEach(el => {
+      el.onclick = () => this._naSaltarFaixa(+el.dataset.nafaixa);
+    });
+    lista.querySelectorAll('[data-naprox]').forEach(el => {
+      el.onclick = () => this._naSaltarFaixa(+el.dataset.naprox);
+    });
     // modo fila: tocar num versículo salta a leitura direto para ele
     lista.querySelectorAll('[data-faixa]').forEach(el => {
       el.onclick = () => {
@@ -5758,6 +5799,490 @@ const App = {
 
   liberarTela() {
     try { if (this._wake) { this._wake.release(); this._wake = null; } } catch (e) {}
+  },
+
+  /* ==========================================================================
+   * MOTOR DE ÁUDIO NOVO (Etapa 1) — estilo tocador de música
+   * --------------------------------------------------------------------------
+   * Uma ÚNICA fila de dados na memória. Cada "faixa" já carrega o texto pronto
+   * pra falar — resolvido a partir de `Dados`, NUNCA lido do DOM. O motor toca
+   * só a fila; ele não pergunta à tela o que dizer nem vira a página pra saber
+   * o próximo. (A tela como seguidora é a Etapa 2.)
+   *
+   * Faixa de versículo: { versao, code, cap, vers, texto }
+   * Faixa de nota:      { nota:true, texto, rotulo, versao }
+   *
+   * Reaproveita toda a "encanação" que já existe: o Locutor, a barra do player,
+   * o realce, a sessão de áudio de fundo, o wake-lock, o auto-fechar, o contador
+   * de repetição (_consumirRepeticao) e os botões de repetir/seguir.
+   *
+   * A chave `_MOTOR_NOVO` liga/desliga tudo: com ela `false`, o app volta
+   * inteiro ao motor antigo (que continua no arquivo, intacto).
+   * ======================================================================== */
+  _MOTOR_NOVO: true,
+
+  _naAtivo: false,      // o motor novo está tocando?
+  _naFila: [],          // as faixas
+  _naIdx: 0,            // faixa corrente
+  _naNatural: false,    // true = sequência natural (segue capítulos); false = combinação fechada
+  _naNome: '',          // rótulo da lista (playlist/estudo), se houver
+  _naUltVers: null,     // último versículo falado (pra decidir anúncio de salto)
+  _naUltCap: null,
+  _naUltCode: null,
+
+  /* ---- construtores da fila (tudo a partir de Dados, sem tocar no DOM) ---- */
+
+  /** Sequência natural: do ponto de partida até o fim do LIVRO. Como
+   *  `Dados.livro` carrega o livro inteiro de uma vez (e fica em cache), montar
+   *  a fila é só percorrer o que já está na memória — sem novas idas à rede. */
+  async _naFilaNatural(versao, code, capInicio, versInicio) {
+    const faixas = [];
+    let livro;
+    try { livro = await Dados.livro(versao, code); } catch (e) { return faixas; }
+    if (!livro || !Array.isArray(livro.chapters)) return faixas;
+    for (const cap of livro.chapters) {
+      if (cap.number < capInicio) continue;
+      for (const v of (cap.verses || [])) {
+        if (cap.number === capInicio && v.number < (versInicio || 1)) continue;
+        const texto = (v.text || '').trim();
+        if (!texto) continue;             // versículo sem texto legível: fora da fila
+        faixas.push({ versao, code, cap: cap.number, vers: v.number, texto });
+      }
+    }
+    return faixas;
+  },
+
+  /** Combinação confinada: só os versículos pedidos, do mesmo capítulo, na
+   *  ordem em que vierem. (Usada quando a seleção tem 2+ versículos.) */
+  async _naFilaCombinacao(versao, code, cap, versos) {
+    const faixas = [];
+    let dados;
+    try { dados = await Dados.capitulo(versao, code, cap); } catch (e) { return faixas; }
+    if (!dados) return faixas;
+    const porNum = new Map((dados.capitulo.verses || []).map(v => [v.number, v]));
+    for (const n of versos) {
+      const v = porNum.get(n);
+      const texto = v ? (v.text || '').trim() : '';
+      if (!texto) continue;
+      faixas.push({ versao, code, cap, vers: n, texto });
+    }
+    return faixas;
+  },
+
+  /** A partir de SEGMENTOS (listas de leitura e estudos, que atravessam livros,
+   *  capítulos e versões, e podem trazer notas). Os segmentos já são dados puros
+   *  — aqui a gente só resolve o texto de cada versículo pedido. */
+  async _naFilaDeSegmentos(segs) {
+    const faixas = [];
+    for (const seg of (segs || [])) {
+      if (seg.tipo === 'nota') {
+        faixas.push({ nota: true, texto: seg.texto || '',
+          rotulo: seg.rotulo || 'Anotação', versao: seg.versao || this.versao });
+        continue;
+      }
+      const versao = seg.versao || this.versao;
+      if (Dados.ehOriginal(versao)) continue;   // interlinear: sem áudio, pula o segmento
+      let dados;
+      try { dados = await Dados.capitulo(versao, seg.code, seg.cap); } catch (e) { continue; }
+      if (!dados) continue;
+      let verses = dados.capitulo.verses || [];
+      if (Array.isArray(seg.versos)) {
+        const pedidos = new Set(seg.versos);
+        verses = verses.filter(v => pedidos.has(v.number));
+      } else {
+        if (seg.de != null) verses = verses.filter(v => v.number >= seg.de);
+        if (seg.ate != null) verses = verses.filter(v => v.number <= seg.ate);
+      }
+      for (const v of verses) {
+        const texto = (v.text || '').trim();
+        if (!texto) continue;
+        faixas.push({ versao, code: seg.code, cap: seg.cap, vers: v.number, texto });
+      }
+    }
+    return faixas;
+  },
+
+  /* ---- abertura do player (mesma encanação do motor antigo) ---- */
+
+  _naAbrirPlayer(nome) {
+    this.fecharPaineis();
+    this.resetarMulti();
+    this.pontoAtual = null;
+    this.esconderMais();
+    this.selecao = null;
+    this.renderBarraSelecao();
+
+    this.leituraGen++;      // invalida qualquer fala/callback pendente de antes
+    Locutor.parar();
+    this._naAtivo = true;
+    this.ouvindo = true;
+    this.pausado = false;
+    this.modoFila = false;  // o motor novo não usa o motor de fila antigo
+    this.lendoNota = false;
+    this.lendoVers = null;
+    this._listaAberta = false;
+    if (this.seguirCapitulos == null) this.seguirCapitulos = true;
+    this.repetir = 'nao';
+    this._repsRestantes = null;
+    this._filaEncerrada = false;
+    this._naUltVers = this._naUltCap = this._naUltCode = null;
+    this._naNome = nome || '';
+    this._cancelarAutoFechar();
+
+    document.body.classList.add('ouvindo');
+    const player = document.getElementById('player-voz');
+    player.classList.add('aberto');
+    player.setAttribute('aria-hidden', 'false');
+    const filaEl = document.getElementById('player-fila');
+    if (filaEl) {
+      if (nome) { filaEl.hidden = false; filaEl.textContent = nome; }
+      else { filaEl.hidden = true; filaEl.textContent = ''; }
+    }
+    this._fecharListaPlayer();
+    this._atualizarSeguirBotao();
+    this._atualizarRepetirBotao();
+    Locutor.manterSessao();
+    this.manterTelaAcesa();
+  },
+
+  /* ---- núcleo: falar a faixa corrente e, ao fim, avançar ---- */
+
+  _naTocar() {
+    if (!this._naAtivo) return;
+    this._cancelarAutoFechar();
+    this._filaEncerrada = false;
+    const faixa = this._naFila[this._naIdx];
+    if (!faixa) { this._naFim(); return; }
+
+    let fala = '';
+    if (faixa.nota) {
+      this.lendoVers = null;
+      this.lendoNota = true;
+      this.pausado = false;
+      this.despintarLendo();
+      this._naUltVers = null;   // depois de uma nota, o próximo versículo se anuncia
+      fala = 'Nota. ' + (faixa.texto || '');
+    } else {
+      this.lendoVers = faixa.vers;
+      this.lendoNota = false;
+      this.pausado = false;
+
+      // Anúncio: o cabeçalho do capítulo sai quando MUDA o livro/capítulo (ou no
+      // começo). O número do versículo sai quando a pessoa se perderia — começo
+      // fora do v.1, ou um salto (faixa não contígua à anterior).
+      const trocouCap = faixa.code !== this._naUltCode || faixa.cap !== this._naUltCap;
+      const contiguo = this._naUltVers != null && faixa.code === this._naUltCode
+        && faixa.cap === this._naUltCap && faixa.vers === this._naUltVers + 1;
+      const anunciarCabeca = (this._naUltVers == null) || trocouCap;
+      const anunciarVers = anunciarCabeca ? (faixa.vers !== 1) : !contiguo;
+
+      // natural fica no mesmo livro → "Capítulo X."; combinação/playlist pode
+      // pular de livro → "Nome, capítulo X.".
+      const capPrefixo = anunciarCabeca
+        ? (this._naNatural
+            ? `Capítulo ${faixa.cap}. `
+            : `${Dados.nomeCurto(faixa.versao, faixa.code)}, capítulo ${faixa.cap}. `)
+        : '';
+      const versPrefixo = anunciarVers ? `Versículo ${faixa.vers}. ` : '';
+      fala = capPrefixo + versPrefixo + faixa.texto;
+
+      this._naUltVers = faixa.vers;
+      this._naUltCap = faixa.cap;
+      this._naUltCode = faixa.code;
+    }
+
+    // Sela a transição ANTES de acionar a tela: o seguidor usa este mesmo selo
+    // pra decidir se ainda deve pintar quando um ir() assíncrono terminar (se a
+    // pessoa saltou de faixa nesse meio-tempo, o selo muda e a pintura é abortada).
+    const gen = ++this.leituraGen;
+
+    this._naAtualizarPlayer();
+    this._naMediaSession();
+    this._naSeguirTela(faixa);   // Etapa 2: a tela segue o que está tocando
+
+    Locutor.parar();
+    // uma batidinha depois do cancelar: alguns motores engasgam se mandar falar
+    // no mesmo instante em que cancelou a fala anterior
+    setTimeout(() => {
+      if (!this._naAtivo || gen !== this.leituraGen) return;
+      Locutor.falar(fala, {
+        aoFim: () => { if (this._naAtivo && gen === this.leituraGen) this._naAvancar(); },
+        aoErro: () => { if (this._naAtivo && gen === this.leituraGen) this._naAvancar(); },
+      });
+    }, 60);
+  },
+
+  /* ---- avançar (repetição, portão do "seguir", fim) ---- */
+
+  _naAvancar() {
+    if (!this._naAtivo) return;
+
+    // repetição de versículo: repete a MESMA faixa
+    if (this.repetir === 'vers' && this.lendoVers != null) {
+      if (this._consumirRepeticao()) { this._naTocar(); }
+      else { this._naFim(); }
+      return;
+    }
+
+    const atual = this._naFila[this._naIdx];
+    const prox = this._naFila[this._naIdx + 1];
+
+    // repetição de "capítulo":
+    //  - natural  → recomeça o CAPÍTULO corrente (as faixas do mesmo cap)
+    //  - combinação/playlist → recomeça a FILA inteira
+    if (this.repetir === 'cap') {
+      const fimDoCiclo = this._naNatural
+        ? (!prox || prox.cap !== atual.cap || prox.code !== atual.code)
+        : (!prox);
+      if (fimDoCiclo) {
+        if (this._consumirRepeticao()) {
+          let alvo = 0;
+          if (this._naNatural) {
+            alvo = this._naIdx;
+            while (alvo > 0
+              && this._naFila[alvo - 1].cap === atual.cap
+              && this._naFila[alvo - 1].code === atual.code) alvo--;
+          }
+          this._naIdx = alvo;
+          this._naUltVers = this._naUltCap = this._naUltCode = null;   // re-anuncia o começo
+          this._naTocar();
+        } else {
+          this._naFim();
+        }
+        return;
+      }
+    }
+
+    if (!prox) { this._naFim(); return; }
+
+    // portão do "seguir capítulos" (só faz sentido no modo natural): se o
+    // próximo é outro capítulo e o seguir está desligado, para aqui.
+    if (this._naNatural && !this.seguirCapitulos
+      && (prox.cap !== atual.cap || prox.code !== atual.code)) {
+      this._naFim();
+      return;
+    }
+
+    this._naIdx++;
+    this._naTocar();
+  },
+
+  /** Fim da fila: para, mas mantém o player aberto pra poder recomeçar. */
+  _naFim() {
+    this.leituraGen++;
+    Locutor.parar();
+    this.pausado = true;
+    this.despintarLendo();
+    this.lendoVers = null;
+    this.lendoNota = false;
+    this._filaEncerrada = true;   // encerrou sozinha: um "play" automático não reinicia
+    this._naAtualizarPlayer();
+    this._agendarAutoFechar();
+  },
+
+  /* ---- controles: pular, play/pausa, tocar num versículo ---- */
+
+  /** Anterior / próximo. Simplesmente anda o ponteiro na fila; nas bordas, nada. */
+  _naPular(dir) {
+    if (!this._naAtivo) return;
+    const j = this._naIdx + dir;
+    if (j < 0 || j >= this._naFila.length) return;
+    this._naIdx = j;
+    this._naTocar();
+  },
+
+  /** Play/pausa. Retomar re-lê a faixa atual do começo (o pause/resume nativo
+   *  falha em vários aparelhos; como a faixa é curta, mal se nota). */
+  _naAlternarPausa({ explicito = false } = {}) {
+    if (!this._naAtivo) return;
+    // fila terminada: só recomeça do zero por toque EXPLÍCITO no botão. Um "play"
+    // que chegue sozinho (keep-alive, sessão de mídia) NÃO reinicia — senão a
+    // lista fica repetindo sem repetição ligada.
+    if (this.lendoVers == null && !this.lendoNota) {
+      if (explicito && this._filaEncerrada) {
+        this._naIdx = 0;
+        this._naUltVers = this._naUltCap = this._naUltCode = null;
+        this._filaEncerrada = false;
+        this._naTocar();
+      }
+      return;
+    }
+    if (this.pausado) {
+      this.pausado = false;
+      this._naTocar();
+    } else {
+      this.leituraGen++;
+      Locutor.parar();
+      this.pausado = true;
+      this._naAtualizarPlayer();
+    }
+  },
+
+  /** Toque num versículo da tela. Na sequência natural, reposiciona a leitura
+   *  ali (dentro do capítulo que está na tela). Na combinação, o toque NÃO
+   *  reposiciona — a tela é só seguidora; pra mudar a combinação, é preciso parar. */
+  _naTocarVerso(vers) {
+    if (!this._naAtivo) return;
+    if (!this._naNatural) return;   // combinação/playlist: toque não adiciona nem reposiciona
+    const code = this.code;
+    const cap = this._capLeitura();   // no Contínuo, o capítulo tocado; senão, this.cap
+    const alvo = this._naFila.findIndex(f => !f.nota
+      && f.code === code && f.cap === cap && f.vers === vers);
+    if (alvo < 0) return;
+    this._naIdx = alvo;
+    this._naTocar();
+  },
+
+  /** Saltar direto para uma faixa da fila (toque na lista de execução). */
+  _naSaltarFaixa(i) {
+    if (!this._naAtivo) return;
+    if (i < 0 || i >= this._naFila.length) return;
+    this._naIdx = i;
+    this._naTocar();
+  },
+
+  /* ---- a TELA como seguidora (Etapa 2) ----
+   * A tela reage ao que está tocando: garante o capítulo certo à vista (virando
+   * a página quando a fila cruza pra outro capítulo/livro), ilumina o versículo
+   * e o centraliza. É "dispara-e-esquece", protegido por try: se a rolagem ou a
+   * navegação falharem, o áudio (que vem da fila em memória) não é afetado. */
+  _naSeguirTela(faixa) {
+    try {
+      if (!faixa || faixa.nota) { this.despintarLendo(); return; }
+      const gen = this.leituraGen;   // sela: se pular de faixa durante um ir() async, aborta a pintura
+      const continuo = Prefs.get('paginaModo') === 'continuo';
+      const trocarVersao = this.versao !== faixa.versao && !!Dados.versao(faixa.versao);
+      // no Contínuo o LIVRO inteiro está empilhado, então navegar só é preciso
+      // quando muda de livro/versão; trocar de capítulo é só rolar até o bloco.
+      const precisaNavegar = trocarVersao
+        || this.code !== faixa.code
+        || (!continuo && this.cap !== faixa.cap);
+
+      const pintarAlvo = () => {
+        if (gen !== this.leituraGen) return;   // já saltou pra outra faixa nesse meio-tempo
+        if (continuo) {
+          const bl = document.querySelector(`#folha .cap-bloco[data-cap="${faixa.cap}"]`);
+          if (bl) { this._blocoLendo = bl; this._capLendo = faixa.cap; this.cap = faixa.cap; }
+        }
+        this.pintarLendo(faixa.vers);
+        this.rolarAteVersiculo(faixa.vers);
+      };
+
+      if (precisaNavegar) {
+        if (trocarVersao) { this.versao = faixa.versao; Prefs.set('versao', faixa.versao); }
+        Promise.resolve(this.ir(faixa.code, faixa.cap, undefined, { registrar: false }))
+          .then(pintarAlvo).catch(() => {});
+      } else {
+        pintarAlvo();
+      }
+    } catch (e) {}
+  },
+
+  /* ---- lista de execução do player, alimentada pela fila NOVA ----
+   * Natural: mostra só os versículos do capítulo que está tocando, com um
+   * "próximo capítulo +" no rodapé quando há mais adiante (leve, mesmo num livro
+   * grande). Combinação/playlist: mostra todas as faixas. Em ambos, a que toca
+   * fica marcada e um toque salta pra ela. */
+  _naHtmlLista() {
+    const atual = this._naFila[this._naIdx];
+    let faixas, offset = 0, titulo = '', rodape = '';
+
+    if (this._naNatural && atual) {
+      let ini = this._naFila.findIndex(f => f.code === atual.code && f.cap === atual.cap);
+      if (ini < 0) ini = this._naIdx;
+      let fim = ini;
+      while (fim + 1 < this._naFila.length
+        && this._naFila[fim + 1].code === atual.code
+        && this._naFila[fim + 1].cap === atual.cap) fim++;
+      faixas = this._naFila.slice(ini, fim + 1);
+      offset = ini;
+      titulo = `${Dados.nomeCurto(atual.versao, atual.code)} ${atual.cap}`;
+      if (fim + 1 < this._naFila.length) {
+        rodape = `<button class="player-lista-proximo" data-naprox="${fim + 1}">`
+          + `Próximo capítulo <span class="mais-cap">+</span></button>`;
+      }
+    } else {
+      faixas = this._naFila;
+      titulo = this._naNome || 'Lista';
+    }
+
+    const linhas = faixas.map((f, k) => {
+      const i = offset + k;
+      const estado = i === this._naIdx ? 'tocando' : (i < this._naIdx ? 'passou' : '');
+      if (f.nota) {
+        return `<button class="faixa faixa-nota ${estado}" data-nafaixa="${i}">
+          <span class="faixa-num">${i + 1}</span>
+          <span class="faixa-ref">${Leitura.escapar(f.rotulo || 'Anotação')}</span>
+          ${estado === 'tocando' ? '<span class="faixa-agora">tocando</span>' : ''}
+        </button>`;
+      }
+      return this._faixaHTML({ ordem: i + 1, versao: f.versao,
+        nome: Dados.nomeCurto(f.versao, f.code), cap: f.cap, vers: f.vers, estado,
+        attrs: `data-nafaixa="${i}"` });
+    });
+
+    const conta = this._naNatural
+      ? `${faixas.length} versículo${faixas.length > 1 ? 's' : ''}`
+      : `${this._naFila.length} item${this._naFila.length > 1 ? 'ns' : ''} · faltam `
+        + `${Math.max(0, this._naFila.length - this._naIdx - 1)}`;
+
+    return `<div class="player-lista-topo">
+        <span class="player-lista-nome">${Leitura.escapar(titulo)}</span>
+        <span class="player-lista-conta">${conta}</span>
+      </div>
+      <div class="player-lista-rol">${linhas.join('')}${rodape}</div>`;
+  },
+
+  /* ---- espelhos de UI do player (rótulo + sessão de mídia) ---- */
+
+  _naAtualizarPlayer() {
+    const faixa = this._naFila[this._naIdx];
+    const btn = document.getElementById('player-play');
+    if (btn) {
+      const tocando = this._naAtivo && !this.pausado && (this.lendoVers != null || this.lendoNota);
+      btn.querySelector('use').setAttribute('href', tocando ? '#i-pausar' : '#i-play');
+      const rot = tocando ? 'Pausar' : 'Tocar';
+      btn.setAttribute('aria-label', rot); btn.title = rot;
+    }
+    const ref = document.getElementById('player-ref');
+    if (ref && faixa) {
+      ref.textContent = faixa.nota
+        ? (faixa.rotulo || 'Anotação')
+        : `${Dados.nomeCurto(faixa.versao, faixa.code)} ${faixa.cap}:${faixa.vers}`;
+    }
+    if (this._listaAberta) this.desenharListaPlayer();
+    this._naMediaSessionEstado();
+  },
+
+  _naMediaSession() {
+    if (!('mediaSession' in navigator)) return;
+    try {
+      const faixa = this._naFila[this._naIdx];
+      const titulo = faixa
+        ? (faixa.nota ? (faixa.rotulo || 'Anotação')
+          : `${Dados.nomeCurto(faixa.versao, faixa.code)} ${faixa.cap}:${faixa.vers}`)
+        : 'Bíblia';
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: titulo, artist: 'Bíblia',
+        album: this._naNome
+          || (faixa && !faixa.nota ? Dados.nomeCurto(faixa.versao, faixa.code) : 'Leitura'),
+      });
+      const set = (a, fn) => { try { navigator.mediaSession.setActionHandler(a, fn); } catch (e) {} };
+      set('play', () => { if (this.pausado || this.lendoVers == null) this._naAlternarPausa(); });
+      set('pause', () => { if (!this.pausado && this.lendoVers != null) this._naAlternarPausa(); });
+      set('previoustrack', () => this._naPular(-1));
+      set('nexttrack', () => this._naPular(1));
+      navigator.mediaSession.playbackState = 'playing';
+    } catch (e) {}
+  },
+
+  _naMediaSessionEstado() {
+    if (!('mediaSession' in navigator)) return;
+    try {
+      navigator.mediaSession.playbackState =
+        (this._naAtivo && !this.pausado && (this.lendoVers != null || this.lendoNota))
+          ? 'playing' : 'paused';
+    } catch (e) {}
   },
 
   /* Media Session: dá controles na tela de bloqueio / notificação (play, pausa,
