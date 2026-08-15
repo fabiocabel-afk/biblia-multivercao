@@ -340,6 +340,27 @@ html, body { overflow-x: hidden; }
   margin: .2em 0 1.2em;
 }
 
+/* divisão temática ("O Verbo se faz carne"): o cabecinho que anuncia o trecho
+   seguinte, na cor de rubrica dos manuscritos, com mais respiro em cima do que
+   embaixo — como nas Bíblias impressas. Nunca encosta na capitular flutuante. */
+.folha .secao-titulo {
+  clear: both;
+  font-family: var(--fonte-texto);
+  font-style: italic;
+  font-weight: 600;
+  font-size: .95em;
+  line-height: 1.35;
+  color: var(--rubrica);
+  margin: 1.5em 0 .45em;
+}
+
+/* quando o capítulo já abre numa seção, o título fica logo abaixo do nome do
+   livro — aí não precisa de tanto espaço em cima */
+.folha .titulo-livro + .secao-titulo,
+.folha .cap-bloco > .secao-titulo:first-child {
+  margin-top: .3em;
+}
+
 /* a capitular: o numero do capitulo ocupa tres linhas, o texto flui em volta.
    E o gesto mais caracteristico da Biblia impressa. */
 .capitular {

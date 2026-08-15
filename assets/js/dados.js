@@ -280,6 +280,81 @@ const Dados = {
     if (!doCap) return [];
     return doCap[String(vers)] || [];
   },
+
+  /* ============================================================ SEÇÕES =======
+   * Divisões temáticas (títulos como "O Verbo se faz carne") de cada capítulo.
+   * Arquivo por versão em data/secoes/<versao>.json, no formato enxuto:
+   *   { versao, nome_versao, dados: { CODE: { "1": [ {t,i,f}, ... ] } } }
+   *   t = título · i = versículo inicial · f = versículo final
+   * Só os capítulos COM seções entram no arquivo. Carregado sob demanda e
+   * guardado em cache, igual às referências cruzadas. Nem toda versão tem o
+   * arquivo — quando falta, devolvemos vazio sem quebrar nada. */
+  _secoesCache: new Map(),      // versao -> dados (ou null se não existe)
+  _secoesCarregando: new Map(), // versao -> promise em voo
+
+  /** Carrega (uma vez) o arquivo de seções de uma versão. Devolve o objeto
+   *  `dados` (CODE -> capítulos) ou null se a versão não tiver arquivo. */
+  async carregarSecoes(versaoCode) {
+    if (this._secoesCache.has(versaoCode)) return this._secoesCache.get(versaoCode);
+    if (this._secoesCarregando.has(versaoCode)) return this._secoesCarregando.get(versaoCode);
+
+    const p = fetch(`data/secoes/${versaoCode}.json`)
+      .then(r => (r.ok ? r.json() : null))
+      .then(arq => {
+        const dados = arq && arq.dados ? arq.dados : null;
+        this._secoesCache.set(versaoCode, dados);
+        this._secoesCarregando.delete(versaoCode);
+        return dados;
+      })
+      .catch(() => {
+        this._secoesCache.set(versaoCode, null);
+        this._secoesCarregando.delete(versaoCode);
+        return null;
+      });
+
+    this._secoesCarregando.set(versaoCode, p);
+    return p;
+  },
+
+  /** Esta versão tem arquivo de seções? (depois de já ter sido carregada.) */
+  async temSecoes(versaoCode) {
+    const d = await this.carregarSecoes(versaoCode);
+    return !!(d && Object.keys(d).length);
+  },
+
+  /** Seções de UM capítulo. Devolve um array [{titulo, inicio, fim}, ...] já
+   *  ordenado pelo versículo inicial, ou [] se não houver. */
+  async secoes(versaoCode, bookCode, capitulo) {
+    const d = await this.carregarSecoes(versaoCode);
+    if (!d) return [];
+    const livro = d[bookCode];
+    if (!livro) return [];
+    const lista = livro[String(capitulo)];
+    if (!lista || !lista.length) return [];
+    return lista
+      .map(s => ({ titulo: s.t, inicio: s.i, fim: s.f }))
+      .sort((a, b) => a.inicio - b.inicio);
+  },
+
+  /** Todas as seções de um LIVRO inteiro, achatadas e em ordem de leitura, para
+   *  a lista do modo Seções. Cada item traz o capítulo a que pertence.
+   *  Devolve [{capitulo, titulo, inicio, fim}, ...] ou [] se o livro não tiver. */
+  async secoesDoLivro(versaoCode, bookCode) {
+    const d = await this.carregarSecoes(versaoCode);
+    if (!d) return [];
+    const livro = d[bookCode];
+    if (!livro) return [];
+    const saida = [];
+    const capsOrdenados = Object.keys(livro)
+      .map(Number)
+      .sort((a, b) => a - b);
+    for (const cap of capsOrdenados) {
+      for (const s of livro[String(cap)]) {
+        saida.push({ capitulo: cap, titulo: s.t, inicio: s.i, fim: s.f });
+      }
+    }
+    return saida;
+  },
 };
 
 /** Minusculas e sem acento. So para o indice de busca, nunca para exibir. */

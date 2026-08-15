@@ -81,8 +81,12 @@ const Leitura = {
 
   /* ---------------------------------------------------------- desenhar */
 
-  /** Monta o HTML de um capitulo inteiro. */
-  html(versaoCode, livro, capitulo, { comCapitular = true } = {}) {
+  /** Monta o HTML de um capitulo inteiro.
+   *  `secoes` (opcional) e a lista [{titulo, inicio, fim}] das divisoes
+   *  tematicas deste capitulo; quando vem, o titulo de cada secao aparece
+   *  como um cabecalho antes do versiculo em que ela comeca. Sem `secoes`,
+   *  nada muda — a leitura sai igual a de antes. */
+  html(versaoCode, livro, capitulo, { comCapitular = true, secoes = null } = {}) {
     // A capitular (o numero grande do capitulo) aparece nos dois modos, igual.
     // No corrido ela substitui o numero do primeiro versiculo; no "um por linha"
     // o numero do primeiro continua, porque ali cada linha comeca pelo numero.
@@ -91,10 +95,24 @@ const Leitura = {
     const ehInter = Dados.ehInterlinear(versaoCode);   // desenha em blocos palavra-a-palavra
     // versiculos que tem anotacao neste capitulo, para o sinalzinho na tela
     const comNota = Anotacoes.noCapitulo(versificacao, livro.code, capitulo.number);
+
+    // indice rapido: versiculo-de-inicio -> titulo da secao. So os capitulos
+    // com divisoes tematicas trazem `secoes`; nas versoes sem elas, fica vazio.
+    const inicioSecao = new Map();
+    if (Array.isArray(secoes)) {
+      for (const s of secoes) inicioSecao.set(s.inicio, s.titulo);
+    }
+
     const partes = [];
     let lacunas = 0;
 
     capitulo.verses.forEach((v, i) => {
+      // se uma divisao tematica comeca neste versiculo, o titulo dela entra
+      // antes do versiculo, como um cabecalho — igual as Biblias impressas
+      if (inicioSecao.has(v.number)) {
+        partes.push(this.tituloSecaoHTML(inicioSecao.get(v.number)));
+      }
+
       const faixas = Marcadores.faixas(versificacao, livro.code, capitulo.number, v.number);
       const ehPonto = Ponto.eh(versificacao, livro.code, capitulo.number, v.number);
 
@@ -162,6 +180,14 @@ const Leitura = {
     }
 
     return saida;
+  },
+
+  /* O cabecalho de uma divisao tematica ("O Verbo se faz carne"), impresso
+   * entre os versiculos. E so texto — nao entra na selecao nem no "onde parei",
+   * porque nao e versiculo. O data-secao ajuda a rolar ate ele, quando o modo
+   * Secoes mandar abrir a leitura num ponto certo. */
+  tituloSecaoHTML(titulo) {
+    return `<div class="secao-titulo" data-secao="${this.escaparAttr(titulo)}">${this.escapar(titulo)}</div>`;
   },
 
   /* ------------------------------------------------------- marcas no texto

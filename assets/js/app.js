@@ -193,8 +193,13 @@ const App = {
       try { await Dados.carregarLexico(r.livro.lang); } catch {}
     }
 
+    // divisoes tematicas deste capitulo (se a versao tiver): a montagem e
+    // sincrona, entao carregamos antes e passamos prontas, igual ao lexico
+    let secs = [];
+    try { secs = await Dados.secoes(this.versao, r.livro.code, r.capitulo.number); } catch {}
+
     folha.innerHTML = `<p class="titulo-livro ${cap === 1 ? 'abertura' : ''}">${Leitura.escapar(r.livro.name)}</p>`
-      + Leitura.html(this.versao, r.livro, r.capitulo);
+      + Leitura.html(this.versao, r.livro, r.capitulo, { secoes: secs });
 
     this.atualizarBarra();
     Pergaminho.folha(code, cap);   // cada capítulo tem a sua folha no estilo Histórico
@@ -249,8 +254,10 @@ const App = {
         primeiro = r;
         if (Dados.ehOriginal(this.versao)) { try { await Dados.carregarLexico(r.livro.lang); } catch {} }
       }
+      let secsC = [];
+      try { secsC = await Dados.secoes(this.versao, r.livro.code, r.capitulo.number); } catch {}
       blocos.push(`<section class="cap-bloco" data-cap="${n}">`
-        + Leitura.html(this.versao, r.livro, r.capitulo) + `</section>`);
+        + Leitura.html(this.versao, r.livro, r.capitulo, { secoes: secsC }) + `</section>`);
     }
     if (!primeiro) {
       folha.innerHTML = `<div class="estado">Não foi possível abrir ${Dados.nomeCurto(this.versao, code)}.</div>`;
@@ -367,7 +374,7 @@ const App = {
    * que ir() usa), para desenhar a folha vizinha durante o arrasto. */
   _htmlCapitulo(r, cap) {
     return `<p class="titulo-livro ${cap === 1 ? 'abertura' : ''}">${Leitura.escapar(r.livro.name)}</p>`
-      + Leitura.html(this.versao, r.livro, r.capitulo);
+      + Leitura.html(this.versao, r.livro, r.capitulo, { secoes: r._secoes || [] });
   },
 
   /* Pré-carrega os dados dos capítulos anterior e próximo, para o arrasto poder
@@ -378,8 +385,16 @@ const App = {
     for (const a of alvos) {
       const k = `${this.versao}|${a.code}|${a.cap}`;
       if (this._vizCache[k]) continue;
-      try { const r = await Dados.capitulo(this.versao, a.code, a.cap); if (r) this._vizCache[k] = r; }
-      catch {}
+      try {
+        const r = await Dados.capitulo(this.versao, a.code, a.cap);
+        if (r) {
+          // ja deixa as divisoes tematicas prontas: o desenho do vizinho no
+          // arrasto e sincrono e nao poderia esperar o arquivo carregar
+          try { r._secoes = await Dados.secoes(this.versao, r.livro.code, r.capitulo.number); }
+          catch { r._secoes = []; }
+          this._vizCache[k] = r;
+        }
+      } catch {}
     }
   },
 
