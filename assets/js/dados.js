@@ -372,8 +372,8 @@ const Dados = {
    *   'nenhum'          — não mostra nada.
    *  Paráfrases (A Mensagem) nunca recebem subtítulo de outra versão. */
   async secoesParaLeitura(versaoAtiva, bookCode, capitulo) {
+    if (typeof Prefs !== 'undefined' && !Prefs.get('subtitulosLigado')) return [];
     const modo = (typeof Prefs !== 'undefined') ? Prefs.get('subtituloModo') : 'nativo-favorito';
-    if (modo === 'nenhum') return [];
     if (this.SUBTITULOS_SEM.includes(versaoAtiva)) return [];
     const favorito = ((typeof Prefs !== 'undefined') ? Prefs.get('subtituloFavorito') : '') || 'ACF';
 

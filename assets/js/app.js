@@ -2463,85 +2463,84 @@ const App = {
       <p class="contagem">Mostra um sinalzinho ao lado do número quando o
       versículo tem anotação no caderno. Toque nele para abrir as anotações.</p>
 
-      <div class="rotulo-controle" style="margin-top:14px"><span>Exibir subtítulos</span></div>
+      <label class="interruptor"><span>Subtítulos</span>
+        <input type="checkbox" id="ctrl-subtitulos" ${p.subtitulosLigado ? 'checked' : ''}></label>
       <p class="contagem">Os subtítulos temáticos (como “O Verbo se faz carne”)
-      mostrados no meio do texto. Cada tradução pode ter os seus; o favorito
-      preenche onde faltar.</p>
-      <div class="escolha-radio">
-        <label class="opcao-radio">
-          <input type="radio" name="subtitulo-modo" value="nativo" ${p.subtituloModo === 'nativo' ? 'checked' : ''}>
-          <span class="marca-radio"></span>
-          <span class="rotulo-radio"><strong>Só os da própria tradução</strong><span>Cada versão mostra os seus; onde não houver, fica sem</span></span>
-        </label>
-        <label class="opcao-radio">
-          <input type="radio" name="subtitulo-modo" value="nativo-favorito" ${p.subtituloModo === 'nativo-favorito' || !['nativo','favorito','nenhum'].includes(p.subtituloModo) ? 'checked' : ''}>
-          <span class="marca-radio"></span>
-          <span class="rotulo-radio"><strong>Os da tradução e completar com o favorito</strong><span>Usa os próprios e preenche o resto com os do favorito</span></span>
-        </label>
-        <label class="opcao-radio">
-          <input type="radio" name="subtitulo-modo" value="favorito" ${p.subtituloModo === 'favorito' ? 'checked' : ''}>
-          <span class="marca-radio"></span>
-          <span class="rotulo-radio"><strong>Sempre os do favorito</strong><span>Os subtítulos do favorito aparecem em todas as traduções</span></span>
-        </label>
-        <label class="opcao-radio">
-          <input type="radio" name="subtitulo-modo" value="nenhum" ${p.subtituloModo === 'nenhum' ? 'checked' : ''}>
-          <span class="marca-radio"></span>
-          <span class="rotulo-radio"><strong>Não exibir</strong><span>Nenhuma tradução mostra subtítulos</span></span>
-        </label>
-      </div>
+      mostrados no meio do texto. Ligue para escolher como aparecem.</p>
 
-      <div id="bloco-subtitulo-favorito" style="margin-top:12px;${p.subtituloModo === 'nativo-favorito' || p.subtituloModo === 'favorito' || !['nativo','nenhum'].includes(p.subtituloModo) ? '' : 'display:none'}">
-        <div class="rotulo-controle"><span>Subtítulo favorito</span></div>
-        <select id="ctrl-subtitulo-favorito">
-          ${Dados.subtitulosDisponiveis().map(v => `<option value="${v.code}" ${p.subtituloFavorito === v.code ? 'selected' : ''}>${v.rotulo}</option>`).join('')}
-        </select>
-      </div>
+      <div id="bloco-subtitulos" style="${p.subtitulosLigado ? '' : 'display:none'}">
+        <div class="rotulo-controle" style="margin-top:14px"><span>Exibir subtítulos</span></div>
+        <div class="escolha-radio">
+          <label class="opcao-radio">
+            <input type="radio" name="subtitulo-modo" value="nativo" ${p.subtituloModo === 'nativo' ? 'checked' : ''}>
+            <span class="marca-radio"></span>
+            <span class="rotulo-radio"><strong>Só os da própria tradução</strong><span>Cada versão mostra os seus; onde não houver, fica sem</span></span>
+          </label>
+          <label class="opcao-radio">
+            <input type="radio" name="subtitulo-modo" value="nativo-favorito" ${p.subtituloModo === 'nativo' || p.subtituloModo === 'favorito' ? '' : 'checked'}>
+            <span class="marca-radio"></span>
+            <span class="rotulo-radio"><strong>Os da tradução e completar com o favorito</strong><span>Usa os próprios e preenche o resto com os do favorito</span></span>
+          </label>
+          <label class="opcao-radio">
+            <input type="radio" name="subtitulo-modo" value="favorito" ${p.subtituloModo === 'favorito' ? 'checked' : ''}>
+            <span class="marca-radio"></span>
+            <span class="rotulo-radio"><strong>Sempre os do favorito</strong><span>Os subtítulos do favorito aparecem em todas as traduções</span></span>
+          </label>
+        </div>
 
-      <div class="rotulo-controle" style="margin-top:14px"><span>Letra do subtítulo</span></div>
-      <div class="escolha-radio">
-        <label class="opcao-radio">
-          <input type="radio" name="subtitulo-estilo" value="classico" ${p.subtituloEstilo === 'rubricada' || p.subtituloEstilo === 'vermelho' ? '' : 'checked'}>
-          <span class="marca-radio"></span>
-          <span class="rotulo-radio"><strong>Clássica</strong><span>Em negrito e reta, como nas Bíblias impressas</span></span>
-        </label>
-        <label class="opcao-radio">
-          <input type="radio" name="subtitulo-estilo" value="rubricada" ${p.subtituloEstilo === 'rubricada' || p.subtituloEstilo === 'vermelho' ? 'checked' : ''}>
-          <span class="marca-radio"></span>
-          <span class="rotulo-radio"><strong>Rubricada</strong><span>Em itálico, com um traço mais decorado</span></span>
-        </label>
-      </div>
+        <div id="bloco-subtitulo-favorito" style="margin-top:12px;${p.subtituloModo === 'nativo' ? 'display:none' : ''}">
+          <div class="rotulo-controle"><span>Subtítulo favorito</span></div>
+          <select id="ctrl-subtitulo-favorito">
+            ${Dados.subtitulosDisponiveis().map(v => `<option value="${v.code}" ${p.subtituloFavorito === v.code ? 'selected' : ''}>${v.rotulo}</option>`).join('')}
+          </select>
+        </div>
 
-      <div class="rotulo-controle" style="margin-top:14px"><span>Cor do subtítulo</span></div>
-      <div class="escolha-radio">
-        <label class="opcao-radio">
-          <input type="radio" name="subtitulo-cor" value="texto" ${p.subtituloCor === 'vermelho' ? '' : 'checked'}>
-          <span class="marca-radio"></span>
-          <span class="rotulo-radio"><strong>Cor do texto</strong><span>Acompanha a tinta da Bíblia, do preto ao marrom</span></span>
-        </label>
-        <label class="opcao-radio">
-          <input type="radio" name="subtitulo-cor" value="vermelho" ${p.subtituloCor === 'vermelho' ? 'checked' : ''}>
-          <span class="marca-radio"></span>
-          <span class="rotulo-radio"><strong>Vermelho</strong><span>No tom da rubrica dos manuscritos</span></span>
-        </label>
-      </div>
+        <div class="rotulo-controle" style="margin-top:14px"><span>Letra do subtítulo</span></div>
+        <div class="escolha-radio">
+          <label class="opcao-radio">
+            <input type="radio" name="subtitulo-estilo" value="classico" ${p.subtituloEstilo === 'rubricada' || p.subtituloEstilo === 'vermelho' ? '' : 'checked'}>
+            <span class="marca-radio"></span>
+            <span class="rotulo-radio"><strong>Clássica</strong><span>Em negrito e reta, como nas Bíblias impressas</span></span>
+          </label>
+          <label class="opcao-radio">
+            <input type="radio" name="subtitulo-estilo" value="rubricada" ${p.subtituloEstilo === 'rubricada' || p.subtituloEstilo === 'vermelho' ? 'checked' : ''}>
+            <span class="marca-radio"></span>
+            <span class="rotulo-radio"><strong>Rubricada</strong><span>Em itálico, com um traço mais decorado</span></span>
+          </label>
+        </div>
 
-      <div class="rotulo-controle" style="margin-top:14px"><span>Alinhamento do subtítulo</span></div>
-      <div class="escolha-radio">
-        <label class="opcao-radio">
-          <input type="radio" name="subtitulo-alinhamento" value="esquerda" ${p.subtituloAlinhamento === 'esquerda' ? 'checked' : ''}>
-          <span class="marca-radio"></span>
-          <span class="rotulo-radio"><strong>À esquerda</strong></span>
-        </label>
-        <label class="opcao-radio">
-          <input type="radio" name="subtitulo-alinhamento" value="centro" ${p.subtituloAlinhamento === 'esquerda' || p.subtituloAlinhamento === 'direita' ? '' : 'checked'}>
-          <span class="marca-radio"></span>
-          <span class="rotulo-radio"><strong>Centralizado</strong></span>
-        </label>
-        <label class="opcao-radio">
-          <input type="radio" name="subtitulo-alinhamento" value="direita" ${p.subtituloAlinhamento === 'direita' ? 'checked' : ''}>
-          <span class="marca-radio"></span>
-          <span class="rotulo-radio"><strong>À direita</strong></span>
-        </label>
+        <div class="rotulo-controle" style="margin-top:14px"><span>Cor do subtítulo</span></div>
+        <div class="escolha-radio">
+          <label class="opcao-radio">
+            <input type="radio" name="subtitulo-cor" value="texto" ${p.subtituloCor === 'vermelho' ? '' : 'checked'}>
+            <span class="marca-radio"></span>
+            <span class="rotulo-radio"><strong>Cor do texto</strong><span>Acompanha a tinta da Bíblia, do preto ao marrom</span></span>
+          </label>
+          <label class="opcao-radio">
+            <input type="radio" name="subtitulo-cor" value="vermelho" ${p.subtituloCor === 'vermelho' ? 'checked' : ''}>
+            <span class="marca-radio"></span>
+            <span class="rotulo-radio"><strong>Vermelho</strong><span>No tom da rubrica dos manuscritos</span></span>
+          </label>
+        </div>
+
+        <div class="rotulo-controle" style="margin-top:14px"><span>Alinhamento do subtítulo</span></div>
+        <div class="escolha-radio">
+          <label class="opcao-radio">
+            <input type="radio" name="subtitulo-alinhamento" value="esquerda" ${p.subtituloAlinhamento === 'esquerda' ? 'checked' : ''}>
+            <span class="marca-radio"></span>
+            <span class="rotulo-radio"><strong>À esquerda</strong></span>
+          </label>
+          <label class="opcao-radio">
+            <input type="radio" name="subtitulo-alinhamento" value="centro" ${p.subtituloAlinhamento === 'esquerda' || p.subtituloAlinhamento === 'direita' ? '' : 'checked'}>
+            <span class="marca-radio"></span>
+            <span class="rotulo-radio"><strong>Centralizado</strong></span>
+          </label>
+          <label class="opcao-radio">
+            <input type="radio" name="subtitulo-alinhamento" value="direita" ${p.subtituloAlinhamento === 'direita' ? 'checked' : ''}>
+            <span class="marca-radio"></span>
+            <span class="rotulo-radio"><strong>À direita</strong></span>
+          </label>
+        </div>
       </div>
 
       <label class="interruptor"><span>Modo escuro</span>
@@ -2782,10 +2781,21 @@ const App = {
       Leitura.aplicarModoNotas(e.target.checked);
     };
 
-    // modo de exibição dos subtítulos (as quatro opções). Muda o conteúdo, então
+    // interruptor-chave dos subtítulos: liga/desliga o grupo inteiro. Desligado,
+    // esconde todas as opções e a leitura fica sem subtítulos.
+    const subtitulos = achar('ctrl-subtitulos');
+    const blocoSub = corpo.querySelector('#bloco-subtitulos');
+    if (subtitulos) subtitulos.onchange = e => {
+      Prefs.set('subtitulosLigado', e.target.checked);
+      if (blocoSub) blocoSub.style.display = e.target.checked ? '' : 'none';
+      this._vizCache = {};
+      this.ir(this.code, this.cap, null);
+    };
+
+    // modo de exibição dos subtítulos (as três opções). Muda o conteúdo, então
     // limpa os vizinhos e redesenha a leitura. O menu de favorito só aparece nos
-    // modos que recorrem a ele.
-    const usaFavorito = m => m === 'nativo-favorito' || m === 'favorito';
+    // modos que recorrem a ele (todos menos "só os da própria tradução").
+    const usaFavorito = m => m !== 'nativo';
     const blocoFav = corpo.querySelector('#bloco-subtitulo-favorito');
     corpo.querySelectorAll('input[name="subtitulo-modo"]').forEach(el => {
       el.onchange = ev => {

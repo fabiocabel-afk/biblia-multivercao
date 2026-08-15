@@ -63,7 +63,8 @@ const Prefs = {
     versiculoPorLinha: false,  // false = texto corrido; true = um versiculo por linha
     refsFixas: false,          // painel de referências dividindo a tela; desligado por padrão
     mostrarNotas: true,        // sinalzinho no versículo quando há anotação no caderno
-    subtituloModo: 'nativo-favorito', // 'nativo' | 'nativo-favorito' | 'favorito' | 'nenhum'
+    subtitulosLigado: true,        // chave geral do grupo de subtítulos
+    subtituloModo: 'nativo-favorito', // 'nativo' | 'nativo-favorito' | 'favorito'
     subtituloFavorito: 'ACF',      // versão-fonte usada quando o modo recorre ao favorito
     subtituloEstilo: 'classico',   // formato da letra: 'classico' (negrito) | 'rubricada' (itálico)
     subtituloCor: 'texto',         // 'texto' (acompanha a tinta) | 'vermelho' (rubrica)
