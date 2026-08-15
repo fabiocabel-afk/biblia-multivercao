@@ -336,30 +336,60 @@ const Dados = {
       .sort((a, b) => a.inicio - b.inicio);
   },
 
-  /* Qual versão serve de fonte dos subtítulos quando a leitura pede. Por ora é
-   * sempre a ACF (o "favorito de fábrica"); mais adiante isto vira a escolha
-   * de nativo/favorito das quatro opções. */
-  SUBTITULOS_FONTE: 'ACF',
+  /* Versões que possuem arquivo de subtítulos, na ordem em que aparecem no menu
+   * de favorito. Conforme novas extrações entram em data/secoes/, acrescente
+   * o código aqui. */
+  SUBTITULOS_DISPONIVEIS: ['ACF', 'ARA', 'NVI'],
   /* Paráfrases cujos versículos não casam com os das demais — nunca recebem
    * subtítulo de outra versão. A Mensagem entra aqui; o código exato pode
    * ser ajustado quando entrar no app. */
   SUBTITULOS_SEM: ['MSG', 'TM', 'BM'],
 
-  /** Os subtítulos que a leitura deve mostrar para a versão ATIVA, já
-   *  respeitando a preferência geral de ligar/desligar. Enquanto o sistema
-   *  completo não chega, a fonte é sempre a ACF, e só entra nas versões que
-   *  numeram igual a ela (as de numeração diferente ficam para a fase da
-   *  conversão). Devolve [] quando desligado, quando é paráfrase, ou quando a
-   *  numeração não bate. */
-  async secoesParaLeitura(versaoAtiva, bookCode, capitulo) {
-    const ligado = (typeof Prefs !== 'undefined') ? Prefs.get('subtitulos') : true;
-    if (!ligado) return [];
-    if (this.SUBTITULOS_SEM.includes(versaoAtiva)) return [];
-    const fonte = this.SUBTITULOS_FONTE;
-    // por ora só onde a numeração casa com a da fonte (a conversão das de
-    // numeração diferente vem depois, junto com as quatro opções)
-    if (this.versificacaoDe(versaoAtiva) !== this.versificacaoDe(fonte)) return [];
+  /** Lista para o menu de favorito: [{code, rotulo}] das versões com subtítulo. */
+  subtitulosDisponiveis() {
+    return this.SUBTITULOS_DISPONIVEIS.map(code => ({
+      code,
+      rotulo: (this.versao(code) && this.versao(code).name) || code,
+    }));
+  },
+
+  /* Seções de uma FONTE aplicadas à versão ATIVA. As nativas já vêm na
+   * numeração da própria versão, então entram direto; uma fonte diferente só
+   * entra quando numera igual à versão ativa (a conversão das de numeração
+   * diferente, como as católicas, vem na fase seguinte). */
+  async _secoesDeFonte(fonte, versaoAtiva, bookCode, capitulo) {
+    if (fonte !== versaoAtiva &&
+        this.versificacaoDe(versaoAtiva) !== this.versificacaoDe(fonte)) return [];
     return this.secoes(fonte, bookCode, capitulo);
+  },
+
+  /** Os subtítulos que a leitura deve mostrar para a versão ATIVA, conforme o
+   *  modo escolhido nos ajustes:
+   *   'nativo'          — só os da própria versão; sem completar.
+   *   'nativo-favorito' — os da própria versão; onde o capítulo não tiver,
+   *                       completa com os do favorito.
+   *   'favorito'        — sempre os do favorito, em qualquer versão.
+   *   'nenhum'          — não mostra nada.
+   *  Paráfrases (A Mensagem) nunca recebem subtítulo de outra versão. */
+  async secoesParaLeitura(versaoAtiva, bookCode, capitulo) {
+    const modo = (typeof Prefs !== 'undefined') ? Prefs.get('subtituloModo') : 'nativo-favorito';
+    if (modo === 'nenhum') return [];
+    if (this.SUBTITULOS_SEM.includes(versaoAtiva)) return [];
+    const favorito = ((typeof Prefs !== 'undefined') ? Prefs.get('subtituloFavorito') : '') || 'ACF';
+
+    if (modo === 'favorito') {
+      return this._secoesDeFonte(favorito, versaoAtiva, bookCode, capitulo);
+    }
+
+    // as próprias da versão ativa (numeração própria, entram direto)
+    const proprias = await this.secoes(versaoAtiva, bookCode, capitulo);
+    if (modo === 'nativo') return proprias;
+
+    // 'nativo-favorito': usa as próprias; se este capítulo não tem nenhuma,
+    // completa com as do favorito
+    if (proprias.length) return proprias;
+    if (favorito === versaoAtiva) return [];
+    return this._secoesDeFonte(favorito, versaoAtiva, bookCode, capitulo);
   },
 
   /** Todas as seções de um LIVRO inteiro, achatadas e em ordem de leitura, para

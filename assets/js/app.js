@@ -2463,11 +2463,39 @@ const App = {
       <p class="contagem">Mostra um sinalzinho ao lado do número quando o
       versículo tem anotação no caderno. Toque nele para abrir as anotações.</p>
 
-      <label class="interruptor"><span>Subtítulos</span>
-        <input type="checkbox" id="ctrl-subtitulos" ${p.subtitulos ? 'checked' : ''}></label>
-      <p class="contagem">Mostra os subtítulos temáticos (como “O Verbo se faz
-      carne”) no meio do texto. Por enquanto vêm da Almeida Corrigida Fiel e
-      aparecem em todas as versões que numeram do mesmo jeito que ela.</p>
+      <div class="rotulo-controle" style="margin-top:14px"><span>Exibir subtítulos</span></div>
+      <p class="contagem">Os subtítulos temáticos (como “O Verbo se faz carne”)
+      mostrados no meio do texto. Cada tradução pode ter os seus; o favorito
+      preenche onde faltar.</p>
+      <div class="escolha-radio">
+        <label class="opcao-radio">
+          <input type="radio" name="subtitulo-modo" value="nativo" ${p.subtituloModo === 'nativo' ? 'checked' : ''}>
+          <span class="marca-radio"></span>
+          <span class="rotulo-radio"><strong>Só os da própria tradução</strong><span>Cada versão mostra os seus; onde não houver, fica sem</span></span>
+        </label>
+        <label class="opcao-radio">
+          <input type="radio" name="subtitulo-modo" value="nativo-favorito" ${p.subtituloModo === 'nativo-favorito' || !['nativo','favorito','nenhum'].includes(p.subtituloModo) ? 'checked' : ''}>
+          <span class="marca-radio"></span>
+          <span class="rotulo-radio"><strong>Os da tradução e completar com o favorito</strong><span>Usa os próprios e preenche o resto com os do favorito</span></span>
+        </label>
+        <label class="opcao-radio">
+          <input type="radio" name="subtitulo-modo" value="favorito" ${p.subtituloModo === 'favorito' ? 'checked' : ''}>
+          <span class="marca-radio"></span>
+          <span class="rotulo-radio"><strong>Sempre os do favorito</strong><span>Os subtítulos do favorito aparecem em todas as traduções</span></span>
+        </label>
+        <label class="opcao-radio">
+          <input type="radio" name="subtitulo-modo" value="nenhum" ${p.subtituloModo === 'nenhum' ? 'checked' : ''}>
+          <span class="marca-radio"></span>
+          <span class="rotulo-radio"><strong>Não exibir</strong><span>Nenhuma tradução mostra subtítulos</span></span>
+        </label>
+      </div>
+
+      <div id="bloco-subtitulo-favorito" style="margin-top:12px;${p.subtituloModo === 'nativo-favorito' || p.subtituloModo === 'favorito' || !['nativo','nenhum'].includes(p.subtituloModo) ? '' : 'display:none'}">
+        <div class="rotulo-controle"><span>Subtítulo favorito</span></div>
+        <select id="ctrl-subtitulo-favorito">
+          ${Dados.subtitulosDisponiveis().map(v => `<option value="${v.code}" ${p.subtituloFavorito === v.code ? 'selected' : ''}>${v.rotulo}</option>`).join('')}
+        </select>
+      </div>
 
       <div class="rotulo-controle" style="margin-top:14px"><span>Letra do subtítulo</span></div>
       <div class="escolha-radio">
@@ -2754,11 +2782,26 @@ const App = {
       Leitura.aplicarModoNotas(e.target.checked);
     };
 
-    const subtitulos = achar('ctrl-subtitulos');
-    if (subtitulos) subtitulos.onchange = e => {
-      Prefs.set('subtitulos', e.target.checked);
-      this._vizCache = {};                 // vizinhos do arrasto refazem com/sem títulos
-      this.ir(this.code, this.cap, null);  // redesenha a leitura atual
+    // modo de exibição dos subtítulos (as quatro opções). Muda o conteúdo, então
+    // limpa os vizinhos e redesenha a leitura. O menu de favorito só aparece nos
+    // modos que recorrem a ele.
+    const usaFavorito = m => m === 'nativo-favorito' || m === 'favorito';
+    const blocoFav = corpo.querySelector('#bloco-subtitulo-favorito');
+    corpo.querySelectorAll('input[name="subtitulo-modo"]').forEach(el => {
+      el.onchange = ev => {
+        if (!ev.target.checked) return;
+        Prefs.set('subtituloModo', ev.target.value);
+        if (blocoFav) blocoFav.style.display = usaFavorito(ev.target.value) ? '' : 'none';
+        this._vizCache = {};
+        this.ir(this.code, this.cap, null);
+      };
+    });
+
+    const favorito = achar('ctrl-subtitulo-favorito');
+    if (favorito) favorito.onchange = e => {
+      Prefs.set('subtituloFavorito', e.target.value);
+      this._vizCache = {};
+      this.ir(this.code, this.cap, null);
     };
 
     // estilo e alinhamento do subtítulo: só trocam um atributo no raiz, então
