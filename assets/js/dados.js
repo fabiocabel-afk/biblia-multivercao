@@ -392,6 +392,22 @@ const Dados = {
     return this._secoesDeFonte(favorito, versaoAtiva, bookCode, capitulo);
   },
 
+  /** Lista de subtítulos de um LIVRO inteiro para a tela de navegação, já
+   *  resolvida pelo modo/favorito atual (a mesma regra da leitura). Cada item:
+   *  {capitulo, titulo, inicio, fim}, em ordem de leitura. Vazio se desligado
+   *  ou se não houver subtítulo para o livro no modo escolhido. */
+  async secoesDoLivroParaNavegacao(versaoAtiva, bookCode) {
+    const info = this.infoLivro(versaoAtiva, bookCode);
+    const total = info ? info.chapters : 0;
+    const saida = [];
+    for (let c = 1; c <= total; c++) {
+      let secs = [];
+      try { secs = await this.secoesParaLeitura(versaoAtiva, bookCode, c); } catch {}
+      for (const s of secs) saida.push({ capitulo: c, titulo: s.titulo, inicio: s.inicio, fim: s.fim });
+    }
+    return saida;
+  },
+
   /** Todas as seções de um LIVRO inteiro, achatadas e em ordem de leitura, para
    *  a lista do modo Seções. Cada item traz o capítulo a que pertence.
    *  Devolve [{capitulo, titulo, inicio, fim}, ...] ou [] se o livro não tiver. */

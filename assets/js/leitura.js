@@ -127,7 +127,7 @@ const Leitura = {
       // se uma divisao tematica comeca neste versiculo, o titulo dela entra
       // antes do versiculo, como um cabecalho — igual as Biblias impressas
       if (inicioSecao.has(v.number)) {
-        partes.push(this.tituloSecaoHTML(inicioSecao.get(v.number)));
+        partes.push(this.tituloSecaoHTML(inicioSecao.get(v.number), v.number));
       }
 
       const faixas = Marcadores.faixas(versificacao, livro.code, capitulo.number, v.number);
@@ -201,10 +201,11 @@ const Leitura = {
 
   /* O cabecalho de uma divisao tematica ("O Verbo se faz carne"), impresso
    * entre os versiculos. E so texto — nao entra na selecao nem no "onde parei",
-   * porque nao e versiculo. O data-secao ajuda a rolar ate ele, quando o modo
-   * Secoes mandar abrir a leitura num ponto certo. */
-  tituloSecaoHTML(titulo) {
-    return `<div class="secao-titulo" data-secao="${this.escaparAttr(titulo)}">${this.escapar(titulo)}</div>`;
+   * porque nao e versiculo. O data-secao guarda o titulo; o data-inicio guarda
+   * o versiculo em que a secao comeca, para o modo Subtitulos rolar ate aqui. */
+  tituloSecaoHTML(titulo, inicio) {
+    const attrInicio = (inicio != null) ? ` data-inicio="${inicio}"` : '';
+    return `<div class="secao-titulo" data-secao="${this.escaparAttr(titulo)}"${attrInicio}>${this.escapar(titulo)}</div>`;
   },
 
   /* ------------------------------------------------------- marcas no texto

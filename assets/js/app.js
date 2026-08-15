@@ -153,8 +153,8 @@ const App = {
 
   /* ============================================================== navegar */
 
-  async ir(code, cap, vers, { registrar = true, desliza = 0 } = {}) {
-    if (Prefs.get('paginaModo') === 'continuo') return this._abrirContinuo(code, cap, vers, desliza);
+  async ir(code, cap, vers, { registrar = true, desliza = 0, alvoTitulo = false } = {}) {
+    if (Prefs.get('paginaModo') === 'continuo') return this._abrirContinuo(code, cap, vers, desliza, alvoTitulo);
     // navegar por conta própria descarta a volta rápida; só o pulo para a
     // referência (que ativa a flag) a preserva, para poder voltar depois
     if (!this._pulandoDeReferencia && this.origemDaReferencia) {
@@ -211,10 +211,17 @@ const App = {
     this._marcarCortados();   // no modo abreviar, marca as palavras que cortaram
 
     if (vers) {
-      const alvo = folha.querySelector(`.v[data-vers="${vers}"]`);
-      if (alvo) {
-        alvo.classList.add('foco');
-        alvo.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      // no modo Subtitulos, a mira e o proprio cabecalho da secao (topo);
+      // nos demais casos, o versiculo (centralizado, com destaque)
+      const titulo = alvoTitulo && folha.querySelector(`.secao-titulo[data-inicio="${vers}"]`);
+      if (titulo) {
+        titulo.scrollIntoView({ block: 'start', behavior: 'smooth' });
+      } else {
+        const alvo = folha.querySelector(`.v[data-vers="${vers}"]`);
+        if (alvo) {
+          alvo.classList.add('foco');
+          alvo.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        }
       }
     }
 
@@ -240,7 +247,7 @@ const App = {
    * um debaixo do outro. O nome do livro aparece uma vez no topo; cada capítulo
    * começa pela sua capitular (o número grande). O deslize lateral troca de livro
    * (ver passo/_alvoPasso). A edição de versículo fica no modo com quebra (3b). */
-  async _abrirContinuo(code, capAlvo, vers, desliza = 0) {
+  async _abrirContinuo(code, capAlvo, vers, desliza = 0, alvoTitulo = false) {
     if (!this._pulandoDeReferencia && this.origemDaReferencia) this.esconderVoltarOrigem();
     const folha = document.getElementById('folha');
     folha.innerHTML = '<div class="estado">Abrindo…</div>';
@@ -293,8 +300,14 @@ const App = {
       window.scrollTo(0, 0);
     }
     if (vers && alvoBloco) {
-      const alvo = alvoBloco.querySelector(`.v[data-vers="${vers}"]`);
-      if (alvo) { alvo.classList.add('foco'); alvo.scrollIntoView({ block: 'center' }); }
+      const titulo = alvoTitulo && alvoBloco.querySelector(`.secao-titulo[data-inicio="${vers}"]`);
+      if (titulo) {
+        const y = titulo.getBoundingClientRect().top + window.scrollY - topoBarra - 8;
+        window.scrollTo(0, Math.max(0, y));
+      } else {
+        const alvo = alvoBloco.querySelector(`.v[data-vers="${vers}"]`);
+        if (alvo) { alvo.classList.add('foco'); alvo.scrollIntoView({ block: 'center' }); }
+      }
     }
     this._marcarCortados();
     this._prefetchVizinhos();
@@ -1007,8 +1020,39 @@ const App = {
     });
   },
 
-  desenharCapitulos(code) {
+  desenharCapitulos(code, aba) {
+    // aba: 'capitulos' (grade de números, padrão) ou 'subtitulos' (lista de
+    // divisões temáticas do livro). Ao entrar num livro sempre começa em
+    // 'capitulos'; o alternador troca sem sair da tela.
+    this._abaLivro = aba || 'capitulos';
     const corpo = document.getElementById('corpo-arvore');
+    const info = Dados.infoLivro(this.versao, code);
+    const nome = info ? info.name : code;
+
+    const abaSel = this._abaLivro;
+    corpo.innerHTML = `
+      <button class="linha" id="voltar-livros" style="margin-bottom:12px">
+        ← Todos os livros</button>
+      <div class="alt-livro">
+        <button data-aba="capitulos" class="${abaSel === 'capitulos' ? 'ativa' : ''}">Capítulos</button>
+        <button data-aba="subtitulos" class="${abaSel === 'subtitulos' ? 'ativa' : ''}">Subtítulos</button>
+      </div>
+      <div id="conteudo-livro"></div>`;
+
+    document.getElementById('titulo-arvore').textContent = nome;
+    document.getElementById('voltar-livros').onclick = () => this.desenharArvore();
+    corpo.querySelectorAll('.alt-livro [data-aba]').forEach(el => {
+      el.onclick = () => this.desenharCapitulos(code, el.dataset.aba);
+    });
+
+    if (abaSel === 'subtitulos') this._preencherSubtitulosDoLivro(code);
+    else this._preencherCapitulosDoLivro(code);
+  },
+
+  /* A grade de números de capítulo (conteúdo da aba Capítulos). */
+  _preencherCapitulosDoLivro(code) {
+    const alvo = document.getElementById('conteudo-livro');
+    if (!alvo) return;
     const info = Dados.infoLivro(this.versao, code);
     const n = info ? info.chapters : 0;
     const deutero = info && info.deutero_sections ? info.deutero_sections.chapters : null;
@@ -1027,16 +1071,53 @@ const App = {
          Não existem nas versões protestantes.</p>`
       : '';
 
-    corpo.innerHTML = `
-      <button class="linha" id="voltar-livros" style="margin-bottom:12px">
-        ← Todos os livros</button>
-      <div class="grupo"><h3>${info ? info.name : code}</h3>
+    alvo.innerHTML = `<div class="grupo"><h3>${info ? info.name : code}</h3>
       <div class="grade">${botoes.join('')}</div>${nota}</div>`;
 
-    document.getElementById('titulo-arvore').textContent = info ? info.name : code;
-    document.getElementById('voltar-livros').onclick = () => this.desenharArvore();
-    corpo.querySelectorAll('[data-cap]').forEach(el => {
+    alvo.querySelectorAll('[data-cap]').forEach(el => {
       el.onclick = () => this.desenharVersiculosDoSeletor(code, +el.dataset.cap);
+    });
+  },
+
+  /* A lista de subtítulos do livro inteiro (conteúdo da aba Subtítulos): título
+   * à esquerda, capítulo:versículos à direita. Tocar abre a leitura rolando até
+   * o próprio cabeçalho da seção. */
+  async _preencherSubtitulosDoLivro(code) {
+    const alvo = document.getElementById('conteudo-livro');
+    if (!alvo) return;
+    const info = Dados.infoLivro(this.versao, code);
+    const nome = info ? info.name : code;
+    alvo.innerHTML = '<div class="estado">Carregando…</div>';
+
+    let lista = [];
+    try { lista = await Dados.secoesDoLivroParaNavegacao(this.versao, code); } catch {}
+
+    if (!lista.length) {
+      const ligado = (typeof Prefs !== 'undefined') ? Prefs.get('subtitulosLigado') : true;
+      const msg = ligado
+        ? `${nome} não tem subtítulos nesta versão. Experimente o modo “completar com o favorito”, nos ajustes.`
+        : `Os subtítulos estão desligados. Ligue-os nos ajustes para navegar por eles.`;
+      alvo.innerHTML = `<p class="contagem" style="margin-top:6px">${msg}</p>`;
+      return;
+    }
+
+    const linhas = lista.map(s => {
+      const ref = s.inicio === s.fim ? `${s.capitulo}:${s.inicio}` : `${s.capitulo}:${s.inicio}-${s.fim}`;
+      return `<button class="linha-secao" data-cap="${s.capitulo}" data-ini="${s.inicio}">
+        <span class="secao-nome">${Leitura.escapar(s.titulo)}</span>
+        <span class="secao-ref">${ref}</span></button>`;
+    });
+
+    alvo.innerHTML = `<div class="grupo"><h3>${nome} — subtítulos</h3>
+      <div class="lista-secoes">${linhas.join('')}</div></div>`;
+
+    alvo.querySelectorAll('.linha-secao').forEach(el => {
+      el.onclick = () => {
+        const cap = +el.dataset.cap;
+        const ini = +el.dataset.ini;
+        this.fecharPaineis();
+        this.ir(code, cap, ini, { alvoTitulo: true });
+      };
     });
   },
 
