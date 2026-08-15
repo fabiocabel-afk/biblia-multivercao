@@ -336,6 +336,32 @@ const Dados = {
       .sort((a, b) => a.inicio - b.inicio);
   },
 
+  /* Qual versão serve de fonte dos subtítulos quando a leitura pede. Por ora é
+   * sempre a ACF (o "favorito de fábrica"); mais adiante isto vira a escolha
+   * de nativo/favorito das quatro opções. */
+  SUBTITULOS_FONTE: 'ACF',
+  /* Paráfrases cujos versículos não casam com os das demais — nunca recebem
+   * subtítulo de outra versão. A Mensagem entra aqui; o código exato pode
+   * ser ajustado quando entrar no app. */
+  SUBTITULOS_SEM: ['MSG', 'TM', 'BM'],
+
+  /** Os subtítulos que a leitura deve mostrar para a versão ATIVA, já
+   *  respeitando a preferência geral de ligar/desligar. Enquanto o sistema
+   *  completo não chega, a fonte é sempre a ACF, e só entra nas versões que
+   *  numeram igual a ela (as de numeração diferente ficam para a fase da
+   *  conversão). Devolve [] quando desligado, quando é paráfrase, ou quando a
+   *  numeração não bate. */
+  async secoesParaLeitura(versaoAtiva, bookCode, capitulo) {
+    const ligado = (typeof Prefs !== 'undefined') ? Prefs.get('subtitulos') : true;
+    if (!ligado) return [];
+    if (this.SUBTITULOS_SEM.includes(versaoAtiva)) return [];
+    const fonte = this.SUBTITULOS_FONTE;
+    // por ora só onde a numeração casa com a da fonte (a conversão das de
+    // numeração diferente vem depois, junto com as quatro opções)
+    if (this.versificacaoDe(versaoAtiva) !== this.versificacaoDe(fonte)) return [];
+    return this.secoes(fonte, bookCode, capitulo);
+  },
+
   /** Todas as seções de um LIVRO inteiro, achatadas e em ordem de leitura, para
    *  a lista do modo Seções. Cada item traz o capítulo a que pertence.
    *  Devolve [{capitulo, titulo, inicio, fim}, ...] ou [] se o livro não tiver. */

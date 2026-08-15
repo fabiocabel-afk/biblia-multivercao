@@ -341,18 +341,40 @@ html, body { overflow-x: hidden; }
 }
 
 /* divisão temática ("O Verbo se faz carne"): o cabecinho que anuncia o trecho
-   seguinte, na cor de rubrica dos manuscritos, com mais respiro em cima do que
-   embaixo — como nas Bíblias impressas. Nunca encosta na capitular flutuante. */
+   seguinte. A base traz o que é comum; o formato da letra (peso/itálico), a cor
+   e o alinhamento vêm de atributos independentes no raiz, que o usuário escolhe
+   nos ajustes. Nunca encosta na capitular flutuante. */
 .folha .secao-titulo {
   clear: both;
   font-family: var(--fonte-texto);
-  font-style: italic;
-  font-weight: 600;
   font-size: .95em;
   line-height: 1.35;
-  color: var(--rubrica);
   margin: 1.5em 0 .45em;
+  text-align: center;          /* padrão; sobrescrito pelo alinhamento escolhido */
+  color: var(--tinta);         /* padrão; sobrescrito pela cor escolhida */
+  font-weight: 700;
+  font-style: normal;
 }
+
+/* formato da letra — só peso e itálico, sem mexer na cor */
+[data-subtitulo-estilo='classico'] .folha .secao-titulo {
+  font-weight: 700;
+  font-style: normal;
+}
+[data-subtitulo-estilo='rubricada'] .folha .secao-titulo {
+  font-weight: 600;
+  font-style: italic;
+}
+
+/* cor — independente do formato. "texto" acompanha a tinta da Bíblia (que muda
+   com a temperatura do papel e o tema); "vermelho" é a rubrica dos manuscritos */
+[data-subtitulo-cor='texto'] .folha .secao-titulo    { color: var(--tinta); }
+[data-subtitulo-cor='vermelho'] .folha .secao-titulo { color: var(--rubrica); }
+
+/* alinhamentos */
+[data-subtitulo-alinhamento='esquerda'] .folha .secao-titulo { text-align: left; }
+[data-subtitulo-alinhamento='centro']   .folha .secao-titulo { text-align: center; }
+[data-subtitulo-alinhamento='direita']  .folha .secao-titulo { text-align: right; }
 
 /* quando o capítulo já abre numa seção, o título fica logo abaixo do nome do
    livro — aí não precisa de tanto espaço em cima */

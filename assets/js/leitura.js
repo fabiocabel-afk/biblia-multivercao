@@ -64,6 +64,23 @@ const Leitura = {
     document.documentElement.dataset.notas = mostrar ? 'sim' : 'nao';
   },
 
+  /* Aparencia dos subtitulos tematicos. O CSS reage aos atributos no raiz, entao
+   * trocar aqui muda na hora, sem redesenhar o texto. Formato da letra, cor e
+   * alinhamento sao independentes. */
+  aplicarSubtituloEstilo(estilo) {
+    // 'vermelho' era o nome antigo, quando cor e formato vinham juntos
+    const e = (estilo === 'vermelho') ? 'rubricada' : (estilo || 'classico');
+    document.documentElement.dataset.subtituloEstilo = e;
+  },
+
+  aplicarSubtituloCor(cor) {
+    document.documentElement.dataset.subtituloCor = cor || 'texto';
+  },
+
+  aplicarSubtituloAlinhamento(alinhamento) {
+    document.documentElement.dataset.subtituloAlinhamento = alinhamento || 'centro';
+  },
+
   aplicarFonte(px) {
     document.documentElement.style.setProperty('--corpo', px + 'px');
   },

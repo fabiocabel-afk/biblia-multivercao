@@ -44,6 +44,9 @@ const App = {
     Leitura.aplicarFonte(p.fonte);
     Leitura.aplicarModoVersiculo(p.versiculoPorLinha);
     Leitura.aplicarModoNotas(p.mostrarNotas);
+    Leitura.aplicarSubtituloEstilo(p.subtituloEstilo);
+    Leitura.aplicarSubtituloCor(p.subtituloCor);
+    Leitura.aplicarSubtituloAlinhamento(p.subtituloAlinhamento);
     this.aplicarInterlinear(p.interlinearTranslit, p.interlinearInfo, p.interlinearAbrev);
     this.aplicarRefsFixas(p.refsFixas);
 
@@ -193,10 +196,10 @@ const App = {
       try { await Dados.carregarLexico(r.livro.lang); } catch {}
     }
 
-    // divisoes tematicas deste capitulo (se a versao tiver): a montagem e
-    // sincrona, entao carregamos antes e passamos prontas, igual ao lexico
+    // divisoes tematicas deste capitulo (se ligadas): a montagem e sincrona,
+    // entao carregamos antes e passamos prontas, igual ao lexico
     let secs = [];
-    try { secs = await Dados.secoes(this.versao, r.livro.code, r.capitulo.number); } catch {}
+    try { secs = await Dados.secoesParaLeitura(this.versao, r.livro.code, r.capitulo.number); } catch {}
 
     folha.innerHTML = `<p class="titulo-livro ${cap === 1 ? 'abertura' : ''}">${Leitura.escapar(r.livro.name)}</p>`
       + Leitura.html(this.versao, r.livro, r.capitulo, { secoes: secs });
@@ -255,7 +258,7 @@ const App = {
         if (Dados.ehOriginal(this.versao)) { try { await Dados.carregarLexico(r.livro.lang); } catch {} }
       }
       let secsC = [];
-      try { secsC = await Dados.secoes(this.versao, r.livro.code, r.capitulo.number); } catch {}
+      try { secsC = await Dados.secoesParaLeitura(this.versao, r.livro.code, r.capitulo.number); } catch {}
       blocos.push(`<section class="cap-bloco" data-cap="${n}">`
         + Leitura.html(this.versao, r.livro, r.capitulo, { secoes: secsC }) + `</section>`);
     }
@@ -390,7 +393,7 @@ const App = {
         if (r) {
           // ja deixa as divisoes tematicas prontas: o desenho do vizinho no
           // arrasto e sincrono e nao poderia esperar o arquivo carregar
-          try { r._secoes = await Dados.secoes(this.versao, r.livro.code, r.capitulo.number); }
+          try { r._secoes = await Dados.secoesParaLeitura(this.versao, r.livro.code, r.capitulo.number); }
           catch { r._secoes = []; }
           this._vizCache[k] = r;
         }
@@ -2460,6 +2463,59 @@ const App = {
       <p class="contagem">Mostra um sinalzinho ao lado do número quando o
       versículo tem anotação no caderno. Toque nele para abrir as anotações.</p>
 
+      <label class="interruptor"><span>Subtítulos</span>
+        <input type="checkbox" id="ctrl-subtitulos" ${p.subtitulos ? 'checked' : ''}></label>
+      <p class="contagem">Mostra os subtítulos temáticos (como “O Verbo se faz
+      carne”) no meio do texto. Por enquanto vêm da Almeida Corrigida Fiel e
+      aparecem em todas as versões que numeram do mesmo jeito que ela.</p>
+
+      <div class="rotulo-controle" style="margin-top:14px"><span>Letra do subtítulo</span></div>
+      <div class="escolha-radio">
+        <label class="opcao-radio">
+          <input type="radio" name="subtitulo-estilo" value="classico" ${p.subtituloEstilo === 'rubricada' || p.subtituloEstilo === 'vermelho' ? '' : 'checked'}>
+          <span class="marca-radio"></span>
+          <span class="rotulo-radio"><strong>Clássica</strong><span>Em negrito e reta, como nas Bíblias impressas</span></span>
+        </label>
+        <label class="opcao-radio">
+          <input type="radio" name="subtitulo-estilo" value="rubricada" ${p.subtituloEstilo === 'rubricada' || p.subtituloEstilo === 'vermelho' ? 'checked' : ''}>
+          <span class="marca-radio"></span>
+          <span class="rotulo-radio"><strong>Rubricada</strong><span>Em itálico, com um traço mais decorado</span></span>
+        </label>
+      </div>
+
+      <div class="rotulo-controle" style="margin-top:14px"><span>Cor do subtítulo</span></div>
+      <div class="escolha-radio">
+        <label class="opcao-radio">
+          <input type="radio" name="subtitulo-cor" value="texto" ${p.subtituloCor === 'vermelho' ? '' : 'checked'}>
+          <span class="marca-radio"></span>
+          <span class="rotulo-radio"><strong>Cor do texto</strong><span>Acompanha a tinta da Bíblia, do preto ao marrom</span></span>
+        </label>
+        <label class="opcao-radio">
+          <input type="radio" name="subtitulo-cor" value="vermelho" ${p.subtituloCor === 'vermelho' ? 'checked' : ''}>
+          <span class="marca-radio"></span>
+          <span class="rotulo-radio"><strong>Vermelho</strong><span>No tom da rubrica dos manuscritos</span></span>
+        </label>
+      </div>
+
+      <div class="rotulo-controle" style="margin-top:14px"><span>Alinhamento do subtítulo</span></div>
+      <div class="escolha-radio">
+        <label class="opcao-radio">
+          <input type="radio" name="subtitulo-alinhamento" value="esquerda" ${p.subtituloAlinhamento === 'esquerda' ? 'checked' : ''}>
+          <span class="marca-radio"></span>
+          <span class="rotulo-radio"><strong>À esquerda</strong></span>
+        </label>
+        <label class="opcao-radio">
+          <input type="radio" name="subtitulo-alinhamento" value="centro" ${p.subtituloAlinhamento === 'esquerda' || p.subtituloAlinhamento === 'direita' ? '' : 'checked'}>
+          <span class="marca-radio"></span>
+          <span class="rotulo-radio"><strong>Centralizado</strong></span>
+        </label>
+        <label class="opcao-radio">
+          <input type="radio" name="subtitulo-alinhamento" value="direita" ${p.subtituloAlinhamento === 'direita' ? 'checked' : ''}>
+          <span class="marca-radio"></span>
+          <span class="rotulo-radio"><strong>À direita</strong></span>
+        </label>
+      </div>
+
       <label class="interruptor"><span>Modo escuro</span>
         <input type="checkbox" id="ctrl-escuro" ${p.escuro ? 'checked' : ''}></label>
       ${p.escuro ? '<p class="contagem">A temperatura do papel só vale no modo claro.</p>' : ''}`;
@@ -2697,6 +2753,37 @@ const App = {
       Prefs.set('mostrarNotas', e.target.checked);
       Leitura.aplicarModoNotas(e.target.checked);
     };
+
+    const subtitulos = achar('ctrl-subtitulos');
+    if (subtitulos) subtitulos.onchange = e => {
+      Prefs.set('subtitulos', e.target.checked);
+      this._vizCache = {};                 // vizinhos do arrasto refazem com/sem títulos
+      this.ir(this.code, this.cap, null);  // redesenha a leitura atual
+    };
+
+    // estilo e alinhamento do subtítulo: só trocam um atributo no raiz, então
+    // o CSS reflete na hora, sem redesenhar o texto
+    corpo.querySelectorAll('input[name="subtitulo-estilo"]').forEach(el => {
+      el.onchange = ev => {
+        if (!ev.target.checked) return;
+        Prefs.set('subtituloEstilo', ev.target.value);
+        Leitura.aplicarSubtituloEstilo(ev.target.value);
+      };
+    });
+    corpo.querySelectorAll('input[name="subtitulo-cor"]').forEach(el => {
+      el.onchange = ev => {
+        if (!ev.target.checked) return;
+        Prefs.set('subtituloCor', ev.target.value);
+        Leitura.aplicarSubtituloCor(ev.target.value);
+      };
+    });
+    corpo.querySelectorAll('input[name="subtitulo-alinhamento"]').forEach(el => {
+      el.onchange = ev => {
+        if (!ev.target.checked) return;
+        Prefs.set('subtituloAlinhamento', ev.target.value);
+        Leitura.aplicarSubtituloAlinhamento(ev.target.value);
+      };
+    });
 
     const escuro = achar('ctrl-escuro');
     if (escuro) escuro.onchange = e => {
