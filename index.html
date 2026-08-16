@@ -324,11 +324,21 @@
 <aside class="painel" id="painel-arvore" aria-hidden="true">
   <header>
     <h2 id="titulo-arvore">Livros</h2>
+    <button id="btn-recentes" hidden aria-label="Navegações recentes"><svg class="icone"><use href="#i-historico"/></svg></button>
     <button data-ajuste-popup="livros" aria-label="Ajustes do painel de livros"><svg class="icone"><use href="#i-ajustes"/></svg></button>
     <button data-fechar aria-label="Fechar"><svg class="icone"><use href="#i-fechar"/></svg></button>
   </header>
   <div class="corpo" id="corpo-arvore"></div>
 </aside>
+
+<div id="veu-recentes" hidden></div>
+<div id="menu-recentes" hidden role="dialog" aria-modal="true" aria-label="Navegações recentes">
+  <header>
+    <h2>Recentes</h2>
+    <button id="fechar-recentes" aria-label="Fechar"><svg class="icone"><use href="#i-fechar"/></svg></button>
+  </header>
+  <div id="lista-recentes"></div>
+</div>
 
 <aside class="painel" id="painel-versao" aria-hidden="true">
   <header>

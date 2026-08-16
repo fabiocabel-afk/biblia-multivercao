@@ -220,6 +220,71 @@ const Historico = {
   },
 };
 
+/* =================================================== histórico de navegação
+ *
+ * Diferente do Histórico (que nasce do toque no versículo), este registra o
+ * TRAJETO de navegação concluído: quando a pessoa escolhe livro -> capítulo ->
+ * versículo (ou um subtítulo) e chega na página de leitura. Guarda no máximo
+ * os 30 mais recentes. Abrir de novo um lugar que já está na lista apenas o
+ * traz para o topo e atualiza a hora — nunca duplica.
+ *
+ * Dois tipos de entrada convivem na mesma lista:
+ *   - 'versiculo': livro + capítulo + versículo(s)
+ *   - 'subtitulo': livro + nome do subtítulo + capítulo:versículos
+ */
+const HistoricoNavegacao = {
+  LIMITE: 30,
+
+  lista() {
+    return Guarda.ler('historicoNavegacao', []);
+  },
+
+  _guardar(lista) {
+    if (lista.length > this.LIMITE) lista = lista.slice(0, this.LIMITE);
+    Guarda.gravar('historicoNavegacao', lista);
+  },
+
+  /** Registra (ou reposiciona) uma navegação por versículo. A mesma referência
+   * (livro + capítulo + versículo inicial) sobe ao topo com a hora renovada,
+   * sem duplicar. */
+  registrarVersiculo({ versao, code, cap, vers, versFim }) {
+    const ini = vers || 1;
+    let lista = this.lista().filter(it =>
+      !(it.tipo === 'versiculo' && it.code === code && it.cap === cap && it.vers === ini));
+    lista.unshift({
+      tipo: 'versiculo', versao, code, cap,
+      vers: ini, versFim: versFim || ini,
+      hora: new Date().toISOString(),
+    });
+    this._guardar(lista);
+  },
+
+  /** Registra (ou reposiciona) uma navegação por subtítulo. A mesma seção
+   * (livro + capítulo + versículo inicial) sobe ao topo com a hora renovada,
+   * sem duplicar. */
+  registrarSubtitulo({ versao, code, cap, ini, fim, titulo }) {
+    const i = ini || 1;
+    let lista = this.lista().filter(it =>
+      !(it.tipo === 'subtitulo' && it.code === code && it.cap === cap && it.ini === i));
+    lista.unshift({
+      tipo: 'subtitulo', versao, code, cap,
+      ini: i, fim: fim || i, titulo: titulo || '',
+      hora: new Date().toISOString(),
+    });
+    this._guardar(lista);
+  },
+
+  remover(indice) {
+    const lista = this.lista();
+    lista.splice(indice, 1);
+    Guarda.gravar('historicoNavegacao', lista);
+  },
+
+  limpar() {
+    Guarda.gravar('historicoNavegacao', []);
+  },
+};
+
 /* ================================================================= estudos
  *
  * O estudo e deliberado, ao contrario do historico. A pessoa segura um

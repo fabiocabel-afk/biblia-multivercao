@@ -62,6 +62,7 @@ const App = {
     Locutor.preparar();   // já pede a lista de vozes do aparelho (chega assíncrona)
     Seletor.iniciar();    // troca as listas suspensas nativas pelas do tema
     this.ligarEventos();
+    this.atualizarBotaoRecentes();   // mostra o relógio se já houver navegações
     // registra também a abertura: reabrir no mesmo lugar não duplica, porque o
     // Histórico traz a visita repetida para o topo em vez de acrescentar outra.
     await this.ir(this.code, this.cap, null);
@@ -1103,7 +1104,7 @@ const App = {
 
     const linhas = lista.map(s => {
       const ref = s.inicio === s.fim ? `${s.capitulo}:${s.inicio}` : `${s.capitulo}:${s.inicio}-${s.fim}`;
-      return `<button class="linha-secao" data-cap="${s.capitulo}" data-ini="${s.inicio}">
+      return `<button class="linha-secao" data-cap="${s.capitulo}" data-ini="${s.inicio}" data-fim="${s.fim}" data-titulo="${Leitura.escapar(s.titulo)}">
         <span class="secao-nome">${Leitura.escapar(s.titulo)}</span>
         <span class="secao-ref">${ref}</span></button>`;
     });
@@ -1115,6 +1116,11 @@ const App = {
       el.onclick = () => {
         const cap = +el.dataset.cap;
         const ini = +el.dataset.ini;
+        HistoricoNavegacao.registrarSubtitulo({
+          versao: this.versao, code, cap, ini,
+          fim: +el.dataset.fim || ini, titulo: el.dataset.titulo || '',
+        });
+        this.atualizarBotaoRecentes();
         this.fecharPaineis();
         this.ir(code, cap, ini, { alvoTitulo: true });
       };
@@ -1162,6 +1168,10 @@ const App = {
         if (this.selVers === null) {
           // primeiro toque: vai até lá e abre o registro
           this.selVers = { ini: v, fim: v };
+          HistoricoNavegacao.registrarVersiculo({
+            versao: this.versao, code, cap, vers: v, versFim: v,
+          });
+          this.atualizarBotaoRecentes();
           this.fecharPaineis();
           this.ir(code, cap, v);
         } else {
@@ -1177,6 +1187,11 @@ const App = {
             versao: this.versao, code, cap, vers: this.selVers.ini,
             trecho: `${this.selVers.ini}–${this.selVers.fim}`,
           });
+          HistoricoNavegacao.registrarVersiculo({
+            versao: this.versao, code, cap,
+            vers: this.selVers.ini, versFim: this.selVers.fim,
+          });
+          this.atualizarBotaoRecentes();
         }
       };
     });
@@ -4408,6 +4423,97 @@ const App = {
     liga(b, a);
   },
 
+  /* ============================================================= recentes */
+
+  /* O relógio no cabeçalho do painel de livros só aparece quando há ao menos
+   * uma navegação registrada. Chamado na abertura e depois de cada registro. */
+  atualizarBotaoRecentes() {
+    const btn = document.getElementById('btn-recentes');
+    if (!btn) return;
+    btn.hidden = HistoricoNavegacao.lista().length === 0;
+  },
+
+  /* Tempo relativo amigável: minutos até 1h, horas até 1 dia, depois dias.
+   * Sem precisão de segundos — serve para a pessoa reconhecer "foi hoje de
+   * manhã", "foi há dois dias", sem exatidão de relógio. */
+  tempoRelativo(iso) {
+    const seg = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
+    const min = Math.floor(seg / 60);
+    const hor = Math.floor(min / 60);
+    const dia = Math.floor(hor / 24);
+    if (min < 1) return 'agora mesmo';
+    if (hor < 1) return `há ${min} ${min === 1 ? 'minuto' : 'minutos'}`;
+    if (dia < 1) return `há ${hor} ${hor === 1 ? 'hora' : 'horas'}`;
+    return `há ${dia} ${dia === 1 ? 'dia' : 'dias'}`;
+  },
+
+  abrirMenuRecentes() {
+    this.desenharMenuRecentes();
+    const menu = document.getElementById('menu-recentes');
+    const veu = document.getElementById('veu-recentes');
+    if (veu) veu.hidden = false;
+    if (menu) { menu.hidden = false; menu.classList.add('aberto'); }
+  },
+
+  fecharMenuRecentes() {
+    const menu = document.getElementById('menu-recentes');
+    const veu = document.getElementById('veu-recentes');
+    if (menu) { menu.classList.remove('aberto'); menu.hidden = true; }
+    if (veu) veu.hidden = true;
+  },
+
+  desenharMenuRecentes() {
+    const alvo = document.getElementById('lista-recentes');
+    if (!alvo) return;
+    const lista = HistoricoNavegacao.lista();
+    if (!lista.length) {
+      alvo.innerHTML = `<p class="rec-vazio">Nenhuma navegação recente ainda.</p>`;
+      return;
+    }
+    const linhas = lista.map((it, i) => {
+      const nome = Dados.nomeCurto(it.versao, it.code) || it.code;
+      if (it.tipo === 'subtitulo') {
+        const r = it.fim && it.fim !== it.ini ? `${it.cap}:${it.ini}-${it.fim}` : `${it.cap}:${it.ini}`;
+        return `<button class="linha-recente" data-i="${i}">
+          <span class="rec-topo"><span class="rec-ref">${nome} ${r}</span>
+          <span class="rec-hora">${this.tempoRelativo(it.hora)}</span></span>
+          <span class="rec-sub">${Leitura.escapar(it.titulo || '')}</span></button>`;
+      }
+      const r = it.versFim && it.versFim !== it.vers ? `${it.cap}:${it.vers}-${it.versFim}` : `${it.cap}:${it.vers}`;
+      return `<button class="linha-recente" data-i="${i}">
+        <span class="rec-topo"><span class="rec-ref">${nome} ${r}</span>
+        <span class="rec-hora">${this.tempoRelativo(it.hora)}</span></span></button>`;
+    });
+    alvo.innerHTML = linhas.join('');
+    alvo.querySelectorAll('.linha-recente').forEach(el => {
+      el.onclick = () => this.abrirRecente(HistoricoNavegacao.lista()[+el.dataset.i]);
+    });
+  },
+
+  /* Reabrir uma navegação recente: leva à página e RECOLOCA a entrada no topo
+   * com a hora renovada (sem duplicar). Não cria linha nova — só reposiciona. */
+  abrirRecente(item) {
+    if (!item) return;
+    this.fecharMenuRecentes();
+    if (item.versao && Dados.versao(item.versao)) this.versao = item.versao;
+    if (item.tipo === 'subtitulo') {
+      HistoricoNavegacao.registrarSubtitulo({
+        versao: this.versao, code: item.code, cap: item.cap,
+        ini: item.ini, fim: item.fim, titulo: item.titulo,
+      });
+      this.fecharPaineis();
+      this.ir(item.code, item.cap, item.ini, { alvoTitulo: true });
+    } else {
+      HistoricoNavegacao.registrarVersiculo({
+        versao: this.versao, code: item.code, cap: item.cap,
+        vers: item.vers, versFim: item.versFim,
+      });
+      this.fecharPaineis();
+      this.ir(item.code, item.cap, item.vers);
+    }
+    this.atualizarBotaoRecentes();
+  },
+
   /* ============================================================== eventos */
 
   ligarEventos() {
@@ -4415,6 +4521,14 @@ const App = {
 
     q('btn-arvore').onclick = () => { this.desenharArvore(); this.abrir('painel-arvore'); };
     q('btn-ref').onclick = () => { this.desenharCapitulos(this.code); this.abrir('painel-arvore'); };
+
+    // Recentes: o relógio abre o menu; o X e o véu (fundo) fecham
+    const btnRec = q('btn-recentes');
+    if (btnRec) btnRec.onclick = () => this.abrirMenuRecentes();
+    const fecharRec = q('fechar-recentes');
+    if (fecharRec) fecharRec.onclick = () => this.fecharMenuRecentes();
+    const veuRec = q('veu-recentes');
+    if (veuRec) veuRec.onclick = () => this.fecharMenuRecentes();
     q('btn-versao').onclick = () => { this.alvoVersao = 'principal'; this.desenharVersoes(); this.abrir('painel-versao'); };
     q('busca-versao').onclick = () => {
       this.alvoVersao = 'busca';
