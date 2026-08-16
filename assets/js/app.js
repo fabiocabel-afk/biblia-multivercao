@@ -1112,6 +1112,9 @@ const App = {
     alvo.innerHTML = `<div class="grupo"><h3>${nome} — subtítulos</h3>
       <div class="lista-secoes">${linhas.join('')}</div></div>`;
 
+    // Tocar num subtítulo AQUI (no painel de navegação) apenas leva à seção,
+    // rolando até o cabeçalho dela — como sempre foi. A SELEÇÃO fica por conta
+    // do toque no próprio cabeçalho da seção dentro da página (ver tocarTituloSecao).
     alvo.querySelectorAll('.linha-secao').forEach(el => {
       el.onclick = () => {
         const cap = +el.dataset.cap;
@@ -1125,6 +1128,148 @@ const App = {
         this.ir(code, cap, ini, { alvoTitulo: true });
       };
     });
+  },
+
+  /** Último versículo de um capítulo (o maior número presente). Usado para
+   *  calcular onde uma seção que cruza capítulos termina. */
+  async _ultimoVersoCap(code, cap) {
+    try {
+      const r = await Dados.capitulo(this.versao, code, cap);
+      if (r && r.capitulo && Array.isArray(r.capitulo.verses) && r.capitulo.verses.length)
+        return Math.max(...r.capitulo.verses.map(v => v.number));
+    } catch {}
+    return null;
+  },
+
+  /** Onde uma seção termina de verdade. Como os subtítulos "continuam" pelos
+   *  capítulos seguintes até o próximo aparecer, o fim é o versículo logo antes
+   *  da PRÓXIMA seção (que pode estar vários capítulos adiante). Devolve
+   *  {cap, vers}. */
+  async _fimRealSecao(code, capIni, proxCap, proxIni) {
+    // sem próxima seção: a seção vai até o fim do livro
+    if (proxCap == null) {
+      const info = Dados.infoLivro(this.versao, code);
+      const ultimoCap = info ? info.chapters : capIni;
+      const v = await this._ultimoVersoCap(code, ultimoCap);
+      return { cap: ultimoCap, vers: v || 1 };
+    }
+    // próxima seção no mesmo capítulo: termina um versículo antes dela
+    if (proxCap === capIni) return { cap: capIni, vers: Math.max(1, proxIni - 1) };
+    // próxima começa no início de outro capítulo: termina no fim do capítulo anterior
+    if (proxIni <= 1) {
+      const capFim = proxCap - 1;
+      const v = await this._ultimoVersoCap(code, capFim);
+      return { cap: capFim, vers: v || 1 };
+    }
+    // próxima começa no meio de outro capítulo: termina um versículo antes dela
+    return { cap: proxCap, vers: proxIni - 1 };
+  },
+
+  /** Toque no cabeçalho de uma seção DENTRO da página de leitura (o subtítulo
+   *  renderizado no meio do texto). Seleciona os versículos da seção — a parte
+   *  visível, no capítulo aberto — e mostra o intervalo completo na barra,
+   *  inclusive quando a seção continua em capítulos seguintes. */
+  async tocarTituloSecao(el) {
+    const bloco = el.closest('.cap-bloco');
+    const cap = bloco ? +bloco.dataset.cap : this.cap;
+    const ini = +el.dataset.inicio;
+    if (!Number.isFinite(cap) || !Number.isFinite(ini)) return;
+    // acha esta seção e a seguinte na tabela do livro, para saber o fim real
+    let lista = [];
+    try { lista = await Dados.secoesDoLivroParaNavegacao(this.versao, this.code); } catch {}
+    const idx = lista.findIndex(s => s.capitulo === cap && s.inicio === ini);
+    const prox = idx >= 0 ? lista[idx + 1] : null;
+    const fim = await this._fimRealSecao(this.code, cap, prox ? prox.capitulo : null, prox ? prox.inicio : null);
+    // faixa visível: se a seção cruza capítulos, seleciona até o fim do capítulo aberto
+    const tetoVisivel = (fim && fim.cap === cap) ? fim.vers : Infinity;
+    const selecionou = this.selecionarFaixaVersiculos(cap, ini, tetoVisivel);
+    // no segundo toque (que limpa) não há nada a estender
+    if (!selecionou) return;
+    // seção que continua em capítulos seguintes: acrescenta esses versículos à
+    // seleção (do DOM no contínuo, do Dados no quebra) para que TODAS as ações —
+    // copiar, compartilhar, tocar, marcar, lista, estudo — cubram o span inteiro
+    if (fim && fim.cap > cap) await this._estenderSelecaoParaSecao(cap, ini, fim);
+  },
+
+  /** Estende a seleção da seção para além do capítulo visível. Marca o capítulo
+   *  em cada pedaço (visível e seguinte) e grava `selecao.faixa` — o intervalo
+   *  contínuo capIni:versIni–capFim:versFim — que passa a reger a referência, o
+   *  rótulo "seção" e o formato salvo em Lista/Estudo. Só é chamada quando a
+   *  seção cruza capítulos; seleções normais e seções de um capítulo não têm
+   *  faixa e seguem exatamente como antes. */
+  async _estenderSelecaoParaSecao(capIni, versIni, fim) {
+    if (!this.selecao || !this.selecao.pedacos) return;
+    const capFim = fim.cap, versFim = fim.vers;
+    // o trecho já selecionado é o pedaço visível de capIni; carimba o capítulo
+    for (const p of this.selecao.pedacos) if (p.cap == null) p.cap = capIni;
+    // acrescenta os versículos dos capítulos seguintes da seção
+    for (let c = capIni + 1; c <= capFim; c++) {
+      const teto = (c === capFim) ? versFim : Infinity;
+      const bloco = document.querySelector(`#folha .cap-bloco[data-cap="${c}"]`);
+      if (bloco) {
+        // capítulo na tela (modo contínuo): lê o texto da tela e pinta o realce
+        for (const el of bloco.querySelectorAll('.v[data-vers]')) {
+          const n = +el.dataset.vers;
+          if (!(n >= 1 && n <= teto)) continue;
+          const texto = this.textoDoVersiculo(el);
+          if (!texto) continue;
+          this.selecao.pedacos.push({ cap: c, vers: n, i: 0, f: texto.length, texto });
+          el.classList.add('multi-sel');
+        }
+      } else {
+        // capítulo fora da tela (modo quebra): carrega o texto sem DOM
+        let r = null;
+        try { r = await Dados.capitulo(this.versao, this.code, c); } catch {}
+        const verses = (r && r.capitulo && r.capitulo.verses) || [];
+        for (const v of verses) {
+          if (!(v.number >= 1 && v.number <= teto) || !v.text) continue;
+          this.selecao.pedacos.push({ cap: c, vers: v.number, i: 0, f: v.text.length, texto: v.text });
+        }
+      }
+    }
+    this.selecao.pedacos.sort((a, b) => (a.cap - b.cap) || (a.vers - b.vers));
+    this.selecao.bruto = this.selecao.pedacos.map(p => p.texto).join(' ');
+    this.selecao.faixa = { capInicio: capIni, versInicio: versIni, capFim, versFim };
+    this.renderBarraSelecao();
+  },
+
+  /** Seleciona um intervalo de versículos [ini..fim] de um capítulo, como se
+   *  fosse a seleção do capítulo inteiro — mas restrita à faixa da seção. Usado
+   *  ao tocar num subtítulo. Reaproveita a mesma maquinaria da multi-seleção
+   *  (multiVers + atualizarSelecaoMulti), então abre a barra de ações igual. */
+  selecionarFaixaVersiculos(cap, ini, fim) {
+    // no Contínuo, o escopo da seleção é o bloco tocado; aponta-o para o
+    // capítulo do subtítulo antes de pintar, senão pintaria no bloco errado
+    if (Prefs.get('paginaModo') === 'continuo') {
+      const bloco = document.querySelector(`#folha .cap-bloco[data-cap="${cap}"]`);
+      if (bloco) this._blocoAtivo = bloco;
+    }
+    // seleciona apenas os versículos que REALMENTE existem na tela dentro da
+    // faixa [ini..fim] — assim funciona mesmo se o fim passar do capítulo
+    // (seções que continuam em capítulos seguintes) ou houver numeração com falhas
+    const teto = Number.isFinite(fim) ? fim : Infinity;
+    const piso = Number.isFinite(ini) ? ini : 1;
+    const presentes = [...this._escopoVersos().querySelectorAll('.v[data-vers]')]
+      .map(el => +el.dataset.vers)
+      .filter(n => Number.isFinite(n) && n >= piso && n <= teto);
+    if (!presentes.length) return false;
+    // alterna igual ao número do capítulo: se a faixa JÁ está toda selecionada,
+    // o toque limpa; se está parcial ou vazia, completa a seleção
+    this.multiVers = this.multiVers || new Set();
+    const jaTodos = this.multiVers.size === presentes.length
+      && presentes.every(v => this.multiVers.has(v));
+    if (jaTodos) {
+      this.resetarMulti();
+      this.selecao = null;
+      this.renderBarraSelecao();
+      return false;
+    }
+    window.getSelection()?.removeAllRanges();   // larga qualquer seleção de texto
+    this.multiAtivo = true;                      // mantém o modo de vários para ajustes
+    this.multiVers = new Set(presentes);
+    this._capSelecao = Prefs.get('paginaModo') === 'continuo' ? cap : null;
+    this.atualizarSelecaoMulti();
+    return true;
   },
 
   /* Depois do capítulo, a escolha do versículo de partida. Serve para registrar
@@ -2126,6 +2271,22 @@ const App = {
     return [...new Set(selecao.pedacos.map(p => p.vers))].sort((a, b) => a - b);
   },
 
+  /** Monta o trecho a guardar em Lista/Estudo a partir de uma seleção. Quando é
+   *  uma seção que cruza capítulos (tem `faixa`), grava no formato de intervalo
+   *  contínuo {capInicio,versInicio,capFim,versFim} — que o armazenamento já lê,
+   *  exibe e toca de ponta a ponta. Seleção normal segue no formato de sempre
+   *  {cap, versiculos:[...]}. */
+  _trechoParaGuardar(selecao) {
+    const fx = selecao && selecao.faixa;
+    if (fx) {
+      return { versao: this.versao, code: this.code,
+        capInicio: fx.capInicio, versInicio: fx.versInicio,
+        capFim: fx.capFim, versFim: fx.versFim };
+    }
+    return { versao: this.versao, code: this.code, cap: this.cap,
+      versiculos: this.versiculosDaSelecao(selecao) };
+  },
+
   /* Ao tocar em "Salvar estudo", abre um painel próprio — mesma largura e fundo
    * claro dos outros — com a opção de estudo novo e a lista dos que já existem.
    * O trecho é exatamente a seleção feita na tela (com o "+", pode pular
@@ -2136,12 +2297,7 @@ const App = {
     document.getElementById('barra-selecao').classList.remove('aberta');
     document.body.classList.remove('selecionando');
 
-    this.estudoParcial = {
-      versao: this.versao,
-      code: this.code,
-      cap: this.cap,
-      versiculos: this.versiculosDaSelecao(this.selecaoGuardada),
-    };
+    this.estudoParcial = this._trechoParaGuardar(this.selecaoGuardada);
 
     this.desenharSalvarEstudo();
     this.abrir('painel-salvar-estudo');
@@ -2175,7 +2331,10 @@ const App = {
         }).join('')}
       </div>` : ''}`;
 
-    const trechoAtual = () => ({ ...e, versiculos: [...(e.versiculos || [])] });
+    // preserva o formato: intervalo (faixa) fica intacto; lista de versículos é clonada
+    const trechoAtual = () => Array.isArray(e.versiculos)
+      ? { ...e, versiculos: [...e.versiculos] }
+      : { ...e };
 
     document.getElementById('estudo-novo').onclick = async () => {
       const nome = await this.pedirTexto({ titulo: 'Novo estudo', placeholder: 'Nome do estudo (opcional)' });
@@ -2205,12 +2364,7 @@ const App = {
     document.getElementById('barra-selecao').classList.remove('aberta');
     document.body.classList.remove('selecionando');
 
-    this.trechoParcialLista = {
-      versao: this.versao,
-      code: this.code,
-      cap: this.cap,
-      versiculos: this.versiculosDaSelecao(this.selecaoGuardada),
-    };
+    this.trechoParcialLista = this._trechoParaGuardar(this.selecaoGuardada);
 
     this.desenharAddLista();
     this.abrir('painel-add-lista');
@@ -2244,7 +2398,10 @@ const App = {
         }).join('')}
       </div>` : ''}`;
 
-    const trechoAtual = () => ({ ...t, versiculos: [...(t.versiculos || [])] });
+    // preserva o formato: intervalo (faixa) fica intacto; lista de versículos é clonada
+    const trechoAtual = () => Array.isArray(t.versiculos)
+      ? { ...t, versiculos: [...t.versiculos] }
+      : { ...t };
 
     document.getElementById('lista-nova').onclick = async () => {
       const nome = await this.pedirTexto({ titulo: 'Nova lista', placeholder: 'Nome da lista (opcional)' });
@@ -3863,6 +4020,16 @@ const App = {
    *  primeiro ao último quando, no meio, algum foi pulado. */
   referenciaDaSelecao(pedacos) {
     const nome = Dados.nomeCurto(this.versao, this.code);
+    // seção que cruza capítulos: intervalo contínuo (não uma lista de versículos)
+    const fx = this.selecao && this.selecao.faixa;
+    if (fx) {
+      if (fx.capInicio === fx.capFim) {
+        return fx.versInicio === fx.versFim
+          ? `${nome} ${fx.capInicio}:${fx.versInicio}`
+          : `${nome} ${fx.capInicio}:${fx.versInicio}-${fx.versFim}`;
+      }
+      return `${nome} ${fx.capInicio}:${fx.versInicio}–${fx.capFim}:${fx.versFim}`;
+    }
     const vs = [...new Set(pedacos.map(p => p.vers))].sort((a, b) => a - b);
     if (!vs.length) return `${nome} ${this.cap}`;
 
@@ -3882,9 +4049,15 @@ const App = {
   textoParaCitar() {
     if (!this.selecao) return '';
     const { pedacos } = this.selecao;
+    // quando o trecho cruza capítulos, o número solto é ambíguo (há um "1" em
+    // cada capítulo), então cada versículo leva "cap:vers"
+    const multiCap = new Set(pedacos.map(p => p.cap != null ? p.cap : this.cap)).size > 1;
     const corpo = pedacos.length === 1
       ? pedacos[0].texto.slice(pedacos[0].i, pedacos[0].f)
-      : pedacos.map(p => `${p.vers} ${p.texto.slice(p.i, p.f)}`).join(' ');
+      : pedacos.map(p => {
+          const rot = multiCap ? `${p.cap != null ? p.cap : this.cap}:${p.vers}` : `${p.vers}`;
+          return `${rot} ${p.texto.slice(p.i, p.f)}`;
+        }).join(' ');
     return `"${corpo.trim()}"\n${this.referenciaDaSelecao(pedacos)} (${this.versao})`;
   },
 
@@ -3911,14 +4084,16 @@ const App = {
     }
 
     const n = sel.pedacos.length;
+    const conta = sel.faixa ? 'seção' : `${n} versículo${n > 1 ? 's' : ''}`;
     document.getElementById('sel-ref').innerHTML =
       `${this.referenciaDaSelecao(sel.pedacos)}
-       <span class="sel-conta">${n} versículo${n > 1 ? 's' : ''}</span>`;
+       <span class="sel-conta">${conta}</span>`;
 
     // o ponto onde a pessoa está de fato lendo é o versículo que ela seleciona;
     // ele atualiza o histórico e acompanha a posição no livro fixado
-    const ultimoVers = sel.pedacos[sel.pedacos.length - 1].vers;
-    Historico.acompanharFixado({ code: this.code, cap: this.cap, vers: ultimoVers });
+    const ultimo = sel.pedacos[sel.pedacos.length - 1];
+    Historico.acompanharFixado({ code: this.code,
+      cap: ultimo.cap != null ? ultimo.cap : this.cap, vers: ultimo.vers });
 
     barra.classList.add('aberta');
     barra.setAttribute('aria-hidden', 'false');
@@ -4143,11 +4318,20 @@ const App = {
       // um só: começa dali e segue a sequência normal do livro
       this.iniciarOuvir({ comecarEm: versos[0] });
     } else {
-      // vários: toca só o conjunto selecionado, confinado, com o repetir agindo nele
-      const seg = { versao: this.versao, code: this.code, cap: this.cap,
-                    versos, de: null, ate: null };
+      // vários: toca só o conjunto selecionado, confinado, com o repetir agindo
+      // nele. Uma seção pode cruzar capítulos, então monta um segmento por
+      // capítulo (o player os toca em ordem). Seleção normal = um só segmento.
+      const porCap = new Map();
+      for (const p of sel.pedacos) {
+        const c = p.cap != null ? p.cap : this.cap;
+        if (!porCap.has(c)) porCap.set(c, []);
+        porCap.get(c).push(p.vers);
+      }
+      const fila = [...porCap.entries()].sort((a, b) => a[0] - b[0]).map(([c, vs]) =>
+        ({ versao: this.versao, code: this.code, cap: c,
+           versos: vs.sort((a, b) => a - b), de: null, ate: null }));
       const nome = this.referenciaDaSelecao(sel.pedacos);
-      this.tocarFila([seg], nome);
+      this.tocarFila(fila, nome);
     }
   },
 
@@ -4186,7 +4370,8 @@ const App = {
     const versificacao = Dados.versificacaoDe(this.versao);
     const postos = new Set();
     for (const p of this.selecao ? this.selecao.pedacos : []) {
-      for (const fx of Marcadores.faixas(versificacao, this.code, this.cap, p.vers)) {
+      const cap = p.cap != null ? p.cap : this.cap;   // seção pode cruzar capítulos
+      for (const fx of Marcadores.faixas(versificacao, this.code, cap, p.vers)) {
         postos.add(fx.m);
       }
     }
@@ -4214,18 +4399,28 @@ const App = {
   marcarSelecao(marcadorId) {
     if (!this.selecao) return;
     const versificacao = Dados.versificacaoDe(this.versao);
+    const continuo = Prefs.get('paginaModo') === 'continuo';
 
     for (const p of this.selecao.pedacos) {
+      const cap = p.cap != null ? p.cap : this.cap;   // seção pode cruzar capítulos
       const inteiro = p.i === 0 && p.f >= p.texto.length;
       const fim = inteiro ? null : p.f;
 
       const faixas = marcadorId === 0
-        ? Marcadores.limparTrecho(versificacao, this.code, this.cap, p.vers,
+        ? Marcadores.limparTrecho(versificacao, this.code, cap, p.vers,
             inteiro ? null : p.i, fim)
-        : Marcadores.marcarTrecho(versificacao, this.code, this.cap, p.vers,
+        : Marcadores.marcarTrecho(versificacao, this.code, cap, p.vers,
             p.i, fim, marcadorId);
 
-      Leitura.pintarMarca(p.vers, p.texto, faixas);
+      // a marca é sempre GRAVADA no capítulo certo (aparece ao navegar até lá).
+      // já a PINTURA na hora precisa de escopo: no contínuo, o mesmo número
+      // existe em vários blocos; sem escopo, pintaríamos o versículo errado.
+      if (continuo) {
+        const bloco = document.querySelector(`#folha .cap-bloco[data-cap="${cap}"]`);
+        if (bloco) Leitura.pintarMarca(p.vers, p.texto, faixas, bloco);
+      } else if (cap === this.cap) {
+        Leitura.pintarMarca(p.vers, p.texto, faixas);
+      }
     }
 
     this.avisoRapido(marcadorId === 0 ? 'Marca removida' : 'Marcado');
@@ -4830,6 +5025,14 @@ const App = {
       if (e.target.closest('.capitular')) {
         clearTimeout(espera); espera = null;
         this.selecionarCapitulo();
+        return;
+      }
+      // tocar no cabeçalho de uma seção (o subtítulo no meio do texto) seleciona
+      // os versículos da seção e mostra o intervalo completo na barra
+      const secTit = e.target.closest('.secao-titulo');
+      if (secTit) {
+        clearTimeout(espera); espera = null;
+        this.tocarTituloSecao(secTit);
         return;
       }
       const sinal = e.target.closest('.marca-nota');

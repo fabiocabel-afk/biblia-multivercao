@@ -123,7 +123,8 @@
    sempre, que combina com a folha e não fica estranho no vermelho. Padrão = marrom. */
 [data-estilo='historico'] .topo,
 [data-estilo='historico'] .rodape,
-[data-estilo='historico'] .painel > header {
+[data-estilo='historico'] .painel > header,
+[data-estilo='historico'] #menu-recentes > header {
   --cromo: #6f4a2c;             /* marrom couro */
   --cromo-alto: #835838;        /* hover, um tom acima */
   --cromo-texto: #f2e6c9;       /* itens/texto em creme */
@@ -131,7 +132,8 @@
 }
 [data-estilo='historico'][data-tema='vermelho'] .topo,
 [data-estilo='historico'][data-tema='vermelho'] .rodape,
-[data-estilo='historico'][data-tema='vermelho'] .painel > header {
+[data-estilo='historico'][data-tema='vermelho'] .painel > header,
+[data-estilo='historico'][data-tema='vermelho'] #menu-recentes > header {
   --cromo: #6e1a17;             /* vermelhão de capa antiga */
   --cromo-alto: #832320;
   --cromo-texto: #cda349;       /* dourado */
@@ -139,7 +141,8 @@
 }
 [data-estilo='historico'][data-tema='classico'] .topo,
 [data-estilo='historico'][data-tema='classico'] .rodape,
-[data-estilo='historico'][data-tema='classico'] .painel > header {
+[data-estilo='historico'][data-tema='classico'] .painel > header,
+[data-estilo='historico'][data-tema='classico'] #menu-recentes > header {
   --cromo: var(--papel);        /* creme, como na 1ª versão */
   --cromo-alto: #e2d3ad;
   --cromo-texto: #3a2a1a;       /* tinta escura */
@@ -354,6 +357,9 @@ html, body { overflow-x: hidden; }
   color: var(--tinta);         /* padrão; sobrescrito pela cor escolhida */
   font-weight: 700;
   font-style: normal;
+  cursor: pointer;             /* tocar seleciona os versículos da seção */
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 /* formato da letra — só peso e itálico, sem mexer na cor */
@@ -5129,7 +5135,7 @@ html[data-il-abrev="sim"] .il-m-c .il-txt {
   max-height: min(70vh, 560px);
   display: flex;
   flex-direction: column;
-  background: var(--folha, #fff);
+  background: var(--papel);
   color: var(--tinta);
   border-radius: calc(var(--raio) + 4px);
   box-shadow: 0 18px 50px rgba(0, 0, 0, .35);

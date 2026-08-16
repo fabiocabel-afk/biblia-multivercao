@@ -260,8 +260,8 @@ const Leitura = {
 
   _raiz() { return (this.escopo ? this.escopo() : document.getElementById('folha')) || document; },
 
-  pintarMarca(vers, texto, faixas) {
-    this._raiz().querySelectorAll(`.v[data-vers="${vers}"]`).forEach(el => {
+  pintarMarca(vers, texto, faixas, raiz) {
+    (raiz || this._raiz()).querySelectorAll(`.v[data-vers="${vers}"]`).forEach(el => {
       // no interlinear o versículo são blocos empilhados; repintar por dentro
       // apagaria as palavras. A marcação de cor não se aplica a esse modo.
       if (el.classList.contains('interlinear')) return;

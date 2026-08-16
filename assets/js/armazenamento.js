@@ -236,7 +236,13 @@ const HistoricoNavegacao = {
   LIMITE: 30,
 
   lista() {
-    return Guarda.ler('historicoNavegacao', []);
+    const bruto = Guarda.ler('historicoNavegacao', []);
+    if (!Array.isArray(bruto)) return [];
+    // ignora registros legados/malformados (ex.: de versões antigas que usavam
+    // outros nomes de campo) para nunca exibir "undefined" na lista
+    return bruto.filter(it => it && it.cap != null &&
+      (it.tipo === 'subtitulo' ? it.ini != null
+        : it.tipo === 'versiculo' ? it.vers != null : false));
   },
 
   _guardar(lista) {
