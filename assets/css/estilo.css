@@ -280,12 +280,34 @@ button {
   padding: calc(var(--barra) + 22px) 20px calc(var(--barra) + 60px);
   max-width: 36rem;
   margin: 0 auto;
+  position: relative;   /* âncora do botão "ouvir" impresso no canto da folha */
   font-family: var(--fonte-texto);
   font-size: var(--corpo);
   line-height: 1.62;
   text-align: justify;
   hyphens: auto;
 }
+
+/* botão "ouvir" impresso no canto superior direito da folha: um círculo só de
+   contorno, na própria tinta (currentColor), bem discreto — nasce da folha como
+   uma letra, sem fundo, sombra ou brilho. Some enquanto o player está aberto. */
+.btn-ouvir-folha {
+  position: absolute;
+  top: calc(var(--barra) + 20px);
+  right: 16px;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  color: var(--tinta);
+  -webkit-tap-highlight-color: transparent;
+}
+.btn-ouvir-folha svg { width: 100%; height: 100%; display: block; }
+.btn-ouvir-folha circle { fill: none; stroke: currentColor; stroke-width: 1.3; stroke-opacity: .34; }
+.btn-ouvir-folha path { fill: currentColor; fill-opacity: .6; }
+.btn-ouvir-folha:hover circle { stroke-opacity: .5; }
+.btn-ouvir-folha:hover path   { fill-opacity: .8; }
+.btn-ouvir-folha:active { transform: scale(.94); }
+body.ouvindo .btn-ouvir-folha { display: none; }
 
 /* transição de deslize ao trocar de capítulo pelos BOTÕES: a página entra já
    pronta de um lado, no mesmo sentido do arrasto — próximo entra pela direita;

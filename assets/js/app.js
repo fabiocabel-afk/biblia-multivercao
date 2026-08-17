@@ -206,6 +206,7 @@ const App = {
       + Leitura.html(this.versao, r.livro, r.capitulo, { secoes: secs });
 
     this.atualizarBarra();
+    this._montarBotaoOuvirFolha();
     Pergaminho.folha(code, cap);   // cada capítulo tem a sua folha no estilo Histórico
     this._aplicarDeslize(folha, desliza);   // transição lateral ao trocar de capítulo
     window.scrollTo(0, 0);
@@ -288,6 +289,7 @@ const App = {
     folha.innerHTML = `<p class="titulo-livro abertura">${Leitura.escapar(primeiro.livro.name)}</p>`
       + blocos.join('');
     this.atualizarBarra();
+    this._montarBotaoOuvirFolha();
     Pergaminho.folha(code, this.cap);
     this._aplicarDeslize(folha, desliza);
 
@@ -4856,6 +4858,15 @@ const App = {
       requestAnimationFrame(() => { spyPend = false; this._spyCapitulo(); });
     }, { passive: true });
 
+    // durante a leitura em voz, a tela acompanha o versículo que toca. Se a
+    // pessoa mexe na rolagem (arrasta o dedo ou gira a roda), o reposicionamento
+    // pausa por alguns segundos e reinicia a contagem a cada gesto; parando de
+    // mexer, volta a centralizar sozinho. (Toque em botão/versículo não conta —
+    // só o arrasto de rolagem e a roda.)
+    const marcarInteracao = () => this._marcarInteracaoLeitura();
+    window.addEventListener('touchmove', marcarInteracao, { passive: true });
+    window.addEventListener('wheel', marcarInteracao, { passive: true });
+
     // a Leitura pinta marca/ponto dentro do mesmo escopo (folha ou bloco ativo)
     Leitura.escopo = () => this._escopoVersos();
 
@@ -5255,6 +5266,26 @@ const App = {
     return [...this._escopoLeitura().querySelectorAll('.v[data-vers]')]
       .map(el => +el.dataset.vers)
       .filter(n => !Number.isNaN(n));
+  },
+
+  /* Insere o botãozinho "ouvir" no canto superior direito da folha, como uma
+   * marca de impressor. É recriado a cada render (o innerHTML da folha é
+   * trocado), então basta acrescentá-lo ao fim de cada montagem. Não aparece em
+   * versões sem áudio (originais/interlinear); e o CSS o esconde enquanto o
+   * player está aberto (body.ouvindo). Faz a mesma coisa que "Ouvir" no menu. */
+  _montarBotaoOuvirFolha() {
+    const folha = document.getElementById('folha');
+    if (!folha) return;
+    if (Dados.ehOriginal(this.versao)) return;   // sem áudio nessas versões: sem botão
+    const b = document.createElement('button');
+    b.className = 'btn-ouvir-folha';
+    b.type = 'button';
+    b.title = 'Ouvir este capítulo';
+    b.setAttribute('aria-label', 'Ouvir este capítulo');
+    b.innerHTML = '<svg viewBox="0 0 32 32" aria-hidden="true">'
+      + '<circle cx="16" cy="16" r="14"/><path d="M13 10 L23 16 L13 22 Z"/></svg>';
+    b.addEventListener('click', (e) => { e.preventDefault(); this.iniciarOuvir(); });
+    folha.insertBefore(b, folha.firstChild);
   },
 
   iniciarOuvir({ comecarEm = null } = {}) {
@@ -5949,9 +5980,77 @@ const App = {
     document.querySelectorAll('#folha .v.lendo').forEach(el => el.classList.remove('lendo'));
   },
 
-  rolarAteVersiculo(vers) {
+  /* Quanto tempo o reposicionamento automático espera depois que a pessoa mexe
+   * na rolagem (procurando um ponto). A cada gesto o relógio reinicia; passado
+   * esse tempo sem toque, a tela volta a acompanhar o versículo que está tocando. */
+  _PAUSA_SEGUIR: 10000,
+
+  /* Borda de baixo da barra do topo (o começo da área de leitura visível). */
+  _topoVisivel() {
+    const topo = document.querySelector('.topo');
+    const h = topo ? topo.getBoundingClientRect().bottom : 0;
+    return (h > 0 && h < window.innerHeight) ? h : 52;
+  },
+
+  /* Borda de cima do que está visível: o topo do player quando aberto (sobe
+   * quando a lista está expandida), senão o fundo da tela. É o que encolhe o
+   * espaço superior — e é nele que o versículo deve ficar centralizado. */
+  _baseVisivel() {
+    const player = document.getElementById('player-voz');
+    if (player && player.classList.contains('aberto')) {
+      const t = player.getBoundingClientRect().top;
+      if (t > 0 && t < window.innerHeight) return t;
+    }
+    return window.innerHeight;
+  },
+
+  /* Registra que a pessoa mexeu na rolagem: pausa o reposicionamento por
+   * _PAUSA_SEGUIR e reagenda a retomada. Só conta durante a leitura em voz. */
+  _marcarInteracaoLeitura() {
+    if (!this.ouvindo) return;
+    this._seguirPausadoAte = Date.now() + this._PAUSA_SEGUIR;
+    clearTimeout(this._seguirRetomaTimer);
+    this._seguirRetomaTimer = setTimeout(() => this._retomarSeguir(), this._PAUSA_SEGUIR + 50);
+  },
+
+  /* Passado o tempo sem toque, volta a centralizar no versículo que está tocando. */
+  _retomarSeguir() {
+    if (!this.ouvindo) return;
+    if (Date.now() < (this._seguirPausadoAte || 0)) return;   // mexeu de novo: o reagendamento cuida
+    if (this.lendoVers != null) this.rolarAteVersiculo(this.lendoVers, { forcar: true });
+  },
+
+  /* Rola para deixar o versículo que está tocando mais ou menos no CENTRO do
+   * espaço realmente visível — entre a barra do topo e o topo do player (que
+   * sobe quando a lista está expandida). Uma zona morta evita ficar rolando a
+   * cada versículo curto. Respeita a pausa por interação: se a pessoa acabou de
+   * mexer na rolagem, não reposiciona (a não ser com `forcar`). */
+  rolarAteVersiculo(vers, { forcar = false } = {}) {
+    if (!forcar && Date.now() < (this._seguirPausadoAte || 0)) return;
     const el = this._escopoLeitura().querySelector(`.v[data-vers="${vers}"]`);
-    if (el) el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    if (!el) return;
+    const topo = this._topoVisivel();
+    const base = this._baseVisivel();
+    const janela = base - topo;
+    if (janela <= 40) { el.scrollIntoView({ block: 'center', behavior: 'smooth' }); return; }
+    const r = el.getBoundingClientRect();
+    // onde o TOPO do versículo deve ficar para centralizá-lo na faixa visível
+    // (entre a barra do topo e o topo do player, que sobe com a lista aberta)
+    const alvoTopo = topo + Math.max(0, (janela - r.height) / 2);
+    // tolerância fixa (não proporcional): já está no ponto? não mexe (sem tremor)
+    if (!forcar && Math.abs(r.top - alvoTopo) < 16) return;
+    // scrollIntoView acha SOZINHO o elemento que realmente rola (janela, <html>
+    // ou <body>, conforme o modo) — window.scrollTo mirava a janela e, quando
+    // quem rola é o body, não mexia nada. O scroll-margin-top coloca o topo do
+    // versículo no ponto calculado (block:'start' + margem = centralizado).
+    const antes = el.style.scrollMarginTop;
+    el.style.scrollMarginTop = alvoTopo + 'px';
+    try { el.scrollIntoView({ block: 'start', behavior: 'smooth' }); }
+    catch (e) { try { el.scrollIntoView(); } catch (e2) {} }
+    // restaura a margem depois que o rolar já mirou (não atrapalha outros usos
+    // de scrollIntoView, como pular para um versículo pela navegação)
+    clearTimeout(this._margemTimer);
+    this._margemTimer = setTimeout(() => { el.style.scrollMarginTop = antes || ''; }, 700);
   },
 
   /** Atualiza o rótulo e o ícone (play vs pausa) da barra do player. */
@@ -6002,6 +6101,11 @@ const App = {
       this._capExplorando = null;    // reabrir a lista começa com tudo fechado, exceto a execução
       this._execColapsada = false;
       this.desenharListaPlayer();
+    }
+    // a lista subiu/desceu: o espaço visível mudou. Recentraliza o versículo que
+    // está tocando nesse novo espaço (forçado — é uma ação deliberada da pessoa).
+    if (this.ouvindo && this.lendoVers != null) {
+      requestAnimationFrame(() => this.rolarAteVersiculo(this.lendoVers, { forcar: true }));
     }
   },
 
@@ -6545,6 +6649,8 @@ const App = {
     this._filaEncerrada = false;
     this._naUltVers = this._naUltCap = this._naUltCode = null;
     this._naNome = nome || '';
+    this._seguirPausadoAte = 0;                 // nova sessão: começa acompanhando
+    clearTimeout(this._seguirRetomaTimer);
     this._cancelarAutoFechar();
 
     document.body.classList.add('ouvindo');
