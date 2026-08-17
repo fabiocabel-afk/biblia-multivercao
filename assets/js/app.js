@@ -2191,8 +2191,21 @@ const App = {
 
     // tocar num botão da barra NÃO pode roubar o foco do texto (senão a seleção
     // some). No celular isso é pointer/touch — não basta o mousedown do desktop.
-    const naoRoubarFoco = el => ['pointerdown', 'touchstart', 'mousedown']
-      .forEach(ev => el.addEventListener(ev, e => e.preventDefault(), { passive: false }));
+    // Ativa um botão da barra de forma robusta no toque: faz o trabalho no
+    // 'pointerdown' e segura o padrão (preserva a seleção). Fazer no pointerdown
+    // — e NÃO no 'click' — é o que conserta o Android: lá, segurar o toque
+    // cancelava o clique e o botão "não fazia nada". O 'click' fica só para a
+    // ativação por teclado, sem repetir o que o ponteiro já fez.
+    const aoAtivar = (el, fn) => {
+      let feitoPeloPonteiro = false;
+      el.addEventListener('pointerdown', e => {
+        e.preventDefault(); feitoPeloPonteiro = true; fn();
+      }, { passive: false });
+      el.addEventListener('click', () => {
+        if (feitoPeloPonteiro) { feitoPeloPonteiro = false; return; }
+        fn();
+      });
+    };
 
     // ---- montar a lista de blocos com os slots de inserção ----
     const slot = i => `<button class="estudo-inserir" data-slot="${i}">
@@ -2251,19 +2264,18 @@ const App = {
 
     // ---- negrito / itálico / sublinhado / limpar ----
     barra.querySelectorAll('[data-cmd]').forEach(b => {
-      naoRoubarFoco(b);
-      b.onclick = () => {
+      aoAtivar(b, () => {
         if (!restaurar()) return;
         css();
         document.execCommand(b.dataset.cmd, false, null);
         salvarRange(); sincronizar();
-      };
+      });
     });
 
     // ---- três tamanhos: Título (g) / Normal (m) / Menor (p) ----
     // Com trecho selecionado, envolve o trecho num <span> com a classe do tamanho
     // (limpando tamanhos internos, para o novo valer de fato). Sem seleção,
-    // aplica o tamanho ao bloco inteiro. Funciona no toque graças ao naoRoubarFoco.
+    // aplica o tamanho ao bloco inteiro. Funciona no toque via aoAtivar (pointerdown).
     const aplicarTamanho = cls => {
       if (!restaurar()) return;
       const s = window.getSelection();
@@ -2289,8 +2301,7 @@ const App = {
       sincronizar();
     };
     barra.querySelectorAll('[data-size]').forEach(b => {
-      naoRoubarFoco(b);
-      b.onclick = () => aplicarTamanho('est-tam-' + b.dataset.size);
+      aoAtivar(b, () => aplicarTamanho('est-tam-' + b.dataset.size));
     });
 
     // ---- cor da letra e de fundo: a mesma roda de cores, com Aplicar ----
@@ -2322,9 +2333,8 @@ const App = {
           aplicarCor(modo, cor);
         });
     };
-    naoRoubarFoco(btnLetra); naoRoubarFoco(btnFundo);
-    btnLetra.onclick = () => abrirCaixaCor('letra');
-    btnFundo.onclick = () => abrirCaixaCor('fundo');
+    aoAtivar(btnLetra, () => abrirCaixaCor('letra'));
+    aoAtivar(btnFundo, () => abrirCaixaCor('fundo'));
   },
 
   /* Monta o trecho a partir da seleção, perguntando até onde vai. Devolve o
@@ -3685,20 +3695,29 @@ const App = {
       if (!vivoNoEditor && rangeSalvo) { s.removeAllRanges(); s.addRange(rangeSalvo); }
     };
     const css = () => { try { document.execCommand('styleWithCSS', false, true); } catch {} };
-    // tocar num botão não pode roubar o foco do texto (no celular é pointer/touch)
-    const naoRoubarFoco = el => ['pointerdown', 'touchstart', 'mousedown']
-      .forEach(ev => el.addEventListener(ev, e => e.preventDefault(), { passive: false }));
+    // Ativa um botão fazendo o trabalho no 'pointerdown' (com preventDefault),
+    // não no 'click' — no Android, segurar o toque cancela o clique; assim o
+    // botão funciona no toque e preserva a seleção. O 'click' cobre o teclado.
+    const aoAtivar = (el, fn) => {
+      let feitoPeloPonteiro = false;
+      el.addEventListener('pointerdown', e => {
+        e.preventDefault(); feitoPeloPonteiro = true; fn();
+      }, { passive: false });
+      el.addEventListener('click', () => {
+        if (feitoPeloPonteiro) { feitoPeloPonteiro = false; return; }
+        fn();
+      });
+    };
     editor.addEventListener('keyup', salvarRange);
     editor.addEventListener('mouseup', salvarRange);
     editor.addEventListener('blur', salvarRange);
     document.addEventListener('selectionchange', salvarRange);
     this._limparSelNota = () => document.removeEventListener('selectionchange', salvarRange);
 
-    // Negrito/itálico/sublinhado/tachado e limpar: seguram o toque para não
-    // perder a seleção, então aplicam direto.
+    // Negrito/itálico/sublinhado/tachado e limpar: aplicam no toque, preservando
+    // a seleção.
     corpo.querySelectorAll('[data-cmd]').forEach(el => {
-      naoRoubarFoco(el);
-      el.onclick = () => { restaurarRange(); css(); document.execCommand(el.dataset.cmd, false, null); salvarRange(); };
+      aoAtivar(el, () => { restaurarRange(); css(); document.execCommand(el.dataset.cmd, false, null); salvarRange(); });
     });
 
     // Cor da letra e cor de fundo usam a MESMA roda de cores dos marcadores — o
@@ -3754,10 +3773,8 @@ const App = {
     };
 
     // segurar o toque preserva a seleção do texto ao tocar no botão de cor
-    naoRoubarFoco(btnCorLetra);
-    naoRoubarFoco(btnCorFundo);
-    btnCorLetra.onclick = () => abrirCaixaCor('letra');
-    btnCorFundo.onclick = () => abrirCaixaCor('fundo');
+    aoAtivar(btnCorLetra, () => abrirCaixaCor('letra'));
+    aoAtivar(btnCorFundo, () => abrirCaixaCor('fundo'));
 
     const fonte = document.getElementById('fmt-fonte');
     fonte.onchange = () => {
