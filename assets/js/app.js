@@ -2396,8 +2396,12 @@ const App = {
           aplicarCor(modo, cor);
         });
     };
-    aoAtivar(btnLetra, () => abrirCaixaCor('letra'));
-    aoAtivar(btnFundo, () => abrirCaixaCor('fundo'));
+    // A cor abre no CLIQUE (fim do toque), não no pointerdown — senão o "subir o
+    // dedo" do mesmo toque cairia na paleta e a fecharia. O trecho é memorizado
+    // já no pointerdown (antes de o foco sair), então a cor pega mesmo sem seleção.
+    [btnLetra, btnFundo].forEach(b => b.addEventListener('pointerdown', () => pegarRange()));
+    btnLetra.onclick = () => abrirCaixaCor('letra');
+    btnFundo.onclick = () => abrirCaixaCor('fundo');
   },
 
   /* Monta o trecho a partir da seleção, perguntando até onde vai. Devolve o
@@ -3841,9 +3845,11 @@ const App = {
         });
     };
 
-    // segurar o toque preserva a seleção do texto ao tocar no botão de cor
-    aoAtivar(btnCorLetra, () => abrirCaixaCor('letra'));
-    aoAtivar(btnCorFundo, () => abrirCaixaCor('fundo'));
+    // A cor abre no CLIQUE (fim do toque) para a paleta não fechar com o próprio
+    // toque de abertura; o trecho é memorizado no pointerdown.
+    [btnCorLetra, btnCorFundo].forEach(b => b.addEventListener('pointerdown', () => pegarRange()));
+    btnCorLetra.onclick = () => abrirCaixaCor('letra');
+    btnCorFundo.onclick = () => abrirCaixaCor('fundo');
 
     const fonte = document.getElementById('fmt-fonte');
     fonte.onchange = () => {
@@ -4132,7 +4138,10 @@ const App = {
 
       btSalvar.onclick = salvar;
       btCanc.onclick = () => fechar(null);
-      veu.onclick = e => { if (e.target === veu) fechar(null); };
+      const abertoEm = Date.now();
+      // ignora um clique no fundo logo após abrir — é o "subir o dedo" do mesmo
+      // toque que abriu a paleta, que senão a fecharia na hora
+      veu.onclick = e => { if (e.target === veu && Date.now() - abertoEm > 300) fechar(null); };
       document.addEventListener('keydown', aoTeclar, true);
 
       veu.setAttribute('aria-hidden', 'false');
