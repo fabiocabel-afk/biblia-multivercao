@@ -130,6 +130,8 @@ const RodaDeCores = {
         <div class="roda-alvo barra-alvo"></div>
       </div>
       <div class="roda-legenda"><span>mais escuro</span><span>mais claro</span></div>
+      <div class="roda-fixas-rot">Cores do app</div>
+      <div class="roda-fixas" role="group" aria-label="Cores do app"></div>
       <div class="roda-rodape">
         <input class="roda-hex" type="text" spellcheck="false" autocomplete="off"
           maxlength="7" aria-label="Código hexadecimal da cor">
@@ -143,16 +145,14 @@ const RodaDeCores = {
     const aplicar = caixa.querySelector('.roda-aplicar');
     const rotulo  = caixa.querySelector('.roda-hex');
     const paleta  = caixa.querySelector('.roda-paleta');
+    const fixasEl = caixa.querySelector('.roda-fixas');
 
-    // desenha os quadradinhos: primeiro as FIXAS, uma divisória, e as recentes
+    const chip = c => `<button type="button" class="roda-chip" data-cor="${c}"
+         title="${c.toUpperCase()}" style="background:${c}"></button>`;
+    // fixas ficam numa TIRA horizontal (não quebram linha); recentes na grade
     const pintarPaleta = () => {
-      const chip = c => `<button type="button" class="roda-chip" data-cor="${c}"
-           title="${c.toUpperCase()}" style="background:${c}"></button>`;
-      const fixas = CoresRecentes.FIXAS.map(chip).join('');
-      const recentes = CoresRecentes.lista().map(chip).join('');
-      paleta.innerHTML = fixas
-        + '<span class="roda-div" aria-hidden="true"></span>'
-        + recentes;
+      fixasEl.innerHTML = CoresRecentes.FIXAS.map(chip).join('');
+      paleta.innerHTML = CoresRecentes.lista().map(chip).join('');
     };
 
     const desenhar = (avisar = true) => {
@@ -238,11 +238,11 @@ const RodaDeCores = {
       desenhar();
     });
 
-    /* ---------- a paleta de recentes: tocar num quadradinho pré-visualiza --- */
-    paleta.addEventListener('click', e => {
-      const chip = e.target.closest('[data-cor]');
-      if (!chip) return;
-      const { h, s, l } = Cores.hexParaHsl(chip.dataset.cor);
+    /* ---------- tocar num quadradinho (fixa ou recente) pré-visualiza ------- */
+    caixa.addEventListener('click', e => {
+      const chipEl = e.target.closest('[data-cor]');
+      if (!chipEl) return;
+      const { h, s, l } = Cores.hexParaHsl(chipEl.dataset.cor);
       estado.h = h; estado.s = s; estado.l = l;   // fixas (0% sat) entram exatas
       desenhar();                                  // só carrega a cor na roda; aplicar é no botão
     });

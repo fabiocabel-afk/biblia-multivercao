@@ -1923,6 +1923,29 @@ body.comparando .comparador { display: flex; }
   transition: transform .08s ease;
 }
 .roda-chip:active { transform: scale(.88); }
+
+/* cores fixas do app: uma TIRA horizontal com rolagem, sem quebrar linha */
+.roda-fixas-rot {
+  font-size: .72rem;
+  opacity: .6;
+  margin: 12px 0 5px;
+  letter-spacing: .02em;
+}
+.roda-fixas {
+  display: flex;
+  gap: 7px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  padding: 2px 1px 7px;
+  scrollbar-width: thin;
+}
+.roda-fixas .roda-chip {
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  aspect-ratio: auto;
+  box-shadow: 0 1px 2px rgb(0 0 0 / .12);
+}
 /* divisória entre as cores fixas (imutáveis) e as recentes, na largura toda */
 .roda-div {
   grid-column: 1 / -1;
@@ -1930,13 +1953,18 @@ body.comparando .comparador { display: flex; }
   margin: 3px 1px;
   border-top: 1px dashed color-mix(in srgb, var(--tinta) 32%, transparent);
 }
-/* prévia: cor atual → nova, e o botão de remover */
+/* prévia: cor atual → nova, emoldurada e fixa (não encavala com a roda acima) */
 .cor-previa {
+  flex: none;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 14px;
-  margin-top: 12px;
+  gap: 16px;
+  margin: 14px 0 4px;
+  padding: 10px 14px;
+  border: 1px solid color-mix(in srgb, var(--tinta) 16%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--tinta) 4%, transparent);
 }
 .cor-previa-item { display: flex; flex-direction: column; align-items: center; gap: 4px; }
 .cor-previa-rot { font-size: .74rem; opacity: .7; }
@@ -2633,6 +2661,51 @@ body.selecionando .rodape { transform: translateY(110%); }
 .est-tam-g { font-size: 1.35em; font-weight: 600; }
 .est-tam-m { font-size: 1em; font-weight: 400; }
 .est-tam-p { font-size: .82em; }
+
+/* ---- blocos de estudo: alinhamento, marcadores, hierarquia em L, preenchimento ---- */
+.estudo-texto.al-c { text-align: center; }
+.estudo-texto.al-d { text-align: right; }
+.estudo-texto.al-j { text-align: justify; }
+
+/* marcador (bullet) — um ponto de tinta, sóbrio */
+.estudo-texto.bloco-marcador { position: relative; padding-left: 1.45em; }
+.estudo-texto.bloco-marcador::before {
+  content: '';
+  position: absolute; left: .5em; top: .62em;
+  width: .34em; height: .34em; border-radius: 50%;
+  background: currentColor; opacity: .72;
+}
+
+/* hierarquia: recuo por nível + um traço em "L" ligando ao nível acima */
+.estudo-texto.nivel-1 { margin-left: 1.7em; }
+.estudo-texto.nivel-2 { margin-left: 3.4em; }
+.estudo-texto.nivel-3 { margin-left: 5.1em; }
+.estudo-texto.nivel-4 { margin-left: 6.8em; }
+.estudo-texto[class*="nivel-"] { position: relative; }
+.estudo-texto[class*="nivel-"]::after {
+  content: '';
+  position: absolute;
+  left: -0.95em; top: -0.12em;
+  width: 0.64em; height: 0.98em;
+  border-left: 1.5px solid color-mix(in srgb, var(--tinta) 32%, transparent);
+  border-bottom: 1.5px solid color-mix(in srgb, var(--tinta) 32%, transparent);
+  border-bottom-left-radius: 6px;
+  pointer-events: none;
+}
+
+/* preenchimento do bloco: a cor cobre a coluna toda (vira um retângulo) */
+.estudo-texto.tem-fundo { padding: .55em .78em; border-radius: 9px; }
+/* blocos preenchidos consecutivos se unem num retângulo só (na visão) */
+.estudo-ver-conteudo .estudo-bloco.tem-fundo:has(+ .estudo-bloco.tem-fundo) {
+  margin-bottom: 0;
+  border-bottom-left-radius: 0; border-bottom-right-radius: 0;
+}
+.estudo-ver-conteudo .estudo-bloco.tem-fundo + .estudo-bloco.tem-fundo {
+  margin-top: 0;
+  border-top-left-radius: 0; border-top-right-radius: 0;
+}
+/* o botão "preencher" na barra mostra a ideia de bloco cheio */
+.fmt-preencher svg rect { opacity: .9; }
 .corpo-estudo-ver.editando .caixa-cor { flex: 0 0 auto; }
 .estudo-edit-blocos {
   flex: 1 1 auto;

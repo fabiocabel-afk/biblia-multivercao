@@ -2028,7 +2028,8 @@ const App = {
     const partes = [];
     for (const b of Estudos.blocosDe(e)) {
       if (b.tipo === 'texto') {
-        partes.push(`<div class="estudo-bloco estudo-texto">${b.html || ''}</div>`);
+        const a = this._blocoTextoAttrs(b);
+        partes.push(`<div class="estudo-bloco ${a.cls}"${a.sty}>${b.html || ''}</div>`);
         continue;
       }
       // um trecho é um lançamento único → sempre UM container, mesmo que cruze
@@ -2110,6 +2111,18 @@ const App = {
    * formatação das notas (negrito, itálico, sublinhado e a roda de cores). Uma
    * barra de formato única age sobre o bloco de texto que estiver em foco.
    * Tudo é guardado como e.blocos (a sequência ordenada). */
+  /* Classes e estilo de um bloco de TEXTO do estudo (marcador, nível/hierarquia,
+   * alinhamento e preenchimento). Usado igual na edição e na visão. */
+  _blocoTextoAttrs(b) {
+    const cls = ['estudo-texto'];
+    if (b.marcador) cls.push('bloco-marcador');
+    if (b.nivel) cls.push('nivel-' + Math.min(4, +b.nivel));
+    if (b.alinhar) cls.push('al-' + b.alinhar);
+    if (b.fundo) cls.push('tem-fundo');
+    const sty = b.fundo ? ` style="background:${b.fundo}"` : '';
+    return { cls: cls.join(' '), sty };
+  },
+
   /* ---- formatação rica por manipulação DIRETA de DOM (sem execCommand) ----
    * No Android, tocar num botão apaga a seleção viva e o execCommand não pega —
    * por isso os botões "não faziam nada". Estas funções operam sobre o RANGE
@@ -2233,7 +2246,8 @@ const App = {
 
     // cópia de trabalho da sequência
     const blocos = Estudos.blocosDe(e).map(b => b.tipo === 'texto'
-      ? { tipo: 'texto', html: b.html || '' }
+      ? { tipo: 'texto', html: b.html || '', marcador: !!b.marcador,
+          nivel: +b.nivel || 0, alinhar: b.alinhar || '', fundo: b.fundo || '' }
       : { tipo: 'versos', trecho: b.trecho });
 
     document.getElementById('titulo-estudo-ver').textContent = Estudos.nomeDe(e) || 'Estudo';
@@ -2252,6 +2266,16 @@ const App = {
         <button class="fmt fmt-tam" data-size="g" title="Título (maior)"><span style="font-size:16px;font-weight:600">A</span></button>
         <button class="fmt fmt-tam" data-size="m" title="Texto normal"><span style="font-size:13px">A</span></button>
         <button class="fmt fmt-tam" data-size="p" title="Texto menor"><span style="font-size:10px">A</span></button>
+        <span class="fmt-sep" aria-hidden="true"></span>
+        <button class="fmt" id="est-marcador" title="Marcadores"><svg class="icone"><use href="#i-lista"/></svg></button>
+        <button class="fmt" id="est-recuar-fora" title="Menos recuo"><svg class="icone"><use href="#i-antes"/></svg></button>
+        <button class="fmt" id="est-recuar" title="Mais recuo (hierarquia)"><svg class="icone"><use href="#i-avancar"/></svg></button>
+        <button class="fmt" id="est-alinhar" title="Alinhamento">
+          <svg class="icone" viewBox="0 0 24 24"><g stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="15" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></g></svg>
+        </button>
+        <button class="fmt fmt-preencher" id="est-preencher" title="Preencher o bloco">
+          <svg class="icone" viewBox="0 0 24 24"><rect x="4" y="6" width="16" height="12" rx="2.5" fill="currentColor"/></svg>
+        </button>
         <span class="fmt-sep" aria-hidden="true"></span>
         <button class="fmt" data-cmd="removeFormat" title="Limpar formatação"><svg class="icone"><use href="#i-limpar-formato"/></svg></button>
       </div>
@@ -2342,9 +2366,10 @@ const App = {
       for (let i = 0; i < blocos.length; i++) {
         const b = blocos[i];
         if (b.tipo === 'texto') {
+          const a = this._blocoTextoAttrs(b);
           partes.push(`<div class="estudo-bloco-edit">
-            <div class="estudo-texto estudo-texto-edit" contenteditable="true"
-              data-edit="${i}" data-ph="Escreva seu comentário…">${b.html || ''}</div>
+            <div class="${a.cls} estudo-texto-edit" contenteditable="true"
+              data-edit="${i}" data-ph="Escreva seu comentário…"${a.sty}>${b.html || ''}</div>
             <button class="estudo-remover-bloco" data-rem="${i}" aria-label="Remover este texto">
               <svg class="icone"><use href="#i-lixeira"/></svg></button>
           </div>`);
@@ -2411,6 +2436,31 @@ const App = {
       });
     });
 
+    // ---- formatação de BLOCO: marcador, recuo (hierarquia), alinhamento ----
+    // Agem no bloco em foco (ativo) — não precisam de seleção.
+    const blocoAtivo = () => (ativo && ativo.dataset.edit != null) ? blocos[+ativo.dataset.edit] : null;
+    const reaplicarBloco = () => {
+      const b = blocoAtivo(); if (!b || !ativo) return;
+      const a = this._blocoTextoAttrs(b);
+      ativo.className = a.cls + ' estudo-texto-edit';
+      ativo.style.background = b.fundo || '';
+      Estudos.salvarBlocos(id, blocos);
+    };
+    const btnMarc = document.getElementById('est-marcador');
+    const btnRec = document.getElementById('est-recuar');
+    const btnRecF = document.getElementById('est-recuar-fora');
+    const btnAlin = document.getElementById('est-alinhar');
+    const btnPreen = document.getElementById('est-preencher');
+    aoAtivar(btnMarc, () => { const b = blocoAtivo(); if (!b) return; b.marcador = !b.marcador; reaplicarBloco(); });
+    aoAtivar(btnRec, () => { const b = blocoAtivo(); if (!b) return; b.nivel = Math.min(4, (+b.nivel || 0) + 1); reaplicarBloco(); });
+    aoAtivar(btnRecF, () => { const b = blocoAtivo(); if (!b) return; b.nivel = Math.max(0, (+b.nivel || 0) - 1); reaplicarBloco(); });
+    const ALINHAS = ['', 'c', 'd', 'j'];   // esquerda → centro → direita → justificado
+    aoAtivar(btnAlin, () => {
+      const b = blocoAtivo(); if (!b) return;
+      b.alinhar = ALINHAS[(ALINHAS.indexOf(b.alinhar || '') + 1) % ALINHAS.length];
+      reaplicarBloco();
+    });
+
     // ---- cor da letra e de fundo: a mesma roda de cores, com Aplicar ----
     const amostraCor = document.getElementById('est-amostra-cor');
     const amostraFundo = document.getElementById('est-amostra-fundo');
@@ -2459,6 +2509,24 @@ const App = {
     [btnLetra, btnFundo].forEach(b => b.addEventListener('pointerdown', () => pegarRange()));
     btnLetra.onclick = () => abrirCaixaCor('letra');
     btnFundo.onclick = () => abrirCaixaCor('fundo');
+
+    // ---- preencher o bloco inteiro (vira um retângulo ao encostar no de baixo) ----
+    const abrirPreencher = () => {
+      const b = blocoAtivo(); if (!b) return;
+      if (ativo) ativo.blur();
+      try { window.getSelection().removeAllRanges(); } catch (e) {}
+      this.escolherCor({
+        cor: b.fundo || corAtual.fundo,
+        atual: b.fundo || null,
+        comRemover: true,
+        titulo: 'Preencher o bloco',
+      }).then(res => {
+        if (!res) return;
+        b.fundo = res.remover ? '' : res;
+        reaplicarBloco();
+      });
+    };
+    btnPreen.onclick = abrirPreencher;   // abre no clique (fim do toque), como as outras cores
   },
 
   /* Monta o trecho a partir da seleção, perguntando até onde vai. Devolve o
