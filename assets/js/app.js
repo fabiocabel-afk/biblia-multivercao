@@ -2181,6 +2181,38 @@ const App = {
       const r = document.createRange(); r.selectNode(t); return r;
     } catch (e) { return null; }
   },
+  /* Remove uma propriedade de estilo (color / backgroundColor) do trecho —
+   * usado pelo "Remover realce/cor". Tira a cor de qualquer span que TOQUE o
+   * trecho (ancestral que o envolve ou descendente); spans que ficam sem estilo
+   * nem classe são desfeitos. */
+  _ricoLimparEstilo(range, prop, editable) {
+    const alvos = new Set();
+    // ancestrais: sobe de cada nó de texto do trecho até o editável
+    this._ricoTextosNoRange(range).forEach(t => {
+      let el = t.parentNode;
+      while (el && el !== editable) {
+        if (el.tagName === 'SPAN' && el.style && el.style[prop]) alvos.add(el);
+        el = el.parentNode;
+      }
+    });
+    // descendentes: spans dentro do trecho com a propriedade
+    const anc = range.commonAncestorContainer;
+    const raiz = anc.nodeType === 1 ? anc : anc.parentNode;
+    if (raiz && raiz.querySelectorAll) {
+      raiz.querySelectorAll('span').forEach(s => {
+        if (s.style && s.style[prop] && range.intersectsNode(s)) alvos.add(s);
+      });
+    }
+    alvos.forEach(s => {
+      s.style[prop] = '';
+      if (!s.getAttribute('style') && !s.className) {   // span esvaziado: desembrulha
+        while (s.firstChild) s.parentNode.insertBefore(s.firstChild, s);
+        s.parentNode.removeChild(s);
+      }
+    });
+    if (editable) editable.normalize();
+    return null;
+  },
 
   async editarEstudo(id) {
     const e = Estudos.todos().find(x => x.id === id);
@@ -2384,17 +2416,28 @@ const App = {
         : { estilo: { backgroundColor: cor }, limparEstilo: 'backgroundColor' });
       aplicarResultado(novo);
     };
+    const removerCor = modo => {
+      const r = pegarRange(); if (!r) return;
+      aplicarResultado(this._ricoLimparEstilo(r, modo === 'letra' ? 'color' : 'backgroundColor', ativo));
+    };
     const abrirCaixaCor = modo => {
-      pegarRange();                 // fixa o trecho no range guardado
-      if (ativo) ativo.blur();      // fecha o teclado do celular para a roda não ficar coberta
-      this.escolherCor({ cor: corAtual[modo], titulo: modo === 'letra' ? 'Cor da letra' : 'Cor de fundo' })
-        .then(cor => {
-          if (!cor) return;
-          corAtual[modo] = cor;
-          if (modo === 'letra') amostraCor.style.background = cor;
-          else { amostraFundo.style.background = cor; amostraFundo.style.color = Cores.contraste(cor); }
-          aplicarCor(modo, cor);
-        });
+      pegarRange();                                 // fixa o trecho no range guardado
+      if (ativo) ativo.blur();                      // fecha o teclado do celular
+      try { window.getSelection().removeAllRanges(); } catch (e) {}   // dispensa a seleção visível
+      this.escolherCor({
+        cor: corAtual[modo],
+        titulo: modo === 'letra' ? 'Cor da letra' : 'Cor de fundo',
+        comRemover: true,
+        rotuloRemover: modo === 'letra' ? 'Remover cor' : 'Remover realce',
+      }).then(res => {
+        if (!res) return;
+        if (res.remover) { removerCor(modo); return; }
+        const cor = res;
+        corAtual[modo] = cor;
+        if (modo === 'letra') amostraCor.style.background = cor;
+        else { amostraFundo.style.background = cor; amostraFundo.style.color = Cores.contraste(cor); }
+        aplicarCor(modo, cor);
+      });
     };
     // A cor abre no CLIQUE (fim do toque), não no pointerdown — senão o "subir o
     // dedo" do mesmo toque cairia na paleta e a fecharia. O trecho é memorizado
@@ -3828,21 +3871,33 @@ const App = {
       btnCorFundo.classList.remove('ativa');
     };
 
+    const removerCor = modo => {
+      const r = pegarRange(); if (!r) return;
+      aplicarResultado(this._ricoLimparEstilo(r, modo === 'letra' ? 'color' : 'backgroundColor', editor));
+    };
+
     const abrirCaixaCor = modo => {
-      salvarRange();
-      editor.blur();   // fecha o teclado do celular para a roda não ficar coberta
-      this.escolherCor({ cor: corAtual[modo], titulo: modo === 'letra' ? 'Cor da letra' : 'Cor de fundo' })
-        .then(cor => {
-          if (!cor) return;
-          corAtual[modo] = cor;
-          if (modo === 'letra') {
-            amostraCor.style.background = cor;
-          } else {
-            amostraFundo.style.background = cor;
-            amostraFundo.style.color = Cores.contraste(cor);   // "A" sempre visível no fundo
-          }
-          aplicarCor(modo, cor);
-        });
+      pegarRange();
+      editor.blur();   // fecha o teclado do celular
+      try { window.getSelection().removeAllRanges(); } catch (e) {}   // dispensa a seleção visível
+      this.escolherCor({
+        cor: corAtual[modo],
+        titulo: modo === 'letra' ? 'Cor da letra' : 'Cor de fundo',
+        comRemover: true,
+        rotuloRemover: modo === 'letra' ? 'Remover cor' : 'Remover realce',
+      }).then(res => {
+        if (!res) return;
+        if (res.remover) { removerCor(modo); return; }
+        const cor = res;
+        corAtual[modo] = cor;
+        if (modo === 'letra') {
+          amostraCor.style.background = cor;
+        } else {
+          amostraFundo.style.background = cor;
+          amostraFundo.style.color = Cores.contraste(cor);
+        }
+        aplicarCor(modo, cor);
+      });
     };
 
     // A cor abre no CLIQUE (fim do toque) para a paleta não fechar com o próprio
@@ -4104,25 +4159,34 @@ const App = {
   /* Seletor de cor padrão: abre a roda num popup próprio, sem empurrar a tela.
    * Devolve uma promessa com o hex escolhido (se Salvar) ou null (se Cancelar).
    * A cor entra nos "recentes" só quando salva. */
-  escolherCor({ cor = '#8c2f39', titulo = 'Escolher cor' } = {}) {
+  escolherCor({ cor = '#8c2f39', titulo = 'Escolher cor', comRemover = false, rotuloRemover = 'Remover realce' } = {}) {
     return new Promise(resolve => {
       const veu = document.getElementById('cor-veu');
       const corpo = document.getElementById('cor-corpo');
       const btSalvar = document.getElementById('cor-salvar');
       const btCanc = document.getElementById('cor-cancelar');
+      const btRemover = document.getElementById('cor-remover');
+      const amAtual = document.getElementById('cor-previa-atual');
+      const amNova = document.getElementById('cor-previa-nova');
       document.getElementById('cor-titulo').textContent = titulo;
+
+      // prévia: "Atual" fixa na cor de entrada; "Nova" acompanha a roda ao vivo
+      if (amAtual) amAtual.style.background = cor;
+      if (amNova) amNova.style.background = cor;
 
       let hexAtual = cor;
       const ctrl = RodaDeCores.montar(corpo, cor, () => {}, {
         semAplicar: true,
-        vivo: hex => { hexAtual = hex; },
+        vivo: hex => { hexAtual = hex; if (amNova) amNova.style.background = hex; },
       });
       hexAtual = ctrl.corAtual();
+      if (amNova) amNova.style.background = hexAtual;
 
       const fechar = resultado => {
         veu.classList.remove('aberto');
         veu.setAttribute('aria-hidden', 'true');
-        btSalvar.onclick = btCanc.onclick = veu.onclick = null;
+        btSalvar.onclick = btCanc.onclick = null;
+        if (btRemover) { btRemover.onclick = null; btRemover.hidden = true; }
         document.removeEventListener('keydown', aoTeclar, true);
         corpo.innerHTML = '';
         resolve(resultado);
@@ -4138,10 +4202,14 @@ const App = {
 
       btSalvar.onclick = salvar;
       btCanc.onclick = () => fechar(null);
-      const abertoEm = Date.now();
-      // ignora um clique no fundo logo após abrir — é o "subir o dedo" do mesmo
-      // toque que abriu a paleta, que senão a fecharia na hora
-      veu.onclick = e => { if (e.target === veu && Date.now() - abertoEm > 300) fechar(null); };
+      if (btRemover) {
+        btRemover.hidden = !comRemover;
+        btRemover.textContent = rotuloRemover;
+        btRemover.onclick = comRemover ? () => fechar({ remover: true }) : null;
+      }
+      // A paleta de cor fecha SÓ pelos botões (Salvar/Cancelar/Remover) ou Esc —
+      // nada de "fechar tocando fora", que no celular fechava sozinha com um
+      // toque residual da seleção logo ao abrir.
       document.addEventListener('keydown', aoTeclar, true);
 
       veu.setAttribute('aria-hidden', 'false');

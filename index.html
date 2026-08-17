@@ -296,7 +296,19 @@
   <div class="dialogo dialogo-cor" role="dialog" aria-modal="true" aria-labelledby="cor-titulo">
     <strong id="cor-titulo">Escolher cor</strong>
     <div class="cor-corpo" id="cor-corpo"></div>
+    <div class="cor-previa" id="cor-previa">
+      <div class="cor-previa-item">
+        <span class="cor-previa-rot">Atual</span>
+        <span class="cor-previa-amostra" id="cor-previa-atual"></span>
+      </div>
+      <span class="cor-previa-seta" aria-hidden="true">→</span>
+      <div class="cor-previa-item">
+        <span class="cor-previa-rot">Nova</span>
+        <span class="cor-previa-amostra" id="cor-previa-nova"></span>
+      </div>
+    </div>
     <div class="dialogo-acoes">
+      <button class="botao secundario cor-btn-remover" id="cor-remover" hidden>Remover realce</button>
       <button class="botao secundario" id="cor-cancelar">Cancelar</button>
       <button class="botao" id="cor-salvar">Salvar</button>
     </div>

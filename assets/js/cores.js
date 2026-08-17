@@ -78,7 +78,9 @@ const Cores = {
 const CoresRecentes = {
   CHAVE: 'cores-recentes',
   MAX: 30,
-  FIXAS: ['#ffffff', '#000000'],
+  // cores fixas, sempre presentes e imutáveis: branco, preto e as mais usadas no
+  // app — marrom (tinta), bege (papel/fundo), vermelho (vinho) e âmbar (realce)
+  FIXAS: ['#ffffff', '#000000', '#3a2a1a', '#efe3c6', '#8c2f39', '#f2c94c'],
 
   padrao: (() => {
     const hues = [0, 30, 50, 95, 140, 175, 200, 225, 265, 305];
@@ -142,12 +144,15 @@ const RodaDeCores = {
     const rotulo  = caixa.querySelector('.roda-hex');
     const paleta  = caixa.querySelector('.roda-paleta');
 
-    // desenha os quadradinhos: as duas fixas (branco/preto) e as recentes
+    // desenha os quadradinhos: primeiro as FIXAS, uma divisória, e as recentes
     const pintarPaleta = () => {
-      const cores = [...CoresRecentes.FIXAS, ...CoresRecentes.lista()];
-      paleta.innerHTML = cores.map(c =>
-        `<button type="button" class="roda-chip" data-cor="${c}"
-           title="${c.toUpperCase()}" style="background:${c}"></button>`).join('');
+      const chip = c => `<button type="button" class="roda-chip" data-cor="${c}"
+           title="${c.toUpperCase()}" style="background:${c}"></button>`;
+      const fixas = CoresRecentes.FIXAS.map(chip).join('');
+      const recentes = CoresRecentes.lista().map(chip).join('');
+      paleta.innerHTML = fixas
+        + '<span class="roda-div" aria-hidden="true"></span>'
+        + recentes;
     };
 
     const desenhar = (avisar = true) => {

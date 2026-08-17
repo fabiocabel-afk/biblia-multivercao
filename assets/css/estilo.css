@@ -1923,6 +1923,30 @@ body.comparando .comparador { display: flex; }
   transition: transform .08s ease;
 }
 .roda-chip:active { transform: scale(.88); }
+/* divisória entre as cores fixas (imutáveis) e as recentes, na largura toda */
+.roda-div {
+  grid-column: 1 / -1;
+  height: 0;
+  margin: 3px 1px;
+  border-top: 1px dashed color-mix(in srgb, var(--tinta) 32%, transparent);
+}
+/* prévia: cor atual → nova, e o botão de remover */
+.cor-previa {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  margin-top: 12px;
+}
+.cor-previa-item { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.cor-previa-rot { font-size: .74rem; opacity: .7; }
+.cor-previa-amostra {
+  width: 46px; height: 26px;
+  border-radius: 6px;
+  border: 1px solid color-mix(in srgb, var(--tinta) 26%, transparent);
+}
+.cor-previa-seta { opacity: .5; font-size: 1.1rem; }
+.cor-btn-remover { margin-right: auto; }
 
 /* rodapé: código hexadecimal editável e, abaixo, o botão Aplicar colorido */
 .roda-rodape {
