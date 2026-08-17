@@ -2561,13 +2561,32 @@ body.selecionando .rodape { transform: translateY(110%); }
 .corpo-estudo-ver.editando { padding: 0; }
 .estudo-edit-barra {
   flex: 0 0 auto;
+  position: sticky;
+  top: 0;
+  z-index: 3;
   display: flex;
   gap: 4px;
   align-items: center;
   padding: 8px 10px;
+  background: var(--papel);
+  background-image: var(--perg-img, none);
   border-bottom: 1px solid color-mix(in srgb, var(--tinta) 10%, transparent);
   overflow-x: auto;
 }
+/* separador e botões de tamanho na barra do editor */
+.fmt-sep {
+  flex: 0 0 auto;
+  width: 1px;
+  align-self: stretch;
+  margin: 5px 3px;
+  background: color-mix(in srgb, var(--tinta) 16%, transparent);
+}
+.fmt-tam { min-width: 32px; }
+.fmt-tam span { line-height: 1; }
+/* três tamanhos aplicáveis ao texto do estudo (edição e visão) */
+.est-tam-g { font-size: 1.35em; font-weight: 600; }
+.est-tam-m { font-size: 1em; font-weight: 400; }
+.est-tam-p { font-size: .82em; }
 .corpo-estudo-ver.editando .caixa-cor { flex: 0 0 auto; }
 .estudo-edit-blocos {
   flex: 1 1 auto;

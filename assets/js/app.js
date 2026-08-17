@@ -2132,6 +2132,11 @@ const App = {
           <span class="rotulo-cor">A</span><span class="risco-cor" id="est-amostra-cor"></span></button>
         <button class="fmt fmt-fundo" id="est-cor-fundo" title="Cor de fundo">
           <span class="bloco-fundo" id="est-amostra-fundo">A</span></button>
+        <span class="fmt-sep" aria-hidden="true"></span>
+        <button class="fmt fmt-tam" data-size="g" title="Título (maior)"><span style="font-size:16px;font-weight:600">A</span></button>
+        <button class="fmt fmt-tam" data-size="m" title="Texto normal"><span style="font-size:13px">A</span></button>
+        <button class="fmt fmt-tam" data-size="p" title="Texto menor"><span style="font-size:10px">A</span></button>
+        <span class="fmt-sep" aria-hidden="true"></span>
         <button class="fmt" data-cmd="removeFormat" title="Limpar formatação"><svg class="icone"><use href="#i-limpar-formato"/></svg></button>
       </div>
       <div class="caixa-cor fechada" id="caixa-cor-estudo"></div>
@@ -2143,26 +2148,51 @@ const App = {
 
     // daqui, voltar/concluir salvam e levam de volta à VISÃO do estudo
     this._volta = () => this.verEstudo(id);
-    const sairSalvando = () => { Estudos.salvarBlocos(id, blocos); corpo.classList.remove('editando'); };
-    document.getElementById('estudo-ver-voltar').onclick = () => { sairSalvando(); this.voltar(); };
-    document.getElementById('estudo-edit-concluir').onclick = () => { sairSalvando(); this.voltar(); };
 
     const area = document.getElementById('estudo-edit-blocos');
+    const barra = document.getElementById('estudo-edit-barra');
 
-    // ---- seleção ativa: a barra age sobre o bloco de texto em foco ----
+    // ---- seleção ativa (robusta no celular) ------------------------------
+    // Guarda o último trecho selecionado DENTRO de um bloco. No celular a
+    // seleção nasce de um toque (não de mouseup), então ouvimos 'selectionchange'
+    // — é o que captura a seleção feita com o dedo. Assim, quando a pessoa toca
+    // num botão da barra, o trecho continua guardado e a formatação pega.
     let ativo = null, range = null;
+    const editavelDe = no => {
+      const el = no && (no.nodeType === 1 ? no : no.parentNode);
+      return el && el.closest ? el.closest('.estudo-texto-edit') : null;
+    };
     const salvarRange = () => {
       const s = window.getSelection();
-      if (s && s.rangeCount && ativo && ativo.contains(s.anchorNode)) range = s.getRangeAt(0).cloneRange();
+      if (!s || !s.rangeCount) return;
+      const ed = editavelDe(s.anchorNode);
+      if (ed) { ativo = ed; range = s.getRangeAt(0).cloneRange(); }
     };
     const restaurar = () => {
-      if (ativo) ativo.focus();
+      if (!ativo) return false;
+      ativo.focus();
       if (range) { const s = window.getSelection(); s.removeAllRanges(); s.addRange(range); }
+      return true;
     };
     const css = () => { try { document.execCommand('styleWithCSS', false, true); } catch { /* jsdom */ } };
     const sincronizar = () => {
       if (ativo && ativo.dataset.edit != null) blocos[+ativo.dataset.edit].html = ativo.innerHTML;
     };
+    const aoMudarSelecao = () => { if (corpo.classList.contains('editando')) salvarRange(); };
+    document.addEventListener('selectionchange', aoMudarSelecao);
+
+    const sairSalvando = () => {
+      Estudos.salvarBlocos(id, blocos);
+      corpo.classList.remove('editando');
+      document.removeEventListener('selectionchange', aoMudarSelecao);
+    };
+    document.getElementById('estudo-ver-voltar').onclick = () => { sairSalvando(); this.voltar(); };
+    document.getElementById('estudo-edit-concluir').onclick = () => { sairSalvando(); this.voltar(); };
+
+    // tocar num botão da barra NÃO pode roubar o foco do texto (senão a seleção
+    // some). No celular isso é pointer/touch — não basta o mousedown do desktop.
+    const naoRoubarFoco = el => ['pointerdown', 'touchstart', 'mousedown']
+      .forEach(ev => el.addEventListener(ev, e => e.preventDefault(), { passive: false }));
 
     // ---- montar a lista de blocos com os slots de inserção ----
     const slot = i => `<button class="estudo-inserir" data-slot="${i}">
@@ -2219,36 +2249,70 @@ const App = {
 
     await montar();
 
-    // ---- barra de formato (negrito/itálico/sublinhado/limpar) ----
-    const barra = document.getElementById('estudo-edit-barra');
+    // ---- negrito / itálico / sublinhado / limpar ----
     barra.querySelectorAll('[data-cmd]').forEach(b => {
-      b.addEventListener('mousedown', ev => ev.preventDefault());
-      b.onclick = () => { restaurar(); css(); document.execCommand(b.dataset.cmd, false, null); sincronizar(); };
+      naoRoubarFoco(b);
+      b.onclick = () => {
+        if (!restaurar()) return;
+        css();
+        document.execCommand(b.dataset.cmd, false, null);
+        salvarRange(); sincronizar();
+      };
+    });
+
+    // ---- três tamanhos: Título (g) / Normal (m) / Menor (p) ----
+    // Com trecho selecionado, envolve o trecho num <span> com a classe do tamanho
+    // (limpando tamanhos internos, para o novo valer de fato). Sem seleção,
+    // aplica o tamanho ao bloco inteiro. Funciona no toque graças ao naoRoubarFoco.
+    const aplicarTamanho = cls => {
+      if (!restaurar()) return;
+      const s = window.getSelection();
+      if (!s || !s.rangeCount) return;
+      const r = s.getRangeAt(0);
+      if (r.collapsed) {
+        if (ativo) { ativo.classList.remove('est-tam-g', 'est-tam-m', 'est-tam-p'); ativo.classList.add(cls); }
+      } else {
+        const span = document.createElement('span');
+        span.className = cls;
+        try {
+          span.appendChild(r.extractContents());
+          span.querySelectorAll('span').forEach(x => {
+            x.classList.remove('est-tam-g', 'est-tam-m', 'est-tam-p');
+            if (x.style) x.style.fontSize = '';
+          });
+          r.insertNode(span);
+          const ns = window.getSelection(); ns.removeAllRanges();
+          const nr = document.createRange(); nr.selectNodeContents(span); ns.addRange(nr);
+          range = nr.cloneRange();
+        } catch (e) { /* seleção complexa: ignora sem quebrar */ }
+      }
+      sincronizar();
+    };
+    barra.querySelectorAll('[data-size]').forEach(b => {
+      naoRoubarFoco(b);
+      b.onclick = () => aplicarTamanho('est-tam-' + b.dataset.size);
     });
 
     // ---- cor da letra e de fundo: a mesma roda de cores, com Aplicar ----
     const amostraCor = document.getElementById('est-amostra-cor');
     const amostraFundo = document.getElementById('est-amostra-fundo');
-    const caixaCor = document.getElementById('caixa-cor-estudo');
     const corAtual = { letra: '#8c2f39', fundo: '#f2c94c' };
     amostraCor.style.background = corAtual.letra;
     amostraFundo.style.background = corAtual.fundo;
     amostraFundo.style.color = Cores.contraste(corAtual.fundo);
-    let modoCor = null;
     const btnLetra = document.getElementById('est-cor-letra');
     const btnFundo = document.getElementById('est-cor-fundo');
 
     const aplicarCor = (modo, cor) => {
-      restaurar(); css();
+      if (!restaurar()) return;
+      css();
       if (modo === 'letra') document.execCommand('foreColor', false, cor);
       else if (!document.execCommand('hiliteColor', false, cor)) document.execCommand('backColor', false, cor);
       salvarRange(); sincronizar();
     };
-    const fecharCaixaCor = () => {
-      caixaCor.classList.add('fechada'); caixaCor.innerHTML = ''; modoCor = null;
-      btnLetra.classList.remove('ativa'); btnFundo.classList.remove('ativa');
-    };
     const abrirCaixaCor = modo => {
+      salvarRange();
+      if (ativo) ativo.blur();   // fecha o teclado do celular para a roda não ficar coberta
       this.escolherCor({ cor: corAtual[modo], titulo: modo === 'letra' ? 'Cor da letra' : 'Cor de fundo' })
         .then(cor => {
           if (!cor) return;
@@ -2258,7 +2322,7 @@ const App = {
           aplicarCor(modo, cor);
         });
     };
-    [btnLetra, btnFundo].forEach(b => b.addEventListener('mousedown', ev => ev.preventDefault()));
+    naoRoubarFoco(btnLetra); naoRoubarFoco(btnFundo);
     btnLetra.onclick = () => abrirCaixaCor('letra');
     btnFundo.onclick = () => abrirCaixaCor('fundo');
   },
@@ -3613,23 +3677,28 @@ const App = {
       }
     };
     const restaurarRange = () => {
+      const s = window.getSelection();
+      // se já há um trecho vivo selecionado dentro do editor, mantém — não
+      // atropela com um range antigo (evita aplicar formatação no lugar errado)
+      const vivoNoEditor = s && s.rangeCount && !s.isCollapsed && editor.contains(s.anchorNode);
       editor.focus();
-      if (rangeSalvo) {
-        const s = window.getSelection();
-        s.removeAllRanges();
-        s.addRange(rangeSalvo);
-      }
+      if (!vivoNoEditor && rangeSalvo) { s.removeAllRanges(); s.addRange(rangeSalvo); }
     };
     const css = () => { try { document.execCommand('styleWithCSS', false, true); } catch {} };
+    // tocar num botão não pode roubar o foco do texto (no celular é pointer/touch)
+    const naoRoubarFoco = el => ['pointerdown', 'touchstart', 'mousedown']
+      .forEach(ev => el.addEventListener(ev, e => e.preventDefault(), { passive: false }));
     editor.addEventListener('keyup', salvarRange);
     editor.addEventListener('mouseup', salvarRange);
     editor.addEventListener('blur', salvarRange);
+    document.addEventListener('selectionchange', salvarRange);
+    this._limparSelNota = () => document.removeEventListener('selectionchange', salvarRange);
 
-    // Negrito/itálico/sublinhado/tachado e limpar: seguram o mousedown para não
+    // Negrito/itálico/sublinhado/tachado e limpar: seguram o toque para não
     // perder a seleção, então aplicam direto.
     corpo.querySelectorAll('[data-cmd]').forEach(el => {
-      el.addEventListener('mousedown', e => e.preventDefault());
-      el.onclick = () => { editor.focus(); css(); document.execCommand(el.dataset.cmd, false, null); };
+      naoRoubarFoco(el);
+      el.onclick = () => { restaurarRange(); css(); document.execCommand(el.dataset.cmd, false, null); salvarRange(); };
     });
 
     // Cor da letra e cor de fundo usam a MESMA roda de cores dos marcadores — o
@@ -3668,6 +3737,8 @@ const App = {
     };
 
     const abrirCaixaCor = modo => {
+      salvarRange();
+      editor.blur();   // fecha o teclado do celular para a roda não ficar coberta
       this.escolherCor({ cor: corAtual[modo], titulo: modo === 'letra' ? 'Cor da letra' : 'Cor de fundo' })
         .then(cor => {
           if (!cor) return;
@@ -3682,9 +3753,9 @@ const App = {
         });
     };
 
-    // segurar o mousedown preserva a seleção do texto ao tocar no botão de cor
-    btnCorLetra.addEventListener('mousedown', e => e.preventDefault());
-    btnCorFundo.addEventListener('mousedown', e => e.preventDefault());
+    // segurar o toque preserva a seleção do texto ao tocar no botão de cor
+    naoRoubarFoco(btnCorLetra);
+    naoRoubarFoco(btnCorFundo);
     btnCorLetra.onclick = () => abrirCaixaCor('letra');
     btnCorFundo.onclick = () => abrirCaixaCor('fundo');
 
@@ -3696,9 +3767,10 @@ const App = {
       fonte.value = '';
     };
 
-    document.getElementById('cancelar-anot').onclick = () => this.abrirAnotacoes(vers);
+    document.getElementById('cancelar-anot').onclick = () => { this._limparSelNota?.(); this.abrirAnotacoes(vers); };
 
     document.getElementById('salvar-anot').onclick = () => {
+      this._limparSelNota?.();
       const html = Anotacoes.limpar(editor.innerHTML);
       const vazia = !(new DOMParser().parseFromString(html, 'text/html')
         .body.textContent || '').trim();
