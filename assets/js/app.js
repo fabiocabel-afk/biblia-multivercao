@@ -2110,6 +2110,78 @@ const App = {
    * formatação das notas (negrito, itálico, sublinhado e a roda de cores). Uma
    * barra de formato única age sobre o bloco de texto que estiver em foco.
    * Tudo é guardado como e.blocos (a sequência ordenada). */
+  /* ---- formatação rica por manipulação DIRETA de DOM (sem execCommand) ----
+   * No Android, tocar num botão apaga a seleção viva e o execCommand não pega —
+   * por isso os botões "não faziam nada". Estas funções operam sobre o RANGE
+   * guardado (um clone que continua válido no DOM), então funcionam igual no
+   * celular e no desktop, sem depender de foco nem de seleção viva. Cada uma
+   * devolve o range a reselecionar (para o trecho seguir marcado), ou null. */
+  _ricoAncestralTag(no, tag, limite) {
+    let el = no && (no.nodeType === 1 ? no : no.parentNode);
+    while (el && el !== limite) {
+      if (el.tagName && el.tagName.toLowerCase() === tag) return el;
+      el = el.parentNode;
+    }
+    return null;
+  },
+  _ricoTextosNoRange(range) {
+    const anc = range.commonAncestorContainer;
+    const raiz = anc.nodeType === 1 ? anc : anc.parentNode;
+    const out = [];
+    const w = document.createTreeWalker(raiz, NodeFilter.SHOW_TEXT);
+    let n;
+    while ((n = w.nextNode())) { if (n.data && range.intersectsNode(n)) out.push(n); }
+    if (!out.length && range.startContainer.nodeType === 3) out.push(range.startContainer);
+    return out;
+  },
+  /* Liga/desliga uma tag inline (strong/em/u/s) no trecho. */
+  _ricoAlternarTag(range, tag, editable) {
+    const textos = this._ricoTextosNoRange(range);
+    const jaTodos = textos.length && textos.every(t => this._ricoAncestralTag(t, tag, editable));
+    if (jaTodos) {                              // desliga: desembrulha os <tag>
+      const alvos = new Set();
+      textos.forEach(t => { const el = this._ricoAncestralTag(t, tag, editable); if (el) alvos.add(el); });
+      alvos.forEach(el => {
+        const pai = el.parentNode; if (!pai) return;
+        while (el.firstChild) pai.insertBefore(el.firstChild, el);
+        pai.removeChild(el);
+      });
+      if (editable) editable.normalize();
+      return null;
+    }
+    const el = document.createElement(tag);    // liga: envolve
+    try { el.appendChild(range.extractContents()); range.insertNode(el); }
+    catch (e) { return null; }
+    if (editable) editable.normalize();
+    const r = document.createRange(); r.selectNodeContents(el); return r;
+  },
+  /* Envolve o trecho num <span> com classe e/ou estilo, limpando a mesma
+   * propriedade em spans internos para o novo valor valer de fato. */
+  _ricoEnvolver(range, { classe = '', estilo = null, limparClasses = [], limparEstilo = '' } = {}) {
+    const span = document.createElement('span');
+    if (classe) span.className = classe;
+    if (estilo) for (const k in estilo) span.style[k] = estilo[k];
+    try {
+      span.appendChild(range.extractContents());
+      span.querySelectorAll('span').forEach(x => {
+        limparClasses.forEach(c => x.classList.remove(c));
+        if (limparEstilo && x.style) x.style[limparEstilo] = '';
+      });
+      range.insertNode(span);
+    } catch (e) { return null; }
+    const r = document.createRange(); r.selectNodeContents(span); return r;
+  },
+  /* Achata o trecho para texto puro (limpar formatação). */
+  _ricoLimpar(range) {
+    const texto = range.toString();
+    try {
+      range.deleteContents();
+      const t = document.createTextNode(texto);
+      range.insertNode(t);
+      const r = document.createRange(); r.selectNode(t); return r;
+    } catch (e) { return null; }
+  },
+
   async editarEstudo(id) {
     const e = Estudos.todos().find(x => x.id === id);
     if (!e) return;
@@ -2153,10 +2225,10 @@ const App = {
     const barra = document.getElementById('estudo-edit-barra');
 
     // ---- seleção ativa (robusta no celular) ------------------------------
-    // Guarda o último trecho selecionado DENTRO de um bloco. No celular a
-    // seleção nasce de um toque (não de mouseup), então ouvimos 'selectionchange'
-    // — é o que captura a seleção feita com o dedo. Assim, quando a pessoa toca
-    // num botão da barra, o trecho continua guardado e a formatação pega.
+    // Guarda o último trecho REAL selecionado dentro de um bloco. No celular a
+    // seleção nasce de um toque (não de mouseup), então ouvimos 'selectionchange'.
+    // Guardamos só seleções não-colapsadas: assim, quando o toque no botão
+    // colapsa a seleção (comportamento do Android), o trecho bom não é perdido.
     let ativo = null, range = null;
     const editavelDe = no => {
       const el = no && (no.nodeType === 1 ? no : no.parentNode);
@@ -2164,19 +2236,29 @@ const App = {
     };
     const salvarRange = () => {
       const s = window.getSelection();
-      if (!s || !s.rangeCount) return;
+      if (!s || !s.rangeCount || s.isCollapsed) return;   // só seleções reais
       const ed = editavelDe(s.anchorNode);
       if (ed) { ativo = ed; range = s.getRangeAt(0).cloneRange(); }
     };
-    const restaurar = () => {
-      if (!ativo) return false;
-      ativo.focus();
-      if (range) { const s = window.getSelection(); s.removeAllRanges(); s.addRange(range); }
-      return true;
+    // range de trabalho: a seleção viva (se real) ou o último guardado
+    const pegarRange = () => {
+      const s = window.getSelection();
+      if (s && s.rangeCount && !s.isCollapsed) {
+        const ed = editavelDe(s.anchorNode);
+        if (ed) { ativo = ed; range = s.getRangeAt(0).cloneRange(); return range.cloneRange(); }
+      }
+      return (range && !range.collapsed) ? range.cloneRange() : null;
     };
-    const css = () => { try { document.execCommand('styleWithCSS', false, true); } catch { /* jsdom */ } };
+    // aplica o resultado: reseleciona o trecho formatado (se possível) e salva
     const sincronizar = () => {
       if (ativo && ativo.dataset.edit != null) blocos[+ativo.dataset.edit].html = ativo.innerHTML;
+    };
+    const aplicarResultado = novo => {
+      if (novo) {
+        try { const s = window.getSelection(); s.removeAllRanges(); s.addRange(novo); range = novo.cloneRange(); }
+        catch (e) {}
+      }
+      sincronizar();
     };
     const aoMudarSelecao = () => { if (corpo.classList.contains('editando')) salvarRange(); };
     document.addEventListener('selectionchange', aoMudarSelecao);
@@ -2262,46 +2344,27 @@ const App = {
 
     await montar();
 
-    // ---- negrito / itálico / sublinhado / limpar ----
+    // ---- negrito / itálico / sublinhado / limpar (via DOM, sem execCommand) ----
+    const TAG = { bold: 'strong', italic: 'em', underline: 'u' };
     barra.querySelectorAll('[data-cmd]').forEach(b => {
       aoAtivar(b, () => {
-        if (!restaurar()) return;
-        css();
-        document.execCommand(b.dataset.cmd, false, null);
-        salvarRange(); sincronizar();
+        const r = pegarRange(); if (!r) return;
+        const novo = b.dataset.cmd === 'removeFormat'
+          ? this._ricoLimpar(r)
+          : this._ricoAlternarTag(r, TAG[b.dataset.cmd], ativo);
+        aplicarResultado(novo);
       });
     });
 
     // ---- três tamanhos: Título (g) / Normal (m) / Menor (p) ----
-    // Com trecho selecionado, envolve o trecho num <span> com a classe do tamanho
-    // (limpando tamanhos internos, para o novo valer de fato). Sem seleção,
-    // aplica o tamanho ao bloco inteiro. Funciona no toque via aoAtivar (pointerdown).
-    const aplicarTamanho = cls => {
-      if (!restaurar()) return;
-      const s = window.getSelection();
-      if (!s || !s.rangeCount) return;
-      const r = s.getRangeAt(0);
-      if (r.collapsed) {
-        if (ativo) { ativo.classList.remove('est-tam-g', 'est-tam-m', 'est-tam-p'); ativo.classList.add(cls); }
-      } else {
-        const span = document.createElement('span');
-        span.className = cls;
-        try {
-          span.appendChild(r.extractContents());
-          span.querySelectorAll('span').forEach(x => {
-            x.classList.remove('est-tam-g', 'est-tam-m', 'est-tam-p');
-            if (x.style) x.style.fontSize = '';
-          });
-          r.insertNode(span);
-          const ns = window.getSelection(); ns.removeAllRanges();
-          const nr = document.createRange(); nr.selectNodeContents(span); ns.addRange(nr);
-          range = nr.cloneRange();
-        } catch (e) { /* seleção complexa: ignora sem quebrar */ }
-      }
-      sincronizar();
-    };
     barra.querySelectorAll('[data-size]').forEach(b => {
-      aoAtivar(b, () => aplicarTamanho('est-tam-' + b.dataset.size));
+      aoAtivar(b, () => {
+        const r = pegarRange(); if (!r) return;
+        const novo = this._ricoEnvolver(r, {
+          classe: 'est-tam-' + b.dataset.size,
+          limparClasses: ['est-tam-g', 'est-tam-m', 'est-tam-p'], limparEstilo: 'fontSize' });
+        aplicarResultado(novo);
+      });
     });
 
     // ---- cor da letra e de fundo: a mesma roda de cores, com Aplicar ----
@@ -2315,15 +2378,15 @@ const App = {
     const btnFundo = document.getElementById('est-cor-fundo');
 
     const aplicarCor = (modo, cor) => {
-      if (!restaurar()) return;
-      css();
-      if (modo === 'letra') document.execCommand('foreColor', false, cor);
-      else if (!document.execCommand('hiliteColor', false, cor)) document.execCommand('backColor', false, cor);
-      salvarRange(); sincronizar();
+      const r = pegarRange(); if (!r) return;
+      const novo = this._ricoEnvolver(r, modo === 'letra'
+        ? { estilo: { color: cor }, limparEstilo: 'color' }
+        : { estilo: { backgroundColor: cor }, limparEstilo: 'backgroundColor' });
+      aplicarResultado(novo);
     };
     const abrirCaixaCor = modo => {
-      salvarRange();
-      if (ativo) ativo.blur();   // fecha o teclado do celular para a roda não ficar coberta
+      pegarRange();                 // fixa o trecho no range guardado
+      if (ativo) ativo.blur();      // fecha o teclado do celular para a roda não ficar coberta
       this.escolherCor({ cor: corAtual[modo], titulo: modo === 'letra' ? 'Cor da letra' : 'Cor de fundo' })
         .then(cor => {
           if (!cor) return;
@@ -3676,28 +3739,30 @@ const App = {
     const corpo = document.getElementById('corpo-anot');
     const editor = document.getElementById('editor-nota');
 
-    // Guardamos a última seleção feita dentro do editor. Quando a pessoa abre o
-    // seletor de cor (ou o menu de fonte), o foco sai do texto; ao voltar,
-    // restauramos exatamente o trecho para a formatação pegar onde deve.
+    // Guardamos o último trecho REAL selecionado dentro do editor (só seleções
+    // não-colapsadas, para o toque no botão não apagar o trecho no Android).
     let rangeSalvo = null;
     const salvarRange = () => {
       const s = window.getSelection();
-      if (s && s.rangeCount && editor.contains(s.anchorNode)) {
+      if (!s || !s.rangeCount || s.isCollapsed) return;
+      if (editor.contains(s.anchorNode)) rangeSalvo = s.getRangeAt(0).cloneRange();
+    };
+    const pegarRange = () => {
+      const s = window.getSelection();
+      if (s && s.rangeCount && !s.isCollapsed && editor.contains(s.anchorNode)) {
         rangeSalvo = s.getRangeAt(0).cloneRange();
+        return rangeSalvo.cloneRange();
+      }
+      return (rangeSalvo && !rangeSalvo.collapsed) ? rangeSalvo.cloneRange() : null;
+    };
+    const aplicarResultado = novo => {
+      if (novo) {
+        try { const s = window.getSelection(); s.removeAllRanges(); s.addRange(novo); rangeSalvo = novo.cloneRange(); }
+        catch (e) {}
       }
     };
-    const restaurarRange = () => {
-      const s = window.getSelection();
-      // se já há um trecho vivo selecionado dentro do editor, mantém — não
-      // atropela com um range antigo (evita aplicar formatação no lugar errado)
-      const vivoNoEditor = s && s.rangeCount && !s.isCollapsed && editor.contains(s.anchorNode);
-      editor.focus();
-      if (!vivoNoEditor && rangeSalvo) { s.removeAllRanges(); s.addRange(rangeSalvo); }
-    };
-    const css = () => { try { document.execCommand('styleWithCSS', false, true); } catch {} };
-    // Ativa um botão fazendo o trabalho no 'pointerdown' (com preventDefault),
-    // não no 'click' — no Android, segurar o toque cancela o clique; assim o
-    // botão funciona no toque e preserva a seleção. O 'click' cobre o teclado.
+    // Ativa um botão fazendo o trabalho no 'pointerdown' (não no 'click', que o
+    // Android cancela quando se segura o toque). O 'click' cobre o teclado.
     const aoAtivar = (el, fn) => {
       let feitoPeloPonteiro = false;
       el.addEventListener('pointerdown', e => {
@@ -3710,14 +3775,20 @@ const App = {
     };
     editor.addEventListener('keyup', salvarRange);
     editor.addEventListener('mouseup', salvarRange);
-    editor.addEventListener('blur', salvarRange);
     document.addEventListener('selectionchange', salvarRange);
     this._limparSelNota = () => document.removeEventListener('selectionchange', salvarRange);
 
-    // Negrito/itálico/sublinhado/tachado e limpar: aplicam no toque, preservando
-    // a seleção.
+    // Negrito/itálico/sublinhado/tachado e limpar — via manipulação de DOM sobre
+    // o range guardado (funciona no Android, onde execCommand/seleção viva falham).
+    const TAG = { bold: 'strong', italic: 'em', underline: 'u', strikeThrough: 's' };
     corpo.querySelectorAll('[data-cmd]').forEach(el => {
-      aoAtivar(el, () => { restaurarRange(); css(); document.execCommand(el.dataset.cmd, false, null); salvarRange(); });
+      aoAtivar(el, () => {
+        const r = pegarRange(); if (!r) return;
+        const novo = el.dataset.cmd === 'removeFormat'
+          ? this._ricoLimpar(r)
+          : this._ricoAlternarTag(r, TAG[el.dataset.cmd], editor);
+        aplicarResultado(novo);
+      });
     });
 
     // Cor da letra e cor de fundo usam a MESMA roda de cores dos marcadores — o
@@ -3738,13 +3809,11 @@ const App = {
     let modoCor = null;        // 'letra' | 'fundo' | null (fechada)
 
     const aplicarCor = (modo, cor) => {
-      restaurarRange(); css();
-      if (modo === 'letra') {
-        document.execCommand('foreColor', false, cor);
-      } else if (!document.execCommand('hiliteColor', false, cor)) {
-        document.execCommand('backColor', false, cor);   // reserva de alguns navegadores
-      }
-      salvarRange();   // o trecho recolorido segue selecionado; recaptura p/ reaplicar limpo
+      const r = pegarRange(); if (!r) return;
+      const novo = this._ricoEnvolver(r, modo === 'letra'
+        ? { estilo: { color: cor }, limparEstilo: 'color' }
+        : { estilo: { backgroundColor: cor }, limparEstilo: 'backgroundColor' });
+      aplicarResultado(novo);
     };
 
     const fecharCaixaCor = () => {
@@ -3779,8 +3848,8 @@ const App = {
     const fonte = document.getElementById('fmt-fonte');
     fonte.onchange = () => {
       if (!fonte.value) return;
-      restaurarRange(); css();
-      document.execCommand('fontName', false, fonte.value);
+      const r = pegarRange();
+      if (r) aplicarResultado(this._ricoEnvolver(r, { estilo: { fontFamily: fonte.value }, limparEstilo: 'fontFamily' }));
       fonte.value = '';
     };
 
