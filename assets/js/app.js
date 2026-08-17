@@ -2794,6 +2794,12 @@ const App = {
             <span class="rotulo-radio"><strong>À direita</strong></span>
           </label>
         </div>
+
+        <label class="interruptor" style="margin-top:16px"><span>Anunciar na leitura em voz</span>
+          <input type="checkbox" id="ctrl-voz-subtitulos" ${p.vozSubtitulos ? 'checked' : ''}></label>
+        <p class="contagem">Durante a leitura em voz alta, o subtítulo da seção é
+        pronunciado uma vez, ao começar a seção, com uma pausa antes e depois.
+        Vale enquanto os subtítulos estiverem sendo exibidos.</p>
       </div>
 
       <label class="interruptor"><span>Modo escuro</span>
@@ -3044,6 +3050,12 @@ const App = {
       this._vizCache = {};
       this.ir(this.code, this.cap, null);
     };
+
+    // anunciar o subtítulo na leitura em voz: só guarda a preferência; entra em
+    // vigor na próxima montagem da fila (o portão de "exibido" já vem do próprio
+    // subtitulosLigado, via Dados.secoesParaLeitura).
+    const vozSub = achar('ctrl-voz-subtitulos');
+    if (vozSub) vozSub.onchange = e => { Prefs.set('vozSubtitulos', e.target.checked); };
 
     // modo de exibição dos subtítulos (as três opções). Muda o conteúdo, então
     // limpa os vizinhos e redesenha a leitura. O menu de favorito só aparece nos
@@ -6402,7 +6414,7 @@ const App = {
         faixas.push({ versao, code, cap: cap.number, vers: v.number, texto });
       }
     }
-    return faixas;
+    return this._naIntercalarSubtitulos(faixas);
   },
 
   /** Combinação confinada: só os versículos pedidos, do mesmo capítulo, na
@@ -6419,7 +6431,7 @@ const App = {
       if (!texto) continue;
       faixas.push({ versao, code, cap, vers: n, texto });
     }
-    return faixas;
+    return this._naIntercalarSubtitulos(faixas);
   },
 
   /** A partir de SEGMENTOS (listas de leitura e estudos, que atravessam livros,
@@ -6452,7 +6464,60 @@ const App = {
         faixas.push({ versao, code: seg.code, cap: seg.cap, vers: v.number, texto });
       }
     }
-    return faixas;
+    return this._naIntercalarSubtitulos(faixas);
+  },
+
+  /** Intercala faixas de SUBTÍTULO nas faixas de versículo (já em ordem de
+   *  leitura). Uma faixa de subtítulo entra imediatamente ANTES do versículo que
+   *  abre a seção — e só ali, então cada seção é anunciada uma única vez, mesmo
+   *  quando ela atravessa capítulos (o início da seção existe num ponto só).
+   *
+   *  Dois portões:
+   *   1. a preferência `vozSubtitulos` (o interruptor "Anunciar na leitura em voz");
+   *   2. a EXIBIÇÃO dos subtítulos — que vem de graça, porque
+   *      `Dados.secoesDoLivroParaNavegacao` usa `secoesParaLeitura`, e essa devolve
+   *      vazio quando os subtítulos estão desligados. Assim, subtítulo oculto na
+   *      tela = nada a falar. E o título é o da versão que está sendo lida (ou o do
+   *      favorito, exatamente como aparece na página). */
+  async _naIntercalarSubtitulos(faixas) {
+    if (typeof Prefs !== 'undefined' && !Prefs.get('vozSubtitulos')) return faixas;
+    if (!Array.isArray(faixas) || !faixas.length) return faixas;
+
+    const cache = new Map();   // (versao|code) -> Map(cap -> Map(inicio -> titulo))
+    const iniciosDe = async (versao, code) => {
+      const chave = versao + '|' + code;
+      if (cache.has(chave)) return cache.get(chave);
+      const mapa = new Map();
+      try {
+        const secs = await Dados.secoesDoLivroParaNavegacao(versao, code);
+        for (const s of (secs || [])) {
+          if (!mapa.has(s.capitulo)) mapa.set(s.capitulo, new Map());
+          mapa.get(s.capitulo).set(s.inicio, s.titulo);
+        }
+      } catch (e) {}
+      cache.set(chave, mapa);
+      return mapa;
+    };
+
+    const saida = [];
+    const jaFalada = new Set();   // (versao|code|cap|inicio) já anunciados
+    for (const f of faixas) {
+      if (!f.nota && !f.subtitulo && f.code && f.cap != null && f.vers != null) {
+        const mapa = await iniciosDe(f.versao, f.code);
+        const doCap = mapa.get(f.cap);
+        const titulo = doCap && doCap.get(f.vers);
+        if (titulo) {
+          const chave = f.versao + '|' + f.code + '|' + f.cap + '|' + f.vers;
+          if (!jaFalada.has(chave)) {
+            jaFalada.add(chave);
+            saida.push({ subtitulo: true, texto: titulo,
+              versao: f.versao, code: f.code, cap: f.cap, vers: f.vers });
+          }
+        }
+      }
+      saida.push(f);
+    }
+    return saida;
   },
 
   /* ---- abertura do player (mesma encanação do motor antigo) ---- */
@@ -6508,7 +6573,16 @@ const App = {
     if (!faixa) { this._naFim(); return; }
 
     let fala = '';
-    if (faixa.nota) {
+    if (faixa.subtitulo) {
+      // Cabeçalho de seção: fala só o título, uma vez, no começo da seção. NÃO
+      // mexe em _naUltVers/_naUltCap/_naUltCode — assim o versículo que vem logo
+      // depois anuncia capítulo/número exatamente como faria sem o subtítulo.
+      this.lendoVers = faixa.vers;   // ancora no versículo de abertura (tela/estado)
+      this.lendoNota = false;
+      this.pausado = false;
+      fala = (faixa.texto || '').trim();
+      if (fala && !/[.!?…]$/.test(fala)) fala += '.';   // um ponto ajuda a prosódia/pausa
+    } else if (faixa.nota) {
       this.lendoVers = null;
       this.lendoNota = true;
       this.pausado = false;
@@ -6555,20 +6629,37 @@ const App = {
 
     Locutor.parar();
     // uma batidinha depois do cancelar: alguns motores engasgam se mandar falar
-    // no mesmo instante em que cancelou a fala anterior
+    // no mesmo instante em que cancelou a fala anterior. Em torno do subtítulo a
+    // espera é maior, criando a pausa ANTES dele (folga do fim do versículo
+    // anterior) e DEPOIS dele (a faixa seguinte é o versículo de abertura, que
+    // vê a anterior como subtítulo e também espera).
+    const anterior = this._naFila[this._naIdx - 1];
+    const emTornoDeSubtitulo = faixa.subtitulo || (anterior && anterior.subtitulo);
+    const espera = emTornoDeSubtitulo ? 450 : 60;
     setTimeout(() => {
       if (!this._naAtivo || gen !== this.leituraGen) return;
       Locutor.falar(fala, {
         aoFim: () => { if (this._naAtivo && gen === this.leituraGen) this._naAvancar(); },
         aoErro: () => { if (this._naAtivo && gen === this.leituraGen) this._naAvancar(); },
       });
-    }, 60);
+    }, espera);
   },
 
   /* ---- avançar (repetição, portão do "seguir", fim) ---- */
 
   _naAvancar() {
     if (!this._naAtivo) return;
+
+    // faixa de subtítulo: é sempre seguida pelo versículo que abre a seção, no
+    // mesmo capítulo. Só avança — não repete (a repetição de versículo recai no
+    // versículo, não no título) e não passa pelo portão de "seguir capítulos".
+    const emSubtitulo = this._naFila[this._naIdx];
+    if (emSubtitulo && emSubtitulo.subtitulo) {
+      if (this._naIdx + 1 >= this._naFila.length) { this._naFim(); return; }
+      this._naIdx++;
+      this._naTocar();
+      return;
+    }
 
     // repetição de versículo: repete a MESMA faixa
     if (this.repetir === 'vers' && this.lendoVers != null) {
@@ -6679,7 +6770,7 @@ const App = {
     if (!this._naNatural) return;   // combinação/playlist: toque não adiciona nem reposiciona
     const code = this.code;
     const cap = this._capLeitura();   // no Contínuo, o capítulo tocado; senão, this.cap
-    const alvo = this._naFila.findIndex(f => !f.nota
+    const alvo = this._naFila.findIndex(f => !f.nota && !f.subtitulo
       && f.code === code && f.cap === cap && f.vers === vers);
     if (alvo < 0) return;
     this._naIdx = alvo;
@@ -6762,6 +6853,13 @@ const App = {
     const linhas = faixas.map((f, k) => {
       const i = offset + k;
       const estado = i === this._naIdx ? 'tocando' : (i < this._naIdx ? 'passou' : '');
+      if (f.subtitulo) {
+        // cabeçalho de seção: uma divisória com o título, não um versículo (nem
+        // clicável — não se "salta" para um subtítulo).
+        return `<div class="faixa faixa-subtitulo ${estado}"
+          style="padding:8px 12px;font-weight:600;opacity:.72;font-size:.85em">
+          ${Leitura.escapar(f.texto || '')}</div>`;
+      }
       if (f.nota) {
         return `<button class="faixa faixa-nota ${estado}" data-nafaixa="${i}">
           <span class="faixa-num">${i + 1}</span>
@@ -6774,8 +6872,9 @@ const App = {
         attrs: `data-nafaixa="${i}"` });
     });
 
+    const nVersos = faixas.filter(f => !f.subtitulo).length;   // não conta os títulos
     const conta = this._naNatural
-      ? `${faixas.length} versículo${faixas.length > 1 ? 's' : ''}`
+      ? `${nVersos} versículo${nVersos > 1 ? 's' : ''}`
       : `${this._naFila.length} item${this._naFila.length > 1 ? 'ns' : ''} · faltam `
         + `${Math.max(0, this._naFila.length - this._naIdx - 1)}`;
 

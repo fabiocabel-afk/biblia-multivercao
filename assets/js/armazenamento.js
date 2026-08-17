@@ -69,6 +69,7 @@ const Prefs = {
     subtituloEstilo: 'classico',   // formato da letra: 'classico' (negrito) | 'rubricada' (itálico)
     subtituloCor: 'texto',         // 'texto' (acompanha a tinta) | 'vermelho' (rubrica)
     subtituloAlinhamento: 'centro',// 'esquerda' | 'centro' | 'direita'
+    vozSubtitulos: true,           // anunciar o subtítulo da seção durante a leitura em voz (só quando exibidos)
     vozURI: null,              // voz escolhida para a leitura em voz alta (null = automática)
     vozVel: 1,                 // velocidade da leitura em voz (1 = normal)
     repeticaoLimite: 3,        // quantas vezes repetir (capítulo/versículo); 0 = infinito
