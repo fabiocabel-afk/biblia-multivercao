@@ -2181,6 +2181,18 @@ const App = {
       const r = document.createRange(); r.selectNode(t); return r;
     } catch (e) { return null; }
   },
+  /* Cor real (color/backgroundColor) aplicada no trecho, subindo do 1º nó de
+   * texto até o editável. Devolve o valor inline ou null (sem cor). */
+  _ricoCorDoTrecho(range, prop, editable) {
+    const t = this._ricoTextosNoRange(range)[0];
+    if (!t) return null;
+    let el = t.parentNode;
+    while (el && el !== editable) {
+      if (el.style && el.style[prop]) return el.style[prop];
+      el = el.parentNode;
+    }
+    return null;
+  },
   /* Remove uma propriedade de estilo (color / backgroundColor) do trecho —
    * usado pelo "Remover realce/cor". Tira a cor de qualquer span que TOQUE o
    * trecho (ancestral que o envolve ou descendente); spans que ficam sem estilo
@@ -2421,14 +2433,16 @@ const App = {
       aplicarResultado(this._ricoLimparEstilo(r, modo === 'letra' ? 'color' : 'backgroundColor', ativo));
     };
     const abrirCaixaCor = modo => {
-      pegarRange();                                 // fixa o trecho no range guardado
-      if (ativo) ativo.blur();                      // fecha o teclado do celular
+      const r0 = pegarRange();                      // fixa e lê o trecho
+      const prop = modo === 'letra' ? 'color' : 'backgroundColor';
+      const atualReal = r0 ? this._ricoCorDoTrecho(r0, prop, ativo) : null;
+      if (ativo) ativo.blur();                       // fecha o teclado do celular
       try { window.getSelection().removeAllRanges(); } catch (e) {}   // dispensa a seleção visível
       this.escolherCor({
         cor: corAtual[modo],
-        titulo: modo === 'letra' ? 'Cor da letra' : 'Cor de fundo',
+        atual: atualReal,                            // null se o trecho não tem essa cor → mostra vazio
         comRemover: true,
-        rotuloRemover: modo === 'letra' ? 'Remover cor' : 'Remover realce',
+        titulo: modo === 'letra' ? 'Cor da letra' : 'Cor de fundo',
       }).then(res => {
         if (!res) return;
         if (res.remover) { removerCor(modo); return; }
@@ -3877,14 +3891,16 @@ const App = {
     };
 
     const abrirCaixaCor = modo => {
-      pegarRange();
+      const r0 = pegarRange();
+      const prop = modo === 'letra' ? 'color' : 'backgroundColor';
+      const atualReal = r0 ? this._ricoCorDoTrecho(r0, prop, editor) : null;
       editor.blur();   // fecha o teclado do celular
-      try { window.getSelection().removeAllRanges(); } catch (e) {}   // dispensa a seleção visível
+      try { window.getSelection().removeAllRanges(); } catch (e) {}
       this.escolherCor({
         cor: corAtual[modo],
-        titulo: modo === 'letra' ? 'Cor da letra' : 'Cor de fundo',
+        atual: atualReal,
         comRemover: true,
-        rotuloRemover: modo === 'letra' ? 'Remover cor' : 'Remover realce',
+        titulo: modo === 'letra' ? 'Cor da letra' : 'Cor de fundo',
       }).then(res => {
         if (!res) return;
         if (res.remover) { removerCor(modo); return; }
@@ -4159,34 +4175,60 @@ const App = {
   /* Seletor de cor padrão: abre a roda num popup próprio, sem empurrar a tela.
    * Devolve uma promessa com o hex escolhido (se Salvar) ou null (se Cancelar).
    * A cor entra nos "recentes" só quando salva. */
-  escolherCor({ cor = '#8c2f39', titulo = 'Escolher cor', comRemover = false, rotuloRemover = 'Remover realce' } = {}) {
+  escolherCor({ cor = '#8c2f39', atual = undefined, comRemover = false, titulo = 'Escolher cor' } = {}) {
     return new Promise(resolve => {
       const veu = document.getElementById('cor-veu');
       const corpo = document.getElementById('cor-corpo');
       const btSalvar = document.getElementById('cor-salvar');
       const btCanc = document.getElementById('cor-cancelar');
-      const btRemover = document.getElementById('cor-remover');
       const amAtual = document.getElementById('cor-previa-atual');
       const amNova = document.getElementById('cor-previa-nova');
       document.getElementById('cor-titulo').textContent = titulo;
 
-      // prévia: "Atual" fixa na cor de entrada; "Nova" acompanha a roda ao vivo
-      if (amAtual) amAtual.style.background = cor;
-      if (amNova) amNova.style.background = cor;
-
+      // "Atual": a cor REAL do trecho (null = sem cor → mostra vazio, só a borda).
+      // Marcadores não passam 'atual', então mostram a própria cor de entrada.
+      const corMostrar = (atual === undefined) ? cor : atual;
+      const podeRemover = comRemover && !!corMostrar;
+      let removendo = false;
       let hexAtual = cor;
+
+      const pintarAtual = () => {
+        if (corMostrar) {
+          amAtual.classList.remove('vazia');
+          amAtual.style.background = corMostrar;
+          amAtual.style.color = Cores.contraste(corMostrar);   // o × contrasta
+        } else {
+          amAtual.classList.add('vazia');
+          amAtual.style.background = 'transparent';
+          amAtual.style.color = '';
+        }
+        amAtual.classList.toggle('removivel', podeRemover);
+      };
+      const novaComCor = hex => {
+        removendo = false;
+        amNova.classList.remove('vazia');
+        amNova.style.background = hex;
+      };
+      const novaVazia = () => {           // remoção pendente: "Nova" fica só a borda
+        removendo = true;
+        amNova.classList.add('vazia');
+        amNova.style.background = 'transparent';
+      };
+
       const ctrl = RodaDeCores.montar(corpo, cor, () => {}, {
         semAplicar: true,
-        vivo: hex => { hexAtual = hex; if (amNova) amNova.style.background = hex; },
+        vivo: hex => { hexAtual = hex; novaComCor(hex); },   // mexer na roda cancela a remoção
       });
       hexAtual = ctrl.corAtual();
-      if (amNova) amNova.style.background = hexAtual;
+      pintarAtual();
+      novaComCor(hexAtual);
 
       const fechar = resultado => {
         veu.classList.remove('aberto');
         veu.setAttribute('aria-hidden', 'true');
-        btSalvar.onclick = btCanc.onclick = null;
-        if (btRemover) { btRemover.onclick = null; btRemover.hidden = true; }
+        btSalvar.onclick = btCanc.onclick = amAtual.onclick = null;
+        amAtual.classList.remove('vazia', 'removivel');
+        amNova.classList.remove('vazia');
         document.removeEventListener('keydown', aoTeclar, true);
         corpo.innerHTML = '';
         resolve(resultado);
@@ -4196,20 +4238,16 @@ const App = {
         else if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); salvar(); }
       };
       const salvar = () => {
+        if (removendo) { fechar({ remover: true }); return; }
         CoresRecentes.registrar(hexAtual);
         fechar(hexAtual);
       };
 
+      // clicar na amostra "Atual" (o ×) marca a remoção e esvazia a "Nova"
+      amAtual.onclick = podeRemover ? () => novaVazia() : null;
       btSalvar.onclick = salvar;
       btCanc.onclick = () => fechar(null);
-      if (btRemover) {
-        btRemover.hidden = !comRemover;
-        btRemover.textContent = rotuloRemover;
-        btRemover.onclick = comRemover ? () => fechar({ remover: true }) : null;
-      }
-      // A paleta de cor fecha SÓ pelos botões (Salvar/Cancelar/Remover) ou Esc —
-      // nada de "fechar tocando fora", que no celular fechava sozinha com um
-      // toque residual da seleção logo ao abrir.
+      // A paleta fecha SÓ pelos botões ou Esc — nada de "fechar tocando fora".
       document.addEventListener('keydown', aoTeclar, true);
 
       veu.setAttribute('aria-hidden', 'false');
