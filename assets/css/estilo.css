@@ -5386,3 +5386,47 @@ html[data-il-abrev="sim"] .il-m-c .il-txt {
 
 /* o relógio no cabeçalho some quando não há navegações registradas */
 #btn-recentes[hidden] { display: none; }
+
+/* ======================================================= EXPORTAÇÃO PARA PDF
+ *
+ * A folha do PDF é montada em #pdf-raiz e fica escondida na tela; só aparece na
+ * impressão ("Salvar como PDF" do navegador). O visual imita um livro impresso:
+ * folha sépia (estilo Histórico), título ocupando a largura toda, conteúdo em
+ * DUAS colunas, preenchimentos viram containers e os versículos mantêm a
+ * tipografia da Bíblia. */
+#pdf-raiz { display: none; }
+/* ---- montador de PDF (seleção + ordenação dos estudos) ---- */
+.estudos-topo { padding: 4px 2px 12px; }
+.pdf-montar { display: flex; flex-direction: column; gap: 10px; padding-bottom: 24px; }
+.pdf-ajuda { font-size: .86rem; opacity: .75; line-height: 1.45; margin: 2px 0 6px; }
+.pdf-secao-rot {
+  font-size: .74rem; letter-spacing: .04em; text-transform: uppercase;
+  opacity: .6; margin-top: 6px;
+}
+.pdf-linha {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 11px;
+  border: 1px solid color-mix(in srgb, var(--tinta) 16%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--tinta) 4%, transparent);
+}
+.pdf-ord {
+  flex: 0 0 auto; width: 22px; height: 22px;
+  display: grid; place-items: center;
+  border-radius: 50%;
+  background: var(--cromo, #2a1c11); color: var(--cromo-texto, #f3e7cf);
+  font-size: .78rem; font-weight: 600;
+}
+.pdf-nome { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pdf-move { flex: 0 0 auto; display: flex; gap: 2px; }
+.pdf-move .xis[disabled] { opacity: .3; }
+.pdf-disponiveis { display: flex; flex-direction: column; gap: 6px; }
+.pdf-add {
+  display: flex; align-items: center; gap: 8px;
+  padding: 9px 11px; text-align: left;
+  border: 1px dashed color-mix(in srgb, var(--tinta) 24%, transparent);
+  border-radius: 10px; background: transparent; color: inherit;
+  font: inherit; cursor: pointer;
+}
+.pdf-add:active { transform: scale(.99); }
+.pdf-gerar { margin-top: 10px; }

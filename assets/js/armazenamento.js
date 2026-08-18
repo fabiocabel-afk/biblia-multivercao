@@ -423,9 +423,16 @@ const Estudos = {
     const vazio = html => (html || '').replace(/<[^>]*>/g, '').replace(/&nbsp;/gi, ' ').trim() === '';
     e.blocos = blocos
       .filter(b => b.tipo !== 'texto' || !vazio(b.html))
-      .map(b => b.tipo === 'texto'
-        ? { tipo: 'texto', html: b.html || '' }
-        : { tipo: 'versos', trecho: b.trecho });
+      .map(b => {
+        if (b.tipo !== 'texto') return { tipo: 'versos', trecho: b.trecho };
+        const bloco = { tipo: 'texto', html: b.html || '' };
+        // preserva a formatação de BLOCO (era isto que se perdia ao salvar)
+        if (b.fundo) bloco.fundo = b.fundo;
+        if (b.marcador) bloco.marcador = true;
+        if (b.nivel) bloco.nivel = +b.nivel;
+        if (b.alinhar) bloco.alinhar = b.alinhar;
+        return bloco;
+      });
     delete e.trechos;                       // blocos manda agora
     delete e.code; delete e.versao;
     delete e.capInicio; delete e.versInicio;

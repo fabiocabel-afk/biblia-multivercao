@@ -1896,7 +1896,11 @@ const App = {
       return;
     }
 
-    corpo.innerHTML = estudos.map(e => {
+    corpo.innerHTML = `<div class="estudos-topo">
+        <button class="botao secundario" id="pdf-varios">
+          <svg class="icone"><use href="#i-compartilhar"/></svg> Montar PDF de vários
+        </button>
+      </div>` + estudos.map(e => {
       const trechos = Estudos.trechosDe(e);
       const listaTrechos = trechos.map((t, i) => `<div class="trecho-estudo">
           <button class="ir-trecho" data-est="${e.id}" data-tr="${i}">
@@ -1921,6 +1925,7 @@ const App = {
           <button class="pilula" data-renomear="${e.id}">Renomear</button>
           <button class="pilula" data-partilhar="${e.id}">Compartilhar</button>
           <button class="pilula" data-copiar="${e.id}">Copiar</button>
+          <button class="pilula" data-pdf="${e.id}">Exportar PDF</button>
           <button class="pilula perigo" data-remover="${e.id}">Excluir</button>
         </div>
       </div>`;
@@ -2000,6 +2005,64 @@ const App = {
         this.desenharEstudos();
       };
     });
+
+    corpo.querySelectorAll('[data-pdf]').forEach(el => {
+      el.onclick = () => this.exportarPdf([el.dataset.pdf]);
+    });
+    const btVarios = document.getElementById('pdf-varios');
+    if (btVarios) btVarios.onclick = () => this.montarPdfEstudos();
+  },
+
+  /* Montador "por fora": escolher vários estudos, ordenar e gerar um PDF só. */
+  montarPdfEstudos() {
+    const corpo = document.getElementById('corpo-estudos');
+    const todos = Estudos.todos();
+    const achar = id => todos.find(e => e.id === id);
+    const ordem = [];   // ids selecionados, na ordem escolhida
+
+    const render = () => {
+      const sel = new Set(ordem);
+      const selecionados = ordem.map((id, i) => `
+        <div class="pdf-linha sel">
+          <span class="pdf-ord">${i + 1}</span>
+          <span class="pdf-nome">${Leitura.escapar(Estudos.nomeDe(achar(id)) || 'Estudo')}</span>
+          <span class="pdf-move">
+            <button class="xis" data-sobe="${id}" ${i === 0 ? 'disabled' : ''} aria-label="Subir">
+              <svg class="icone"><use href="#i-tri-cima"/></svg></button>
+            <button class="xis" data-desce="${id}" ${i === ordem.length - 1 ? 'disabled' : ''} aria-label="Descer">
+              <svg class="icone"><use href="#i-tri-baixo"/></svg></button>
+            <button class="xis" data-tira="${id}" aria-label="Tirar">
+              <svg class="icone"><use href="#i-fechar"/></svg></button>
+          </span>
+        </div>`).join('');
+      const disponiveis = todos.filter(e => !sel.has(e.id)).map(e => `
+        <button class="pdf-add" data-add="${e.id}">
+          <svg class="icone"><use href="#i-nota"/></svg>
+          ${Leitura.escapar(Estudos.nomeDe(e) || 'Estudo')}</button>`).join('');
+
+      corpo.innerHTML = `
+        <div class="pdf-montar">
+          <button class="botao secundario" id="pdf-voltar">
+            <svg class="icone"><use href="#i-antes"/></svg> Voltar</button>
+          <p class="pdf-ajuda">Escolha os estudos e ordene. Eles entram no PDF nessa ordem,
+            cada um com o título grande no topo e o conteúdo em duas colunas.</p>
+          <div class="pdf-secao-rot">Selecionados (na ordem)</div>
+          <div class="pdf-selecionados">${selecionados || '<div class="estado peq">Nenhum selecionado ainda.</div>'}</div>
+          <div class="pdf-secao-rot">Disponíveis</div>
+          <div class="pdf-disponiveis">${disponiveis || '<div class="estado peq">— todos já escolhidos —</div>'}</div>
+          <button class="botao pdf-gerar" id="pdf-gerar" ${ordem.length ? '' : 'disabled'}>
+            Gerar PDF${ordem.length ? ` (${ordem.length})` : ''}</button>
+        </div>`;
+
+      corpo.querySelectorAll('[data-add]').forEach(el => el.onclick = () => { ordem.push(el.dataset.add); render(); });
+      corpo.querySelectorAll('[data-tira]').forEach(el => el.onclick = () => { const i = ordem.indexOf(el.dataset.tira); if (i >= 0) ordem.splice(i, 1); render(); });
+      corpo.querySelectorAll('[data-sobe]').forEach(el => el.onclick = () => { const i = ordem.indexOf(el.dataset.sobe); if (i > 0) { [ordem[i - 1], ordem[i]] = [ordem[i], ordem[i - 1]]; render(); } });
+      corpo.querySelectorAll('[data-desce]').forEach(el => el.onclick = () => { const i = ordem.indexOf(el.dataset.desce); if (i >= 0 && i < ordem.length - 1) { [ordem[i + 1], ordem[i]] = [ordem[i], ordem[i + 1]]; render(); } });
+      document.getElementById('pdf-voltar').onclick = () => this.desenharEstudos();
+      const g = document.getElementById('pdf-gerar');
+      if (g) g.onclick = () => { if (ordem.length) this.exportarPdf(ordem.slice(), ordem.length > 1 ? 'Estudos' : null); };
+    };
+    render();
   },
 
   /* ============================================ MODO VISÃO DO ESTUDO
@@ -2103,6 +2166,169 @@ const App = {
       <div class="estudo-ref">${Estudos.refDoTrecho(trecho)}<span class="estudo-sigla">${trecho.versao}</span></div>
       ${corpo}
     </div>`;
+  },
+
+  /* ---- exportação para PDF (via "Salvar como PDF" do navegador) ---- */
+
+  /* Devolve o título do estudo (que atravessa as colunas) seguido dos blocos.
+   * Vários estudos entram no MESMO fluxo de colunas, um após o outro. */
+  async _secaoPdf(e) {
+    const partes = [`<h2 class="pdf-titulo">${Leitura.escapar(Estudos.nomeDe(e))}</h2>`];
+    for (const b of Estudos.blocosDe(e)) {
+      if (b.tipo === 'texto') {
+        const a = this._blocoTextoAttrs(b);
+        partes.push(`<div class="estudo-bloco ${a.cls}"${a.sty}>${b.html || ''}</div>`);
+      } else {
+        partes.push(await this._containerVersos(b.trecho));
+      }
+    }
+    return partes.join('');
+  },
+
+  /* CSS de impressão ESSENCIAL, injetado na hora de exportar. Assim a folha sai
+   * certa (sépia, título largo, duas colunas, containers) mesmo que o estilo.css
+   * no cache do navegador esteja desatualizado. */
+  _estiloPdfCritico() {
+    return `
+      /* esconde a interface inteira; mostra só a folha, sem barras de rolagem */
+      html, body { background: #ffffff !important; overflow: visible !important;
+        height: auto !important; margin: 0 !important; }
+      body > *:not(#pdf-raiz) { display: none !important; }
+      #pdf-raiz { display: block !important; color: #232a36;
+        font-family: 'EB Garamond', Georgia, 'Times New Roman', serif; font-size: 11pt; line-height: 1.52; }
+      * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+      @page { size: A4 portrait; margin: 17mm 15mm 18mm; }
+
+      /* título do estudo: atravessa as colunas (largura inteira), com régua de
+         acento dourado. break-after: avoid gruda o título ao início do texto —
+         se não couber com um trecho na página, desce junto para a próxima. */
+      .pdf-titulo {
+        column-span: all;
+        break-after: avoid; break-inside: avoid;
+        margin: 0 0 5mm; padding: 0 0 2.6mm;
+        font-family: 'EB Garamond', Georgia, serif; font-size: 21pt; font-weight: 600;
+        line-height: 1.15; letter-spacing: .005em; color: #2a3550;
+        border-bottom: 2pt solid #c8a24a;
+      }
+      .pdf-titulo:not(:first-child) { margin-top: 9mm; }
+      /* o primeiro bloco depois do título não se separa dele */
+      .pdf-titulo + * { break-before: avoid; }
+
+      /* corpo em DUAS colunas que fluem */
+      .pdf-colunas {
+        column-count: 2; column-gap: 8.5mm; column-fill: balance;
+        column-rule: 1px solid #e7e2d6; text-align: justify; hyphens: auto;
+      }
+      .pdf-colunas > * { break-inside: auto; }
+      .pdf-colunas .estudo-bloco { margin: 0 0 3mm; }
+
+      /* texto comum do usuário: prosa plana no branco (quebra entre colunas) */
+      .pdf-colunas .estudo-texto {
+        font-family: 'EB Garamond', Georgia, serif; font-size: 11pt; line-height: 1.52;
+        color: #262f3d; background: none; border: 0; padding: 0; border-radius: 0;
+      }
+      .pdf-colunas .est-tam-g { font-size: 1.3em; font-weight: 600; color: #2a3550; }
+      .pdf-colunas .est-tam-p { font-size: .84em; }
+
+      /* preenchimento do usuário: container limpo. PODE quebrar entre colunas
+         (borda clonada), pra não deixar buraco no fim da coluna anterior. */
+      .pdf-colunas .estudo-texto.tem-fundo { padding: 3mm 3.6mm; border-radius: 2mm;
+        break-inside: auto; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
+
+      /* marcadores e hierarquia em L */
+      .pdf-colunas .estudo-texto.bloco-marcador { position: relative; padding-left: 1.4em; }
+      .pdf-colunas .estudo-texto.bloco-marcador::before { content: ''; position: absolute;
+        left: .45em; top: .62em; width: .32em; height: .32em; border-radius: 50%; background: #c8a24a; }
+      .pdf-colunas .estudo-texto.nivel-1 { margin-left: 1.6em; }
+      .pdf-colunas .estudo-texto.nivel-2 { margin-left: 3.2em; }
+      .pdf-colunas .estudo-texto.nivel-3 { margin-left: 4.8em; }
+      .pdf-colunas .estudo-texto.nivel-4 { margin-left: 6.4em; }
+
+      /* VERSÍCULOS: pedaço de papiro — creme claro, fita de acento, sutil e moderno.
+         PODE quebrar entre colunas/páginas (borda clonada em cada parte), para as
+         colunas encherem meio a meio, sem buracos. */
+      .pdf-colunas .estudo-versos {
+        break-inside: auto;
+        box-decoration-break: clone; -webkit-box-decoration-break: clone;
+        background: #f7f1e2;
+        border: 1px solid #e6dcc2;
+        border-left: 3px solid #c8a24a;
+        border-radius: 1.6mm;
+        padding: 3mm 3.6mm;
+        box-shadow: 0 1px 2px rgba(60,45,20,.06);
+      }
+      .pdf-colunas .estudo-ref {
+        font-variant: small-caps; letter-spacing: .05em; font-weight: 600;
+        color: #8a6d2f; font-size: .92em; margin-bottom: 1.4mm;
+      }
+      .pdf-colunas .estudo-sigla { color: #a98c4f; margin-left: .35em; font-variant: normal; }
+      .pdf-colunas .estudo-cap-sep { color: #a98c4f; font-variant: small-caps; margin: 1.2mm 0 .6mm; }
+      .pdf-colunas .estudo-passagem { color: #33302a; font-style: normal; }
+      .pdf-colunas .estudo-passagem .ev-n { color: #a1301f; font-size: .68em; vertical-align: super;
+        margin-right: .12em; font-weight: 600; }
+
+      /* rodapé: só a data, embaixo à esquerda, repetido nas páginas */
+      .pdf-rodape { position: fixed; left: 15mm; bottom: 8mm;
+        font-size: 8.5pt; color: #8b8676; letter-spacing: .02em; }
+    `;
+  },
+
+  /* Gera o PDF de um ou vários estudos (na ordem dada) e dispara o "Salvar como
+   * PDF" do navegador. A folha vive em #pdf-raiz, que só aparece na impressão. */
+  async exportarPdf(ids, nomeArquivo) {
+    const raiz = document.getElementById('pdf-raiz');
+    if (!raiz || !ids || !ids.length) return;
+    const todos = Estudos.todos();
+    const achar = id => todos.find(e => e.id === id);
+
+    const secoes = [];
+    for (const id of ids) {
+      const e = achar(id);
+      if (!e) continue;
+      try { secoes.push(await this._secaoPdf(e)); }
+      catch (err) { /* um estudo com problema não derruba os demais */ }
+    }
+    if (!secoes.length) { this.avisoRapido?.('Nada para exportar em PDF.'); return; }
+
+    // data (só a data, sem hora) no rodapé: do estudo, quando é um só; senão, de hoje
+    const soData = iso => { try { return new Date(iso).toLocaleDateString('pt-BR'); } catch (e) { return ''; } };
+    const dataRodape = ids.length === 1 && achar(ids[0]) && achar(ids[0]).criado
+      ? soData(achar(ids[0]).criado)
+      : new Date().toLocaleDateString('pt-BR');
+
+    // TODOS os estudos num único fluxo de duas colunas (os títulos atravessam);
+    // o rodapé é fixo e se repete em todas as páginas.
+    raiz.innerHTML =
+      `<div class="pdf-colunas">${secoes.join('')}</div>` +
+      `<div class="pdf-rodape"><span class="pdf-data">${dataRodape}</span></div>`;
+
+    // injeta o CSS de impressão essencial (imune a estilo.css velho no cache)
+    let estilo = document.getElementById('pdf-estilo-critico');
+    if (!estilo) {
+      estilo = document.createElement('style');
+      estilo.id = 'pdf-estilo-critico';
+      estilo.media = 'print';
+      document.head.appendChild(estilo);
+    }
+    estilo.textContent = this._estiloPdfCritico();
+
+    const tituloAntes = document.title;
+    document.title = nomeArquivo
+      || (ids.length === 1 ? (Estudos.nomeDe(achar(ids[0])) || 'Estudo') : 'Estudos');
+
+    const limpar = () => {
+      raiz.innerHTML = '';
+      document.title = tituloAntes;
+      window.removeEventListener('afterprint', limpar);
+      clearTimeout(this._pdfTimer);
+    };
+    window.addEventListener('afterprint', limpar);
+    this._pdfTimer = setTimeout(limpar, 120000);   // rede de segurança
+
+    // dois quadros para o layout/fontes assentarem, então imprime
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      try { window.print(); } catch (e) { limpar(); }
+    }));
   },
 
   /* ============================================ MODO EDIÇÃO DO ESTUDO
