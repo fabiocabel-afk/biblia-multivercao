@@ -1898,7 +1898,7 @@ const App = {
 
     corpo.innerHTML = `<div class="estudos-topo">
         <button class="botao secundario" id="pdf-varios">
-          <svg class="icone"><use href="#i-compartilhar"/></svg> Montar PDF de vários
+          <svg class="icone"><use href="#i-compartilhar"/></svg> Exportar PDF
         </button>
       </div>` + estudos.map(e => {
       const trechos = Estudos.trechosDe(e);
@@ -1922,11 +1922,19 @@ const App = {
         </div>
         <div class="trechos-lista">${listaTrechos}</div>
         <div class="acoes-sessao">
-          <button class="pilula" data-renomear="${e.id}">Renomear</button>
-          <button class="pilula" data-partilhar="${e.id}">Compartilhar</button>
-          <button class="pilula" data-copiar="${e.id}">Copiar</button>
-          <button class="pilula" data-pdf="${e.id}">Exportar PDF</button>
-          <button class="pilula perigo" data-remover="${e.id}">Excluir</button>
+          <button class="pilula" data-ler="${e.id}">Ler</button>
+          <button class="pilula" data-editar="${e.id}">Editar</button>
+          <div class="mais-opcoes">
+            <button class="pilula mais-btn" data-mais="${e.id}" aria-haspopup="true"
+              aria-expanded="false" aria-label="Mais opções">⋯ Mais</button>
+            <div class="mais-lista" id="mais-${e.id}" hidden>
+              <button class="mais-item" data-renomear="${e.id}">Renomear</button>
+              <button class="mais-item" data-partilhar="${e.id}">Compartilhar</button>
+              <button class="mais-item" data-copiar="${e.id}">Copiar</button>
+              <button class="mais-item" data-pdf="${e.id}">Exportar PDF</button>
+              <button class="mais-item perigo" data-remover="${e.id}">Excluir</button>
+            </div>
+          </div>
         </div>
       </div>`;
     }).join('');
@@ -1936,6 +1944,39 @@ const App = {
     corpo.querySelectorAll('[data-ver]').forEach(el => {
       el.onclick = () => this.verEstudo(el.dataset.ver);
     });
+    corpo.querySelectorAll('[data-ler]').forEach(el => {
+      el.onclick = () => this.verEstudo(el.dataset.ler);
+    });
+    corpo.querySelectorAll('[data-editar]').forEach(el => {
+      el.onclick = () => this.editarEstudo(el.dataset.editar);
+    });
+
+    // menu "⋯ Mais": abre/fecha a lista para baixo (um de cada vez)
+    const fecharMenus = (exceto) => corpo.querySelectorAll('.mais-lista').forEach(l => {
+      if (l !== exceto) { l.hidden = true; const b = l.previousElementSibling; if (b) b.setAttribute('aria-expanded', 'false'); }
+    });
+    corpo.querySelectorAll('[data-mais]').forEach(el => {
+      el.onclick = (ev) => {
+        ev.stopPropagation();
+        const lista = document.getElementById('mais-' + el.dataset.mais);
+        const abrir = lista.hidden;
+        fecharMenus(abrir ? lista : null);
+        lista.hidden = !abrir;
+        el.setAttribute('aria-expanded', String(abrir));
+      };
+    });
+    // tocar num item do menu fecha o menu; tocar fora também
+    corpo.querySelectorAll('.mais-item').forEach(el => el.addEventListener('click', () => fecharMenus(null)));
+    if (!this._fecharMaisLigado) {
+      this._fecharMaisLigado = true;
+      document.addEventListener('click', (ev) => {
+        if (!ev.target.closest || !ev.target.closest('.mais-opcoes')) {
+          document.querySelectorAll('.mais-lista').forEach(l => {
+            l.hidden = true; const b = l.previousElementSibling; if (b) b.setAttribute('aria-expanded', 'false');
+          });
+        }
+      });
+    }
 
     corpo.querySelectorAll('[data-est]').forEach(el => {
       el.onclick = () => {
@@ -2172,8 +2213,10 @@ const App = {
 
   /* Devolve o título do estudo (que atravessa as colunas) seguido dos blocos.
    * Vários estudos entram no MESMO fluxo de colunas, um após o outro. */
-  async _secaoPdf(e) {
-    const partes = [`<h2 class="pdf-titulo">${Leitura.escapar(Estudos.nomeDe(e))}</h2>`];
+  /* Devolve só os BLOCOS do estudo (sem o título) — o título é montado à parte
+   * em exportarPdf, para a medição decidir se ele cabe na página atual. */
+  async _corpoEstudoPdf(e) {
+    const partes = [];
     for (const b of Estudos.blocosDe(e)) {
       if (b.tipo === 'texto') {
         const a = this._blocoTextoAttrs(b);
@@ -2183,6 +2226,87 @@ const App = {
       }
     }
     return partes.join('');
+  },
+
+  /* Decide, por MEDIÇÃO, quais títulos precisam começar em página nova. Regra:
+   * ao entrar um estudo, se na página atual não couber o título + as 7 primeiras
+   * linhas do texto, ele começa na próxima folha (nunca título órfão); se couber,
+   * compartilha a folha com o estudo anterior (não desperdiça página em estudo
+   * curto). Mede fora da tela, na largura real da folha A4. */
+  _decidirQuebrasTitulos(estudos) {
+    const MM = 96 / 25.4;
+    const Wpage = Math.round(180 * MM);           // largura útil (A4 210mm − 2×15mm)
+    const gap = Math.round(8.5 * MM);
+    const Wcol = Math.floor((Wpage - gap) / 2);   // largura de uma coluna
+    const H = Math.round(262 * MM);               // altura útil (297 − 17 − 18)
+    const mTopo = Math.round(9 * MM), mBase = Math.round(5 * MM);
+
+    // estilo de medição (media all) replicando a tipografia do PDF numa coluna
+    const est = document.createElement('style');
+    est.textContent = `
+      .pdf-medir { position:absolute; left:-99999px; top:0; visibility:hidden;
+        font-family:'EB Garamond',Georgia,serif; }
+      .pdf-medir .cx { font-size:11pt; line-height:1.52; }
+      .pdf-medir .estudo-bloco { margin:0 0 3mm; }
+      .pdf-medir .estudo-texto { font-size:11pt; line-height:1.52; margin:0; background:none;
+        border:0; padding:0; }
+      .pdf-medir .est-tam-g { font-size:1.3em; font-weight:600; }
+      .pdf-medir .est-tam-p { font-size:.84em; }
+      .pdf-medir .estudo-texto.tem-fundo { padding:3mm 3.6mm; }
+      .pdf-medir .estudo-texto.bloco-marcador { padding-left:1.4em; }
+      .pdf-medir .estudo-texto.nivel-1{margin-left:1.6em} .pdf-medir .estudo-texto.nivel-2{margin-left:3.2em}
+      .pdf-medir .estudo-texto.nivel-3{margin-left:4.8em} .pdf-medir .estudo-texto.nivel-4{margin-left:6.4em}
+      .pdf-medir .estudo-versos { padding:3mm 3.6mm; border:1px solid #999; border-left:3px solid #999;
+        border-radius:1.6mm; margin:0 0 3mm; }
+      .pdf-medir .estudo-ref { font-size:.92em; margin-bottom:1.4mm; }
+      .pdf-medir .estudo-passagem .ev-n { font-size:.68em; vertical-align:super; }
+      .pdf-medir .tit { font-size:21pt; font-weight:600; line-height:1.15;
+        border-bottom:2pt solid #000; padding-bottom:2.6mm; }
+    `;
+    document.head.appendChild(est);
+
+    const wrap = document.createElement('div');
+    wrap.className = 'pdf-medir';
+    document.body.appendChild(wrap);
+    const alturaDe = (html, largura, cls) => {
+      const d = document.createElement('div');
+      if (cls) d.className = cls;
+      d.style.width = largura + 'px';
+      d.innerHTML = html;
+      wrap.appendChild(d);
+      const h = d.offsetHeight;
+      wrap.removeChild(d);
+      return h;
+    };
+
+    const umaLinha = alturaDe('linha de exemplo', Wcol, 'cx');
+    const L7 = umaLinha * 7;
+
+    const met = estudos.map((s, i) => {
+      const t = alturaDe(s.titulo, Wpage, 'tit') + mBase + (i > 0 ? mTopo : 0);
+      const C = alturaDe(`<div class="cx">${s.corpo}</div>`, Wcol);
+      return { t, C };
+    });
+    document.body.removeChild(wrap);
+    document.head.removeChild(est);
+
+    // simula o preenchimento das páginas (duas colunas)
+    const quebras = new Array(estudos.length).fill(false);
+    let y = 0;   // altura já ocupada na página atual
+    for (let i = 0; i < met.length; i++) {
+      const { t, C } = met[i];
+      if (i > 0 && (H - y) < (t + L7)) { quebras[i] = true; y = 0; }
+      const avail = Math.max(0, H - (y + t));       // por coluna, após o título
+      const cap = 2 * avail;                        // as duas colunas desta página
+      if (C <= cap) {
+        y = y + t + Math.ceil(C / 2);               // cabe: colunas balanceadas
+      } else {
+        let rem = C - cap;                          // sobra para as próximas páginas
+        rem -= Math.floor(rem / (2 * H)) * (2 * H); // descarta páginas cheias
+        y = Math.ceil(rem / 2);                     // posição na última página
+      }
+    }
+    return quebras;
   },
 
   /* CSS de impressão ESSENCIAL, injetado na hora de exportar. Assim a folha sai
@@ -2211,13 +2335,17 @@ const App = {
         border-bottom: 2pt solid #c8a24a;
       }
       .pdf-titulo:not(:first-child) { margin-top: 9mm; }
+      /* quando a medição decide que o título não cabe com um trecho de texto na
+         página atual, ele ganha esta classe e começa na próxima folha */
+      .pdf-titulo.pagina-nova { break-before: page; margin-top: 0; }
       /* o primeiro bloco depois do título não se separa dele */
       .pdf-titulo + * { break-before: avoid; }
 
-      /* corpo em DUAS colunas que fluem */
+      /* corpo em DUAS colunas que fluem (sem régua vertical: ela vazava por
+         cima do título de largura inteira) */
       .pdf-colunas {
         column-count: 2; column-gap: 8.5mm; column-fill: balance;
-        column-rule: 1px solid #e7e2d6; text-align: justify; hyphens: auto;
+        text-align: justify; hyphens: auto;
       }
       .pdf-colunas > * { break-inside: auto; }
       .pdf-colunas .estudo-bloco { margin: 0 0 3mm; }
@@ -2266,10 +2394,6 @@ const App = {
       .pdf-colunas .estudo-passagem { color: #33302a; font-style: normal; }
       .pdf-colunas .estudo-passagem .ev-n { color: #a1301f; font-size: .68em; vertical-align: super;
         margin-right: .12em; font-weight: 600; }
-
-      /* rodapé: só a data, embaixo à esquerda, repetido nas páginas */
-      .pdf-rodape { position: fixed; left: 15mm; bottom: 8mm;
-        font-size: 8.5pt; color: #8b8676; letter-spacing: .02em; }
     `;
   },
 
@@ -2281,26 +2405,27 @@ const App = {
     const todos = Estudos.todos();
     const achar = id => todos.find(e => e.id === id);
 
-    const secoes = [];
+    // monta título + corpo de cada estudo
+    const estudos = [];
     for (const id of ids) {
       const e = achar(id);
       if (!e) continue;
-      try { secoes.push(await this._secaoPdf(e)); }
-      catch (err) { /* um estudo com problema não derruba os demais */ }
+      try {
+        estudos.push({ titulo: Leitura.escapar(Estudos.nomeDe(e)), corpo: await this._corpoEstudoPdf(e) });
+      } catch (err) { /* um estudo com problema não derruba os demais */ }
     }
-    if (!secoes.length) { this.avisoRapido?.('Nada para exportar em PDF.'); return; }
+    if (!estudos.length) { this.avisoRapido?.('Nada para exportar em PDF.'); return; }
 
-    // data (só a data, sem hora) no rodapé: do estudo, quando é um só; senão, de hoje
-    const soData = iso => { try { return new Date(iso).toLocaleDateString('pt-BR'); } catch (e) { return ''; } };
-    const dataRodape = ids.length === 1 && achar(ids[0]) && achar(ids[0]).criado
-      ? soData(achar(ids[0]).criado)
-      : new Date().toLocaleDateString('pt-BR');
+    // MEDE e decide quais títulos começam em página nova (nunca órfão; estudo
+    // curto compartilha a folha). Se a medição falhar, cai no seguro (sem quebra).
+    let quebras = new Array(estudos.length).fill(false);
+    try { quebras = this._decidirQuebrasTitulos(estudos); } catch (e) {}
 
-    // TODOS os estudos num único fluxo de duas colunas (os títulos atravessam);
-    // o rodapé é fixo e se repete em todas as páginas.
-    raiz.innerHTML =
-      `<div class="pdf-colunas">${secoes.join('')}</div>` +
-      `<div class="pdf-rodape"><span class="pdf-data">${dataRodape}</span></div>`;
+    // TODOS os estudos num único fluxo de duas colunas; os títulos atravessam a
+    // largura inteira, e recebem a quebra de página quando a medição pediu.
+    const secoes = estudos.map((s, i) =>
+      `<h2 class="pdf-titulo${i > 0 && quebras[i] ? ' pagina-nova' : ''}">${s.titulo}</h2>${s.corpo}`);
+    raiz.innerHTML = `<div class="pdf-colunas">${secoes.join('')}</div>`;
 
     // injeta o CSS de impressão essencial (imune a estilo.css velho no cache)
     let estilo = document.getElementById('pdf-estilo-critico');
@@ -2507,8 +2632,13 @@ const App = {
       </div>
       <div class="caixa-cor fechada" id="caixa-cor-estudo"></div>
       <div class="estudo-edit-blocos" id="estudo-edit-blocos"></div>
-      <div class="estudo-ver-rodape">
-        <button class="pilula-lapis" id="estudo-edit-concluir">Concluir</button>
+      <div class="estudo-ver-rodape estudo-edit-rodape">
+        <button class="pilula-lapis" id="estudo-desfazer" disabled title="Desfazer (até 10 passos)">
+          <svg class="icone" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="8 8 4 12 8 16"/><path d="M4 12 h10 a5 5 0 0 1 5 5 v1"/></g></svg>
+          Desfazer</button>
+        <span class="rodape-espaco"></span>
+        <button class="pilula-lapis secundario" id="estudo-cancelar">Cancelar</button>
+        <button class="pilula-lapis" id="estudo-aplicar">Aplicar</button>
       </div>`;
     this.abrir('painel-estudo-ver');
 
@@ -2557,13 +2687,45 @@ const App = {
     const aoMudarSelecao = () => { if (corpo.classList.contains('editando')) salvarRange(); };
     document.addEventListener('selectionchange', aoMudarSelecao);
 
-    const sairSalvando = () => {
-      Estudos.salvarBlocos(id, blocos);
+    // ---- histórico de DESFAZER (até 10 passos) ----
+    const pilha = [];
+    const atualizarDesfazer = () => {
+      const b = document.getElementById('estudo-desfazer');
+      if (b) b.disabled = pilha.length === 0;
+    };
+    const snapshot = () => {
+      pilha.push(JSON.parse(JSON.stringify(blocos)));
+      if (pilha.length > 10) pilha.shift();     // guarda no máximo 10 estados
+      atualizarDesfazer();
+    };
+    // digitação: um passo por rajada (não um por tecla)
+    let digitando = false, tDigit = null;
+    const snapshotDigitacao = () => {
+      if (!digitando) { snapshot(); digitando = true; }
+      clearTimeout(tDigit);
+      tDigit = setTimeout(() => { digitando = false; }, 800);
+    };
+    const desfazer = async () => {
+      if (!pilha.length) return;
+      const antes = pilha.pop();
+      blocos.length = 0; antes.forEach(b => blocos.push(b));
+      ativo = null; range = null; digitando = false;
+      await montar();
+      atualizarDesfazer();
+    };
+
+    // ---- SALVAR DIFERIDO: nada é gravado até Aplicar; Cancelar descarta ----
+    const sairEdicao = salvar => {
+      if (salvar) Estudos.salvarBlocos(id, blocos);
       corpo.classList.remove('editando');
       document.removeEventListener('selectionchange', aoMudarSelecao);
+      this.verEstudo(id);
     };
-    document.getElementById('estudo-ver-voltar').onclick = () => { sairSalvando(); this.voltar(); };
-    document.getElementById('estudo-edit-concluir').onclick = () => { sairSalvando(); this.voltar(); };
+    document.getElementById('estudo-ver-voltar').onclick = () => sairEdicao(true);
+    document.getElementById('estudo-aplicar').onclick = () => sairEdicao(true);
+    document.getElementById('estudo-cancelar').onclick = () => sairEdicao(false);
+    const btnDesf = document.getElementById('estudo-desfazer');
+    if (btnDesf) btnDesf.onclick = () => desfazer();
 
     // tocar num botão da barra NÃO pode roubar o foco do texto (senão a seleção
     // some). No celular isso é pointer/touch — não basta o mousedown do desktop.
@@ -2612,8 +2774,8 @@ const App = {
       area.querySelectorAll('[data-slot]').forEach(el => {
         el.onclick = async () => {
           const i = +el.dataset.slot;
+          snapshot();
           blocos.splice(i, 0, { tipo: 'texto', html: '' });
-          Estudos.salvarBlocos(id, blocos);
           await montar();
           const novo = area.querySelector(`[data-edit="${i}"]`);
           if (novo) { novo.focus(); ativo = novo; }
@@ -2621,19 +2783,19 @@ const App = {
       });
       area.querySelectorAll('[data-rem]').forEach(el => {
         el.onclick = async () => {
+          snapshot();
           blocos.splice(+el.dataset.rem, 1);
-          Estudos.salvarBlocos(id, blocos);
           if (ativo && ativo.dataset.edit === el.dataset.rem) { ativo = null; range = null; }
           await montar();
         };
       });
       area.querySelectorAll('[data-edit]').forEach(div => {
         const i = +div.dataset.edit;
-        div.addEventListener('input', () => { blocos[i].html = div.innerHTML; });
+        div.addEventListener('input', () => { snapshotDigitacao(); blocos[i].html = div.innerHTML; });
         div.addEventListener('focus', () => { ativo = div; });
         div.addEventListener('keyup', salvarRange);
         div.addEventListener('mouseup', salvarRange);
-        div.addEventListener('blur', () => { blocos[i].html = div.innerHTML; Estudos.salvarBlocos(id, blocos); });
+        div.addEventListener('blur', () => { blocos[i].html = div.innerHTML; });
       });
     };
 
@@ -2644,6 +2806,7 @@ const App = {
     barra.querySelectorAll('[data-cmd]').forEach(b => {
       aoAtivar(b, () => {
         const r = pegarRange(); if (!r) return;
+        snapshot();
         const novo = b.dataset.cmd === 'removeFormat'
           ? this._ricoLimpar(r)
           : this._ricoAlternarTag(r, TAG[b.dataset.cmd], ativo);
@@ -2655,6 +2818,7 @@ const App = {
     barra.querySelectorAll('[data-size]').forEach(b => {
       aoAtivar(b, () => {
         const r = pegarRange(); if (!r) return;
+        snapshot();
         const novo = this._ricoEnvolver(r, {
           classe: 'est-tam-' + b.dataset.size,
           limparClasses: ['est-tam-g', 'est-tam-m', 'est-tam-p'], limparEstilo: 'fontSize' });
@@ -2670,19 +2834,19 @@ const App = {
       const a = this._blocoTextoAttrs(b);
       ativo.className = a.cls + ' estudo-texto-edit';
       ativo.style.background = b.fundo || '';
-      Estudos.salvarBlocos(id, blocos);
     };
     const btnMarc = document.getElementById('est-marcador');
     const btnRec = document.getElementById('est-recuar');
     const btnRecF = document.getElementById('est-recuar-fora');
     const btnAlin = document.getElementById('est-alinhar');
     const btnPreen = document.getElementById('est-preencher');
-    aoAtivar(btnMarc, () => { const b = blocoAtivo(); if (!b) return; b.marcador = !b.marcador; reaplicarBloco(); });
-    aoAtivar(btnRec, () => { const b = blocoAtivo(); if (!b) return; b.nivel = Math.min(4, (+b.nivel || 0) + 1); reaplicarBloco(); });
-    aoAtivar(btnRecF, () => { const b = blocoAtivo(); if (!b) return; b.nivel = Math.max(0, (+b.nivel || 0) - 1); reaplicarBloco(); });
+    aoAtivar(btnMarc, () => { const b = blocoAtivo(); if (!b) return; snapshot(); b.marcador = !b.marcador; reaplicarBloco(); });
+    aoAtivar(btnRec, () => { const b = blocoAtivo(); if (!b) return; snapshot(); b.nivel = Math.min(4, (+b.nivel || 0) + 1); reaplicarBloco(); });
+    aoAtivar(btnRecF, () => { const b = blocoAtivo(); if (!b) return; snapshot(); b.nivel = Math.max(0, (+b.nivel || 0) - 1); reaplicarBloco(); });
     const ALINHAS = ['', 'c', 'd', 'j'];   // esquerda → centro → direita → justificado
     aoAtivar(btnAlin, () => {
       const b = blocoAtivo(); if (!b) return;
+      snapshot();
       b.alinhar = ALINHAS[(ALINHAS.indexOf(b.alinhar || '') + 1) % ALINHAS.length];
       reaplicarBloco();
     });
@@ -2699,6 +2863,7 @@ const App = {
 
     const aplicarCor = (modo, cor) => {
       const r = pegarRange(); if (!r) return;
+      snapshot();
       const novo = this._ricoEnvolver(r, modo === 'letra'
         ? { estilo: { color: cor }, limparEstilo: 'color' }
         : { estilo: { backgroundColor: cor }, limparEstilo: 'backgroundColor' });
@@ -2706,6 +2871,7 @@ const App = {
     };
     const removerCor = modo => {
       const r = pegarRange(); if (!r) return;
+      snapshot();
       aplicarResultado(this._ricoLimparEstilo(r, modo === 'letra' ? 'color' : 'backgroundColor', ativo));
     };
     const abrirCaixaCor = modo => {
@@ -2748,6 +2914,7 @@ const App = {
         titulo: 'Preencher o bloco',
       }).then(res => {
         if (!res) return;
+        snapshot();
         b.fundo = res.remover ? '' : res;
         reaplicarBloco();
       });

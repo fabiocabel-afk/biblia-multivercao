@@ -5430,3 +5430,48 @@ html[data-il-abrev="sim"] .il-m-c .il-txt {
 }
 .pdf-add:active { transform: scale(.99); }
 .pdf-gerar { margin-top: 10px; }
+
+/* menu "⋯ Mais" nas ações do estudo */
+.acoes-sessao { position: relative; flex-wrap: wrap; }
+.mais-opcoes { position: relative; display: inline-block; }
+.mais-btn { white-space: nowrap; }
+.mais-lista {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 30;
+  min-width: 170px;
+  display: flex;
+  flex-direction: column;
+  padding: 5px;
+  border-radius: 12px;
+  background: var(--cartao, var(--papel));
+  background-image: var(--perg-img, none);
+  border: 1px solid color-mix(in srgb, var(--tinta) 16%, transparent);
+  box-shadow: 0 8px 26px rgb(0 0 0 / .22);
+}
+.mais-lista[hidden] { display: none; }
+.mais-item {
+  text-align: left;
+  padding: 9px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.mais-item:hover { background: color-mix(in srgb, var(--tinta) 8%, transparent); }
+.mais-item.perigo { color: #b23b3b; }
+
+/* rodapé do editor de estudo: Desfazer à esquerda, Cancelar/Aplicar à direita */
+.estudo-edit-rodape { display: flex; align-items: center; gap: 8px; }
+.estudo-edit-rodape .rodape-espaco { flex: 1 1 auto; }
+.estudo-edit-rodape .pilula-lapis { display: inline-flex; align-items: center; gap: 6px; }
+.estudo-edit-rodape .pilula-lapis .icone { width: 18px; height: 18px; }
+.estudo-edit-rodape .pilula-lapis[disabled] { opacity: .4; pointer-events: none; }
+.estudo-edit-rodape .pilula-lapis.secundario {
+  background: transparent;
+  border: 1px solid color-mix(in srgb, var(--tinta) 24%, transparent);
+  color: inherit;
+}
