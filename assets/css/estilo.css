@@ -5475,3 +5475,33 @@ html[data-il-abrev="sim"] .il-m-c .il-txt {
   border: 1px solid color-mix(in srgb, var(--tinta) 24%, transparent);
   color: inherit;
 }
+
+/* ---- popup do seletor de tamanho ---- */
+.tam-popup {
+  margin: 4px 0 8px;
+  padding: 8px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--tinta) 5%, transparent);
+  border: 1px solid color-mix(in srgb, var(--tinta) 14%, transparent);
+}
+.tam-popup.fechada { display: none; }
+.tam-linha { display: flex; gap: 6px; margin-bottom: 6px; }
+.tam-preset {
+  flex: 1 1 auto; padding: 8px 10px; border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--tinta) 20%, transparent);
+  background: transparent; color: inherit; font: inherit; cursor: pointer; white-space: nowrap;
+}
+.tam-nums { display: flex; gap: 5px; flex-wrap: wrap; }
+.tam-nums button {
+  min-width: 38px; padding: 7px 0; border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--tinta) 16%, transparent);
+  background: transparent; color: inherit; font: inherit; cursor: pointer;
+}
+.tam-preset:active, .tam-nums button:active { transform: scale(.94); }
+
+/* ---- marcadores e recuo POR LINHA (listas do editor) ---- */
+.estudo-texto ul, .estudo-texto-edit ul { margin: .15em 0; padding-left: 1.5em; list-style: disc; }
+.estudo-texto ol, .estudo-texto-edit ol { margin: .15em 0; padding-left: 1.6em; }
+.estudo-texto li, .estudo-texto-edit li { margin: .1em 0; }
+.estudo-texto ul ul, .estudo-texto-edit ul ul { list-style: circle; }
+.estudo-texto blockquote, .estudo-texto-edit blockquote { margin: .1em 0 .1em 1.6em; border: 0; padding: 0; }

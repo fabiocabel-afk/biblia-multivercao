@@ -2371,6 +2371,12 @@ const App = {
       .pdf-colunas .estudo-texto.nivel-2 { margin-left: 3.2em; }
       .pdf-colunas .estudo-texto.nivel-3 { margin-left: 4.8em; }
       .pdf-colunas .estudo-texto.nivel-4 { margin-left: 6.4em; }
+      /* marcadores e recuo por LINHA (listas do editor) */
+      .pdf-colunas .estudo-texto ul { margin: .15em 0; padding-left: 1.4em; list-style: disc; }
+      .pdf-colunas .estudo-texto ol { margin: .15em 0; padding-left: 1.5em; }
+      .pdf-colunas .estudo-texto li { margin: .1em 0; }
+      .pdf-colunas .estudo-texto ul ul { list-style: circle; }
+      .pdf-colunas .estudo-texto blockquote { margin: .1em 0 .1em 1.5em; border: 0; padding: 0; }
 
       /* VERSÍCULOS: pedaço de papiro — creme claro, fita de acento, sutil e moderno.
          PODE quebrar entre colunas/páginas (borda clonada em cada parte), para as
@@ -2614,13 +2620,11 @@ const App = {
         <button class="fmt fmt-fundo" id="est-cor-fundo" title="Cor de fundo">
           <span class="bloco-fundo" id="est-amostra-fundo">A</span></button>
         <span class="fmt-sep" aria-hidden="true"></span>
-        <button class="fmt fmt-tam" data-size="g" title="Título (maior)"><span style="font-size:16px;font-weight:600">A</span></button>
-        <button class="fmt fmt-tam" data-size="m" title="Texto normal"><span style="font-size:13px">A</span></button>
-        <button class="fmt fmt-tam" data-size="p" title="Texto menor"><span style="font-size:10px">A</span></button>
+        <button class="fmt fmt-tam" id="est-tam-btn" title="Tamanho da fonte">A<span style="font-size:.62em;vertical-align:.15em">▾</span></button>
         <span class="fmt-sep" aria-hidden="true"></span>
-        <button class="fmt" id="est-marcador" title="Marcadores"><svg class="icone"><use href="#i-lista"/></svg></button>
-        <button class="fmt" id="est-recuar-fora" title="Menos recuo"><svg class="icone"><use href="#i-antes"/></svg></button>
-        <button class="fmt" id="est-recuar" title="Mais recuo (hierarquia)"><svg class="icone"><use href="#i-avancar"/></svg></button>
+        <button class="fmt" id="est-marcador" title="Marcadores (na linha)"><svg class="icone"><use href="#i-lista"/></svg></button>
+        <button class="fmt" id="est-recuar-fora" title="Menos recuo (na linha)"><svg class="icone"><use href="#i-antes"/></svg></button>
+        <button class="fmt" id="est-recuar" title="Mais recuo (na linha)"><svg class="icone"><use href="#i-avancar"/></svg></button>
         <button class="fmt" id="est-alinhar" title="Alinhamento">
           <svg class="icone" viewBox="0 0 24 24"><g stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="15" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></g></svg>
         </button>
@@ -2631,6 +2635,21 @@ const App = {
         <button class="fmt" data-cmd="removeFormat" title="Limpar formatação"><svg class="icone"><use href="#i-limpar-formato"/></svg></button>
       </div>
       <div class="caixa-cor fechada" id="caixa-cor-estudo"></div>
+      <div class="tam-popup fechada" id="tam-popup">
+        <div class="tam-linha">
+          <button class="tam-preset" data-tam="corpo">Corpo</button>
+          <button class="tam-preset" data-tam="subtitulo">Subtítulo</button>
+        </div>
+        <div class="tam-nums">
+          <button data-px="12">12</button>
+          <button data-px="14">14</button>
+          <button data-px="16">16</button>
+          <button data-px="18">18</button>
+          <button data-px="22">22</button>
+          <button data-px="26">26</button>
+          <button data-px="32">32</button>
+        </div>
+      </div>
       <div class="estudo-edit-blocos" id="estudo-edit-blocos"></div>
       <div class="estudo-ver-rodape estudo-edit-rodape">
         <button class="pilula-lapis" id="estudo-desfazer" disabled title="Desfazer (até 10 passos)">
@@ -2814,20 +2833,40 @@ const App = {
       });
     });
 
-    // ---- três tamanhos: Título (g) / Normal (m) / Menor (p) ----
-    barra.querySelectorAll('[data-size]').forEach(b => {
-      aoAtivar(b, () => {
-        const r = pegarRange(); if (!r) return;
-        snapshot();
-        const novo = this._ricoEnvolver(r, {
-          classe: 'est-tam-' + b.dataset.size,
-          limparClasses: ['est-tam-g', 'est-tam-m', 'est-tam-p'], limparEstilo: 'fontSize' });
-        aplicarResultado(novo);
-      });
+    // ---- TAMANHO por número: popup com padrões (Corpo/Subtítulo) + 7 medidas ----
+    // Aplica font-size em px, LIMPANDO o tamanho que veio (inclusive de texto
+    // colado da web), então a medida fica exata e controlável.
+    const tamPopup = document.getElementById('tam-popup');
+    const aplicarTamanho = (estilo) => {
+      const r = pegarRange(); if (!r) return;
+      snapshot();
+      aplicarResultado(this._ricoEnvolver(r, {
+        estilo,
+        limparEstilo: 'fontSize',
+        limparClasses: ['est-tam-g', 'est-tam-m', 'est-tam-p'],
+      }));
+    };
+    const btnTam = document.getElementById('est-tam-btn');
+    // memoriza o trecho no pointerdown; abre o popup no clique (fim do toque)
+    btnTam.addEventListener('pointerdown', () => pegarRange());
+    btnTam.onclick = () => {
+      tamPopup.classList.toggle('fechada');
+    };
+    tamPopup.querySelectorAll('[data-px]').forEach(el => {
+      el.addEventListener('pointerdown', e => e.preventDefault());   // não rouba o foco
+      el.onclick = () => { aplicarTamanho({ fontSize: el.dataset.px + 'px' }); tamPopup.classList.add('fechada'); };
+    });
+    tamPopup.querySelectorAll('[data-tam]').forEach(el => {
+      el.addEventListener('pointerdown', e => e.preventDefault());
+      el.onclick = () => {
+        aplicarTamanho(el.dataset.tam === 'subtitulo'
+          ? { fontSize: '20px', fontWeight: '600' }     // padrão subtítulo
+          : { fontSize: '15px', fontWeight: '400' });   // padrão corpo
+        tamPopup.classList.add('fechada');
+      };
     });
 
-    // ---- formatação de BLOCO: marcador, recuo (hierarquia), alinhamento ----
-    // Agem no bloco em foco (ativo) — não precisam de seleção.
+    // ---- formatação de BLOCO: alinhamento e preenchimento (agem no bloco) ----
     const blocoAtivo = () => (ativo && ativo.dataset.edit != null) ? blocos[+ativo.dataset.edit] : null;
     const reaplicarBloco = () => {
       const b = blocoAtivo(); if (!b || !ativo) return;
@@ -2835,14 +2874,24 @@ const App = {
       ativo.className = a.cls + ' estudo-texto-edit';
       ativo.style.background = b.fundo || '';
     };
+
+    // ---- marcador e hierarquia por LINHA/PARÁGRAFO (dentro da caixa) ----
+    // Age no parágrafo onde está o cursor: tocar aplica, tocar de novo remove.
     const btnMarc = document.getElementById('est-marcador');
     const btnRec = document.getElementById('est-recuar');
     const btnRecF = document.getElementById('est-recuar-fora');
     const btnAlin = document.getElementById('est-alinhar');
     const btnPreen = document.getElementById('est-preencher');
-    aoAtivar(btnMarc, () => { const b = blocoAtivo(); if (!b) return; snapshot(); b.marcador = !b.marcador; reaplicarBloco(); });
-    aoAtivar(btnRec, () => { const b = blocoAtivo(); if (!b) return; snapshot(); b.nivel = Math.min(4, (+b.nivel || 0) + 1); reaplicarBloco(); });
-    aoAtivar(btnRecF, () => { const b = blocoAtivo(); if (!b) return; snapshot(); b.nivel = Math.max(0, (+b.nivel || 0) - 1); reaplicarBloco(); });
+    const cmdLinha = comando => {
+      if (!ativo || ativo.dataset.edit == null) return;
+      snapshot();
+      try { document.execCommand('styleWithCSS', false, true); } catch (e) {}
+      try { document.execCommand(comando, false, null); } catch (e) {}
+      sincronizar();   // grava o novo HTML do bloco na cópia de trabalho
+    };
+    aoAtivar(btnMarc, () => cmdLinha('insertUnorderedList'));
+    aoAtivar(btnRec, () => cmdLinha('indent'));
+    aoAtivar(btnRecF, () => cmdLinha('outdent'));
     const ALINHAS = ['', 'c', 'd', 'j'];   // esquerda → centro → direita → justificado
     aoAtivar(btnAlin, () => {
       const b = blocoAtivo(); if (!b) return;
