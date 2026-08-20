@@ -2377,17 +2377,20 @@ const App = {
       .pdf-colunas .estudo-texto li { margin: .1em 0; }
       .pdf-colunas .estudo-texto ul ul { list-style: circle; }
       .pdf-colunas .estudo-texto blockquote { margin: .1em 0 .1em 1.5em; border: 0; padding: 0; }
-      /* HIERARQUIA em L por linha (níveis 1..5 com conector) */
+      /* HIERARQUIA em L por linha (níveis 1..5, trilhas por nível) */
       .pdf-colunas .estudo-texto [class*="niv-"] { position: relative; }
-      .pdf-colunas .estudo-texto .niv-1 { margin-left: 1.5em; }
-      .pdf-colunas .estudo-texto .niv-2 { margin-left: 3.0em; }
-      .pdf-colunas .estudo-texto .niv-3 { margin-left: 4.5em; }
-      .pdf-colunas .estudo-texto .niv-4 { margin-left: 6.0em; }
-      .pdf-colunas .estudo-texto .niv-5 { margin-left: 7.5em; }
-      .pdf-colunas .estudo-texto [class*="niv-"]::before { content:''; position:absolute;
-        left:-0.95em; top:0; bottom:0; border-left:1.4px solid #a1301f; }
+      .pdf-colunas .estudo-texto .niv-1 { padding-left: 1.5em; }
+      .pdf-colunas .estudo-texto .niv-2 { padding-left: 3.0em; }
+      .pdf-colunas .estudo-texto .niv-3 { padding-left: 4.5em; }
+      .pdf-colunas .estudo-texto .niv-4 { padding-left: 6.0em; }
+      .pdf-colunas .estudo-texto .niv-5 { padding-left: 7.5em; }
       .pdf-colunas .estudo-texto [class*="niv-"]::after { content:''; position:absolute;
-        left:-0.95em; top:.72em; width:.72em; border-top:1.4px solid #a1301f; }
+        top:.72em; width:.72em; border-top:1.6px solid rgba(140,47,57,.6); }
+      .pdf-colunas .estudo-texto .niv-1::after { left:.55em; }
+      .pdf-colunas .estudo-texto .niv-2::after { left:2.05em; }
+      .pdf-colunas .estudo-texto .niv-3::after { left:3.55em; }
+      .pdf-colunas .estudo-texto .niv-4::after { left:5.05em; }
+      .pdf-colunas .estudo-texto .niv-5::after { left:6.55em; }
 
       /* VERSÍCULOS: pedaço de papiro — creme claro, fita de acento, sutil e moderno.
          PODE quebrar entre colunas/páginas (borda clonada em cada parte), para as
@@ -2540,7 +2543,53 @@ const App = {
     const div = document.createElement('div');
     editable.insertBefore(div, ini);
     nós.forEach(x => div.appendChild(x));
+    // remove os <br> vizinhos (o próprio <div> já quebra a linha) — evita espaço
+    // duplo e deixa parágrafos consecutivos encostados, pro conector ligar certo.
+    if (div.previousSibling && div.previousSibling.nodeName === 'BR') div.previousSibling.remove();
+    if (div.nextSibling && div.nextSibling.nodeName === 'BR') div.nextSibling.remove();
     return div;
+  },
+
+  /* TRILHAS DA HIERARQUIA: cada nível tem sua vertical própria. Percorre as
+   * linhas do bloco e, para cada item com nível, calcula:
+   *  - .corrente: há outro item do MESMO nível abaixo (a vertical desce contínua);
+   *  - trilhas ancestrais (níveis mais rasos ainda "abertos"): desenhadas como
+   *    linhas verticais que ATRAVESSAM este item (por isso um filho no meio não
+   *    quebra a corrente do pai). Uma trilha K só quebra quando aparece alguém do
+   *    nível K ou mais raso — ou um texto sem nível. */
+  _recalcularTrilhas(editable) {
+    const COR = 'rgba(140,47,57,.55)';
+    const linhas = [];
+    editable.childNodes.forEach(c => {
+      const m = c.nodeType === 1 && c.className && c.className.match(/\bniv-([1-5])\b/);
+      if (m) linhas.push({ el: c, nivel: +m[1] });
+      else if (c.nodeType === 1 && c.nodeName === 'BR') { /* separador */ }
+      else if ((c.textContent || '').trim() || (c.nodeType === 1 && c.nodeName !== 'BR'))
+        linhas.push({ el: null, nivel: 0 });   // linha sem nível → quebra as trilhas
+    });
+    const passa = (i, K) => {
+      for (let j = i + 1; j < linhas.length; j++) {
+        if (linhas[j].nivel === K) return true;
+        if (linhas[j].nivel < K) return false;   // nível 0 ou mais raso encerra
+      }
+      return false;
+    };
+    const colX = K => (K * 1.5 - 0.95).toFixed(2) + 'em';
+    linhas.forEach((ln, i) => {
+      if (!ln.el) return;
+      const L = ln.nivel;
+      const corrente = passa(i, L);
+      ln.el.classList.toggle('corrente', corrente);
+      // TODAS as verticais (trilhas ancestrais + a própria) são desenhadas pela
+      // MESMA técnica (background), então têm a espessura idêntica — sem rebarba.
+      const cam = [];   // { x, full }
+      for (let K = 1; K < L; K++) if (passa(i, K)) cam.push({ x: colX(K), full: true });
+      cam.push({ x: colX(L), full: corrente });   // vertical própria (full se tem irmão abaixo)
+      ln.el.style.backgroundImage = cam.map(() => `linear-gradient(${COR},${COR})`).join(',');
+      ln.el.style.backgroundPosition = cam.map(c => `${c.x} 0`).join(',');
+      ln.el.style.backgroundSize = cam.map(c => c.full ? '1.6px 100%' : '1.6px .78em').join(',');
+      ln.el.style.backgroundRepeat = 'no-repeat';
+    });
   },
 
   /* Classes e estilo de um bloco de TEXTO do estudo (marcador, nível/hierarquia,
@@ -2694,7 +2743,9 @@ const App = {
           <span class="bloco-fundo" id="est-amostra-fundo">A</span></button>
         <span class="fmt-sep" aria-hidden="true"></span>
         <button class="fmt" id="est-marcador" title="Marcadores (na linha)"><svg class="icone"><use href="#i-lista"/></svg></button>
-        <button class="fmt" id="est-hierarquia" title="Hierarquia em L (na linha)"><svg class="icone"><use href="#i-arvore"/></svg></button>
+        <button class="fmt" id="est-hierarquia" title="Hierarquia em L (na linha)">
+          <svg class="icone" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="8 4 8 16 18 16"/></svg>
+        </button>
         <button class="fmt" id="est-alinhar" title="Alinhamento">
           <svg class="icone" viewBox="0 0 24 24"><g stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="15" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></g></svg>
         </button>
@@ -2918,6 +2969,7 @@ const App = {
         div.addEventListener('mouseup', salvarRange);
         div.addEventListener('blur', () => { blocos[i].html = div.innerHTML; });
       });
+      area.querySelectorAll('.estudo-texto-edit').forEach(d => this._recalcularTrilhas(d));
     };
 
     await montar();
@@ -3026,6 +3078,8 @@ const App = {
       par.classList.remove('niv-1', 'niv-2', 'niv-3', 'niv-4', 'niv-5');
       const prox = (n + 1) % 6;                 // 0→1→2→3→4→5→0
       if (prox) par.classList.add('niv-' + prox);
+      else { par.classList.remove('corrente'); par.style.backgroundImage = ''; }
+      this._recalcularTrilhas(ativo);            // atualiza as trilhas de todos os níveis
       sincronizar();
     });
     const ALINHAS = ['', 'c', 'd', 'j'];   // esquerda → centro → direita → justificado

@@ -5537,20 +5537,19 @@ html[data-il-abrev="sim"] .il-m-c .il-txt {
  * nível: se houver um texto no meio, a corrente quebra e o próximo item parece
  * "sair" desse texto. */
 .estudo-texto [class*="niv-"], .estudo-texto-edit [class*="niv-"] { position: relative; }
-.estudo-texto .niv-1, .estudo-texto-edit .niv-1 { margin-left: 1.5em; }
-.estudo-texto .niv-2, .estudo-texto-edit .niv-2 { margin-left: 3.0em; }
-.estudo-texto .niv-3, .estudo-texto-edit .niv-3 { margin-left: 4.5em; }
-.estudo-texto .niv-4, .estudo-texto-edit .niv-4 { margin-left: 6.0em; }
-.estudo-texto .niv-5, .estudo-texto-edit .niv-5 { margin-left: 7.5em; }
-/* vertical na coluna do pai (um passo à esquerda), altura toda da linha */
-.estudo-texto [class*="niv-"]::before, .estudo-texto-edit [class*="niv-"]::before {
-  content: ''; position: absolute;
-  left: -0.95em; top: 0; bottom: 0; width: 0;
-  border-left: 1.6px solid color-mix(in srgb, var(--rubrica, #8c2f39) 55%, transparent);
-}
-/* tique horizontal ligando a vertical ao texto, no centro da 1ª linha */
+.estudo-texto .niv-1, .estudo-texto-edit .niv-1 { padding-left: 1.5em; }
+.estudo-texto .niv-2, .estudo-texto-edit .niv-2 { padding-left: 3.0em; }
+.estudo-texto .niv-3, .estudo-texto-edit .niv-3 { padding-left: 4.5em; }
+.estudo-texto .niv-4, .estudo-texto-edit .niv-4 { padding-left: 6.0em; }
+.estudo-texto .niv-5, .estudo-texto-edit .niv-5 { padding-left: 7.5em; }
+/* vertical PRÓPRIA e trilhas ancestrais são desenhadas por background (mesma
+   espessura, sem rebarba) — ver _recalcularTrilhas. Aqui fica só o TIQUE. */
 .estudo-texto [class*="niv-"]::after, .estudo-texto-edit [class*="niv-"]::after {
-  content: ''; position: absolute;
-  left: -0.95em; top: .72em; width: .72em; height: 0;
-  border-top: 1.6px solid color-mix(in srgb, var(--rubrica, #8c2f39) 55%, transparent);
+  content: ''; position: absolute; top: .72em; width: .72em; height: 0;
+  border-top: 1.6px solid rgba(140,47,57,.55);
 }
+.estudo-texto .niv-1::after, .estudo-texto-edit .niv-1::after { left: .55em; }
+.estudo-texto .niv-2::after, .estudo-texto-edit .niv-2::after { left: 2.05em; }
+.estudo-texto .niv-3::after, .estudo-texto-edit .niv-3::after { left: 3.55em; }
+.estudo-texto .niv-4::after, .estudo-texto-edit .niv-4::after { left: 5.05em; }
+.estudo-texto .niv-5::after, .estudo-texto-edit .niv-5::after { left: 6.55em; }
