@@ -2377,6 +2377,17 @@ const App = {
       .pdf-colunas .estudo-texto li { margin: .1em 0; }
       .pdf-colunas .estudo-texto ul ul { list-style: circle; }
       .pdf-colunas .estudo-texto blockquote { margin: .1em 0 .1em 1.5em; border: 0; padding: 0; }
+      /* HIERARQUIA em L por linha (níveis 1..5 com conector) */
+      .pdf-colunas .estudo-texto [class*="niv-"] { position: relative; }
+      .pdf-colunas .estudo-texto .niv-1 { margin-left: 1.5em; }
+      .pdf-colunas .estudo-texto .niv-2 { margin-left: 3.0em; }
+      .pdf-colunas .estudo-texto .niv-3 { margin-left: 4.5em; }
+      .pdf-colunas .estudo-texto .niv-4 { margin-left: 6.0em; }
+      .pdf-colunas .estudo-texto .niv-5 { margin-left: 7.5em; }
+      .pdf-colunas .estudo-texto [class*="niv-"]::before { content:''; position:absolute;
+        left:-0.95em; top:0; bottom:0; border-left:1.4px solid #a1301f; }
+      .pdf-colunas .estudo-texto [class*="niv-"]::after { content:''; position:absolute;
+        left:-0.95em; top:.72em; width:.72em; border-top:1.4px solid #a1301f; }
 
       /* VERSÍCULOS: pedaço de papiro — creme claro, fita de acento, sutil e moderno.
          PODE quebrar entre colunas/páginas (borda clonada em cada parte), para as
@@ -2468,6 +2479,70 @@ const App = {
    * formatação das notas (negrito, itálico, sublinhado e a roda de cores). Uma
    * barra de formato única age sobre o bloco de texto que estiver em foco.
    * Tudo é guardado como e.blocos (a sequência ordenada). */
+  /* Sanitiza HTML colado da web: joga fora fundo, cor, tamanho, imagens, botões
+   * e qualquer elemento — sobra só TEXTO, preservando apenas negrito/itálico/
+   * sublinhado. Emojis passam (são texto). Blocos viram quebras de linha. */
+  _limparColagem(html) {
+    const tmp = document.createElement('div');
+    tmp.innerHTML = html;
+    const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const DESCARTA = ['IMG','SVG','PICTURE','VIDEO','AUDIO','BUTTON','INPUT','STYLE','SCRIPT','IFRAME','NOSCRIPT','FIGURE','CANVAS'];
+    const proc = (no, neg, ita, sub) => {
+      let r = '';
+      no.childNodes.forEach(c => {
+        if (c.nodeType === 3) {
+          const t = esc(c.data);
+          if (!t) return;
+          let x = t;
+          if (neg) x = `<strong>${x}</strong>`;
+          if (ita) x = `<em>${x}</em>`;
+          if (sub) x = `<u>${x}</u>`;
+          r += x;
+        } else if (c.nodeType === 1) {
+          const tag = c.tagName;
+          if (tag === 'BR') { r += '<br>'; return; }
+          if (DESCARTA.includes(tag)) return;
+          const st = (c.getAttribute('style') || '');
+          const nb = neg || tag === 'B' || tag === 'STRONG' || /font-weight:\s*(bold|[6-9]00)/i.test(st);
+          const ni = ita || tag === 'I' || tag === 'EM' || /font-style:\s*italic/i.test(st);
+          const nu = sub || tag === 'U' || /text-decoration:[^;]*underline/i.test(st);
+          r += proc(c, nb, ni, nu);
+          if (/^(P|DIV|LI|TR|H[1-6]|BLOCKQUOTE|SECTION|ARTICLE|UL|OL)$/.test(tag)) r += '<br>';
+        }
+      });
+      return r;
+    };
+    let s = proc(tmp, false, false, false);
+    return s.replace(/(<br>\s*){3,}/g, '<br><br>').replace(/^(<br>)+|(<br>)+$/g, '');
+  },
+
+  /* Devolve o elemento de bloco do parágrafo onde está o cursor (filho direto do
+   * editável). Se a linha estiver "solta" (texto entre <br>), embrulha num <div>
+   * pra poder receber a hierarquia. */
+  _paragrafoAtual(editable) {
+    const sel = window.getSelection();
+    if (!sel || !sel.rangeCount) return null;
+    let no = sel.getRangeAt(0).startContainer;
+    if (no === editable) no = editable.childNodes[Math.min(sel.getRangeAt(0).startOffset, editable.childNodes.length - 1)] || editable;
+    // já existe um bloco (div/p/li) filho direto do editável?
+    let el = no.nodeType === 1 ? no : no.parentNode;
+    while (el && el !== editable) {
+      if (el.parentNode === editable && /^(DIV|P|LI|H[1-6]|BLOCKQUOTE)$/.test(el.tagName)) return el;
+      el = el.parentNode;
+    }
+    // linha solta no raiz → embrulha os nós da linha (entre <br>) num <div>
+    let base = no;
+    while (base && base.parentNode !== editable) base = base.parentNode;
+    if (!base) return null;
+    let ini = base; while (ini.previousSibling && ini.previousSibling.nodeName !== 'BR') ini = ini.previousSibling;
+    let fim = base; while (fim.nextSibling && fim.nextSibling.nodeName !== 'BR') fim = fim.nextSibling;
+    const nós = []; let n = ini; while (n) { nós.push(n); if (n === fim) break; n = n.nextSibling; }
+    const div = document.createElement('div');
+    editable.insertBefore(div, ini);
+    nós.forEach(x => div.appendChild(x));
+    return div;
+  },
+
   /* Classes e estilo de um bloco de TEXTO do estudo (marcador, nível/hierarquia,
    * alinhamento e preenchimento). Usado igual na edição e na visão. */
   _blocoTextoAttrs(b) {
@@ -2612,19 +2687,14 @@ const App = {
     corpo.classList.add('editando');
     corpo.innerHTML = `
       <div class="estudo-edit-barra" id="estudo-edit-barra">
-        <button class="fmt" data-cmd="bold" title="Negrito"><svg class="icone"><use href="#i-negrito"/></svg></button>
-        <button class="fmt" data-cmd="italic" title="Itálico"><svg class="icone"><use href="#i-italico"/></svg></button>
-        <button class="fmt" data-cmd="underline" title="Sublinhado"><svg class="icone"><use href="#i-sublinhado"/></svg></button>
+        <button class="fmt fmt-fontemenu" id="est-fonte-menu" title="Fonte: tipo, tamanho e estilo"><span style="font-weight:600">A</span><span style="font-size:.62em;vertical-align:.15em">▾</span></button>
         <button class="fmt fmt-cor" id="est-cor-letra" title="Cor da letra">
           <span class="rotulo-cor">A</span><span class="risco-cor" id="est-amostra-cor"></span></button>
         <button class="fmt fmt-fundo" id="est-cor-fundo" title="Cor de fundo">
           <span class="bloco-fundo" id="est-amostra-fundo">A</span></button>
         <span class="fmt-sep" aria-hidden="true"></span>
-        <button class="fmt fmt-tam" id="est-tam-btn" title="Tamanho da fonte">A<span style="font-size:.62em;vertical-align:.15em">▾</span></button>
-        <span class="fmt-sep" aria-hidden="true"></span>
         <button class="fmt" id="est-marcador" title="Marcadores (na linha)"><svg class="icone"><use href="#i-lista"/></svg></button>
-        <button class="fmt" id="est-recuar-fora" title="Menos recuo (na linha)"><svg class="icone"><use href="#i-antes"/></svg></button>
-        <button class="fmt" id="est-recuar" title="Mais recuo (na linha)"><svg class="icone"><use href="#i-avancar"/></svg></button>
+        <button class="fmt" id="est-hierarquia" title="Hierarquia em L (na linha)"><svg class="icone"><use href="#i-arvore"/></svg></button>
         <button class="fmt" id="est-alinhar" title="Alinhamento">
           <svg class="icone" viewBox="0 0 24 24"><g stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="15" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></g></svg>
         </button>
@@ -2635,7 +2705,15 @@ const App = {
         <button class="fmt" data-cmd="removeFormat" title="Limpar formatação"><svg class="icone"><use href="#i-limpar-formato"/></svg></button>
       </div>
       <div class="caixa-cor fechada" id="caixa-cor-estudo"></div>
-      <div class="tam-popup fechada" id="tam-popup">
+      <div class="fmt-popup fonte-menu fechada" id="fonte-menu">
+        <div class="fm-rot">Estilo</div>
+        <div class="fm-estilo">
+          <button class="fm-est" data-est="bold" title="Negrito"><svg class="icone"><use href="#i-negrito"/></svg></button>
+          <button class="fm-est" data-est="italic" title="Itálico"><svg class="icone"><use href="#i-italico"/></svg></button>
+          <button class="fm-est" data-est="underline" title="Sublinhado"><svg class="icone"><use href="#i-sublinhado"/></svg></button>
+          <button class="fm-est" data-est="strike" title="Tachado"><svg class="icone"><use href="#i-tachado"/></svg></button>
+        </div>
+        <div class="fm-rot">Tamanho</div>
         <div class="tam-linha">
           <button class="tam-preset" data-tam="corpo">Corpo</button>
           <button class="tam-preset" data-tam="subtitulo">Subtítulo</button>
@@ -2648,6 +2726,19 @@ const App = {
           <button data-px="22">22</button>
           <button data-px="26">26</button>
           <button data-px="32">32</button>
+        </div>
+        <div class="fm-rot">Fonte</div>
+        <div class="fm-fontes">
+          <button class="fonte-item" data-fonte="var(--fonte-texto)" style="font-family:var(--fonte-texto)">EB Garamond (Bíblia)</button>
+          <button class="fonte-item" data-fonte="system-ui, sans-serif" style="font-family:system-ui,sans-serif">Padrão do sistema</button>
+          <button class="fonte-item" data-fonte="Georgia, serif" style="font-family:Georgia,serif">Georgia</button>
+          <button class="fonte-item" data-fonte="'Times New Roman', Times, serif" style="font-family:'Times New Roman',serif">Times New Roman</button>
+          <button class="fonte-item" data-fonte="'Palatino Linotype', Palatino, serif" style="font-family:'Palatino Linotype',serif">Palatino</button>
+          <button class="fonte-item" data-fonte="Garamond, serif" style="font-family:Garamond,serif">Garamond</button>
+          <button class="fonte-item" data-fonte="Arial, Helvetica, sans-serif" style="font-family:Arial,sans-serif">Arial</button>
+          <button class="fonte-item" data-fonte="Verdana, sans-serif" style="font-family:Verdana,sans-serif">Verdana</button>
+          <button class="fonte-item" data-fonte="'Trebuchet MS', sans-serif" style="font-family:'Trebuchet MS',sans-serif">Trebuchet</button>
+          <button class="fonte-item" data-fonte="'Courier New', monospace" style="font-family:'Courier New',monospace">Courier</button>
         </div>
       </div>
       <div class="estudo-edit-blocos" id="estudo-edit-blocos"></div>
@@ -2811,6 +2902,17 @@ const App = {
       area.querySelectorAll('[data-edit]').forEach(div => {
         const i = +div.dataset.edit;
         div.addEventListener('input', () => { snapshotDigitacao(); blocos[i].html = div.innerHTML; });
+        div.addEventListener('paste', e => {
+          e.preventDefault();
+          const cd = e.clipboardData || window.clipboardData;
+          const html = cd.getData('text/html');
+          const limpo = html
+            ? this._limparColagem(html)
+            : (cd.getData('text/plain') || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
+          snapshot();
+          try { document.execCommand('insertHTML', false, limpo); } catch (err) {}
+          blocos[i].html = div.innerHTML;
+        });
         div.addEventListener('focus', () => { ativo = div; });
         div.addEventListener('keyup', salvarRange);
         div.addEventListener('mouseup', salvarRange);
@@ -2820,49 +2922,75 @@ const App = {
 
     await montar();
 
-    // ---- negrito / itálico / sublinhado / limpar (via DOM, sem execCommand) ----
-    const TAG = { bold: 'strong', italic: 'em', underline: 'u' };
+    // ---- "Limpar formatação" (o único data-cmd que restou na barra) ----
+    const TAG = { bold: 'strong', italic: 'em', underline: 'u', strike: 's' };
     barra.querySelectorAll('[data-cmd]').forEach(b => {
       aoAtivar(b, () => {
         const r = pegarRange(); if (!r) return;
         snapshot();
-        const novo = b.dataset.cmd === 'removeFormat'
-          ? this._ricoLimpar(r)
-          : this._ricoAlternarTag(r, TAG[b.dataset.cmd], ativo);
-        aplicarResultado(novo);
+        aplicarResultado(this._ricoLimpar(r));
       });
     });
 
-    // ---- TAMANHO por número: popup com padrões (Corpo/Subtítulo) + 7 medidas ----
-    // Aplica font-size em px, LIMPANDO o tamanho que veio (inclusive de texto
-    // colado da web), então a medida fica exata e controlável.
-    const tamPopup = document.getElementById('tam-popup');
+    // ---- MENU DE FONTE consolidado: estilo + tamanho + tipo, num só flutuante ----
+    const fonteMenu = document.getElementById('fonte-menu');
+    const flutuar = (popup, btn) => {
+      const abrir = popup.classList.contains('fechada');
+      popup.classList.toggle('fechada');
+      if (abrir) {
+        const r = btn.getBoundingClientRect();
+        popup.style.left = Math.max(8, Math.min(r.left, window.innerWidth - popup.offsetWidth - 8)) + 'px';
+        popup.style.top = (r.bottom + 6) + 'px';
+      }
+    };
+    const btnFonteMenu = document.getElementById('est-fonte-menu');
+    btnFonteMenu.addEventListener('pointerdown', () => pegarRange());
+    btnFonteMenu.onclick = () => flutuar(fonteMenu, btnFonteMenu);
+    // fecha ao tocar fora
+    if (!this._fecharFonteLigado) {
+      this._fecharFonteLigado = true;
+      document.addEventListener('pointerdown', e => {
+        const m = document.getElementById('fonte-menu');
+        if (!m || m.classList.contains('fechada')) return;
+        const alvo = e.target;
+        const dentro = alvo && alvo.closest && (alvo.closest('#fonte-menu') || alvo.closest('#est-fonte-menu'));
+        if (!dentro) m.classList.add('fechada');
+      });
+    }
+
+    // estilo: negrito / itálico / sublinhado / tachado (o menu fica aberto)
+    fonteMenu.querySelectorAll('[data-est]').forEach(b => {
+      aoAtivar(b, () => {
+        const r = pegarRange(); if (!r) return;
+        snapshot();
+        aplicarResultado(this._ricoAlternarTag(r, TAG[b.dataset.est], ativo));
+      });
+    });
+    // tamanho por número + padrões
     const aplicarTamanho = (estilo) => {
       const r = pegarRange(); if (!r) return;
       snapshot();
       aplicarResultado(this._ricoEnvolver(r, {
-        estilo,
-        limparEstilo: 'fontSize',
+        estilo, limparEstilo: 'fontSize',
         limparClasses: ['est-tam-g', 'est-tam-m', 'est-tam-p'],
       }));
     };
-    const btnTam = document.getElementById('est-tam-btn');
-    // memoriza o trecho no pointerdown; abre o popup no clique (fim do toque)
-    btnTam.addEventListener('pointerdown', () => pegarRange());
-    btnTam.onclick = () => {
-      tamPopup.classList.toggle('fechada');
-    };
-    tamPopup.querySelectorAll('[data-px]').forEach(el => {
-      el.addEventListener('pointerdown', e => e.preventDefault());   // não rouba o foco
-      el.onclick = () => { aplicarTamanho({ fontSize: el.dataset.px + 'px' }); tamPopup.classList.add('fechada'); };
+    fonteMenu.querySelectorAll('[data-px]').forEach(el => {
+      el.addEventListener('pointerdown', e => e.preventDefault());
+      el.onclick = () => aplicarTamanho({ fontSize: el.dataset.px + 'px' });
     });
-    tamPopup.querySelectorAll('[data-tam]').forEach(el => {
+    fonteMenu.querySelectorAll('[data-tam]').forEach(el => {
+      el.addEventListener('pointerdown', e => e.preventDefault());
+      el.onclick = () => aplicarTamanho(el.dataset.tam === 'subtitulo'
+        ? { fontSize: '20px', fontWeight: '600' }
+        : { fontSize: '15px', fontWeight: '400' });
+    });
+    // tipo de fonte
+    fonteMenu.querySelectorAll('[data-fonte]').forEach(el => {
       el.addEventListener('pointerdown', e => e.preventDefault());
       el.onclick = () => {
-        aplicarTamanho(el.dataset.tam === 'subtitulo'
-          ? { fontSize: '20px', fontWeight: '600' }     // padrão subtítulo
-          : { fontSize: '15px', fontWeight: '400' });   // padrão corpo
-        tamPopup.classList.add('fechada');
+        const r = pegarRange();
+        if (r) { snapshot(); aplicarResultado(this._ricoEnvolver(r, { estilo: { fontFamily: el.dataset.fonte }, limparEstilo: 'fontFamily' })); }
       };
     });
 
@@ -2875,23 +3003,31 @@ const App = {
       ativo.style.background = b.fundo || '';
     };
 
-    // ---- marcador e hierarquia por LINHA/PARÁGRAFO (dentro da caixa) ----
-    // Age no parágrafo onde está o cursor: tocar aplica, tocar de novo remove.
+    // ---- marcador (bolinha por linha) e HIERARQUIA em L (por linha) ----
     const btnMarc = document.getElementById('est-marcador');
-    const btnRec = document.getElementById('est-recuar');
-    const btnRecF = document.getElementById('est-recuar-fora');
+    const btnHier = document.getElementById('est-hierarquia');
     const btnAlin = document.getElementById('est-alinhar');
     const btnPreen = document.getElementById('est-preencher');
-    const cmdLinha = comando => {
+    // marcador: lista de verdade — tocar aplica, tocar de novo remove
+    aoAtivar(btnMarc, () => {
       if (!ativo || ativo.dataset.edit == null) return;
       snapshot();
-      try { document.execCommand('styleWithCSS', false, true); } catch (e) {}
-      try { document.execCommand(comando, false, null); } catch (e) {}
-      sincronizar();   // grava o novo HTML do bloco na cópia de trabalho
-    };
-    aoAtivar(btnMarc, () => cmdLinha('insertUnorderedList'));
-    aoAtivar(btnRec, () => cmdLinha('indent'));
-    aoAtivar(btnRecF, () => cmdLinha('outdent'));
+      try { document.execCommand('insertUnorderedList', false, null); } catch (e) {}
+      sincronizar();
+    });
+    // hierarquia: cicla o nível do PARÁGRAFO do cursor — 1→2→3→4→5→some(0)
+    aoAtivar(btnHier, () => {
+      if (!ativo || ativo.dataset.edit == null) return;
+      const par = this._paragrafoAtual(ativo);
+      if (!par) return;
+      snapshot();
+      let n = 0;
+      for (let k = 1; k <= 5; k++) if (par.classList.contains('niv-' + k)) { n = k; break; }
+      par.classList.remove('niv-1', 'niv-2', 'niv-3', 'niv-4', 'niv-5');
+      const prox = (n + 1) % 6;                 // 0→1→2→3→4→5→0
+      if (prox) par.classList.add('niv-' + prox);
+      sincronizar();
+    });
     const ALINHAS = ['', 'c', 'd', 'j'];   // esquerda → centro → direita → justificado
     aoAtivar(btnAlin, () => {
       const b = blocoAtivo(); if (!b) return;

@@ -5476,15 +5476,39 @@ html[data-il-abrev="sim"] .il-m-c .il-txt {
   color: inherit;
 }
 
-/* ---- popup do seletor de tamanho ---- */
-.tam-popup {
-  margin: 4px 0 8px;
+/* ---- menus flutuantes de fonte e tamanho (por cima, não empurram o layout) ---- */
+.fmt-popup {
+  position: fixed; z-index: 60;
   padding: 8px;
   border-radius: 12px;
-  background: color-mix(in srgb, var(--tinta) 5%, transparent);
-  border: 1px solid color-mix(in srgb, var(--tinta) 14%, transparent);
+  max-width: min(92vw, 340px);
+  background: var(--cartao, var(--papel));
+  background-image: var(--perg-img, none);
+  border: 1px solid color-mix(in srgb, var(--tinta) 16%, transparent);
+  box-shadow: 0 12px 30px rgb(0 0 0 / .28);
 }
-.tam-popup.fechada { display: none; }
+.fmt-popup.fechada { display: none; }
+/* menu de fonte consolidado: estilo + tamanho + tipo */
+.fonte-menu { width: min(92vw, 300px); }
+.fm-rot { font-size: .72rem; letter-spacing: .04em; text-transform: uppercase;
+  opacity: .55; margin: 8px 2px 5px; }
+.fm-rot:first-child { margin-top: 2px; }
+.fm-estilo { display: flex; gap: 6px; }
+.fm-est {
+  flex: 1 1 auto; height: 38px; display: grid; place-items: center;
+  border-radius: 9px; cursor: pointer; color: inherit;
+  border: 1px solid color-mix(in srgb, var(--tinta) 16%, transparent);
+  background: transparent;
+}
+.fm-est .icone { width: 20px; height: 20px; }
+.fm-est:active { transform: scale(.94); }
+.fm-fontes { display: flex; flex-direction: column; gap: 2px; max-height: 34vh; overflow-y: auto; }
+#fonte-popup { display: flex; flex-direction: column; gap: 3px; max-height: 60vh; overflow-y: auto; }
+.fonte-item {
+  text-align: left; padding: 8px 11px; border-radius: 8px;
+  border: 0; background: transparent; color: inherit; font-size: 15px; cursor: pointer;
+}
+.fonte-item:hover { background: color-mix(in srgb, var(--tinta) 8%, transparent); }
 .tam-linha { display: flex; gap: 6px; margin-bottom: 6px; }
 .tam-preset {
   flex: 1 1 auto; padding: 8px 10px; border-radius: 8px;
@@ -5505,3 +5529,28 @@ html[data-il-abrev="sim"] .il-m-c .il-txt {
 .estudo-texto li, .estudo-texto-edit li { margin: .1em 0; }
 .estudo-texto ul ul, .estudo-texto-edit ul ul { list-style: circle; }
 .estudo-texto blockquote, .estudo-texto-edit blockquote { margin: .1em 0 .1em 1.6em; border: 0; padding: 0; }
+
+/* ---- HIERARQUIA EM L por linha (níveis 1..5, com conector) ----
+ * Cada linha com nível recua e desenha, na coluna do "pai", uma linha vertical
+ * (altura toda → liga itens consecutivos) e um tique horizontal até o texto.
+ * Como a vertical vive DENTRO da caixa da linha, ela nunca cruza um texto sem
+ * nível: se houver um texto no meio, a corrente quebra e o próximo item parece
+ * "sair" desse texto. */
+.estudo-texto [class*="niv-"], .estudo-texto-edit [class*="niv-"] { position: relative; }
+.estudo-texto .niv-1, .estudo-texto-edit .niv-1 { margin-left: 1.5em; }
+.estudo-texto .niv-2, .estudo-texto-edit .niv-2 { margin-left: 3.0em; }
+.estudo-texto .niv-3, .estudo-texto-edit .niv-3 { margin-left: 4.5em; }
+.estudo-texto .niv-4, .estudo-texto-edit .niv-4 { margin-left: 6.0em; }
+.estudo-texto .niv-5, .estudo-texto-edit .niv-5 { margin-left: 7.5em; }
+/* vertical na coluna do pai (um passo à esquerda), altura toda da linha */
+.estudo-texto [class*="niv-"]::before, .estudo-texto-edit [class*="niv-"]::before {
+  content: ''; position: absolute;
+  left: -0.95em; top: 0; bottom: 0; width: 0;
+  border-left: 1.6px solid color-mix(in srgb, var(--rubrica, #8c2f39) 55%, transparent);
+}
+/* tique horizontal ligando a vertical ao texto, no centro da 1ª linha */
+.estudo-texto [class*="niv-"]::after, .estudo-texto-edit [class*="niv-"]::after {
+  content: ''; position: absolute;
+  left: -0.95em; top: .72em; width: .72em; height: 0;
+  border-top: 1.6px solid color-mix(in srgb, var(--rubrica, #8c2f39) 55%, transparent);
+}
