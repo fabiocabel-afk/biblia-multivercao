@@ -327,7 +327,9 @@ const Dados = {
   async secoes(versaoCode, bookCode, capitulo) {
     const d = await this.carregarSecoes(versaoCode);
     if (!d) return [];
-    const livro = d[bookCode];
+    // tolera diferença de caixa no código do livro (gn/GN/Gn) para casar com o
+    // que o app usa em estrutura.json, mesmo que a extração tenha gerado outra.
+    const livro = d[bookCode] || d[String(bookCode).toLowerCase()] || d[String(bookCode).toUpperCase()];
     if (!livro) return [];
     const lista = livro[String(capitulo)];
     if (!lista || !lista.length) return [];
@@ -339,18 +341,21 @@ const Dados = {
   /* Versões que possuem arquivo de subtítulos, na ordem em que aparecem no menu
    * de favorito. Conforme novas extrações entram em data/secoes/, acrescente
    * o código aqui. */
-  SUBTITULOS_DISPONIVEIS: ['ACF', 'ARA', 'NVI'],
+  SUBTITULOS_DISPONIVEIS: ['ACF', 'ARA', 'ARC', 'NAA', 'NVI', 'NVT', 'NTLH', 'KJA', 'VFL', 'OL', 'TB'],
   /* Paráfrases cujos versículos não casam com os das demais — nunca recebem
    * subtítulo de outra versão. A Mensagem entra aqui; o código exato pode
    * ser ajustado quando entrar no app. */
   SUBTITULOS_SEM: ['MSG', 'TM', 'BM'],
 
-  /** Lista para o menu de favorito: [{code, rotulo}] das versões com subtítulo. */
+  /** Lista para o menu de favorito: [{code, rotulo}] das versões com subtítulo.
+   *  O rótulo mostra a SIGLA - Nome completo (ex.: "ACF - Almeida Corrigida
+   *  Fiel"), como já é feito com os livros. */
   subtitulosDisponiveis() {
-    return this.SUBTITULOS_DISPONIVEIS.map(code => ({
-      code,
-      rotulo: (this.versao(code) && this.versao(code).name) || code,
-    }));
+    return this.SUBTITULOS_DISPONIVEIS.map(code => {
+      const v = this.versao(code);
+      const nome = (v && v.name) || '';
+      return { code, rotulo: nome ? `${code} - ${nome}` : code };
+    });
   },
 
   /* Seções de uma FONTE aplicadas à versão ATIVA. As nativas já vêm na
@@ -414,7 +419,7 @@ const Dados = {
   async secoesDoLivro(versaoCode, bookCode) {
     const d = await this.carregarSecoes(versaoCode);
     if (!d) return [];
-    const livro = d[bookCode];
+    const livro = d[bookCode] || d[String(bookCode).toLowerCase()] || d[String(bookCode).toUpperCase()];
     if (!livro) return [];
     const saida = [];
     const capsOrdenados = Object.keys(livro)

@@ -3643,9 +3643,15 @@ const App = {
 
         <div id="bloco-subtitulo-favorito" style="margin-top:12px;${p.subtituloModo === 'nativo' ? 'display:none' : ''}">
           <div class="rotulo-controle"><span>Subtítulo favorito</span></div>
-          <select id="ctrl-subtitulo-favorito">
-            ${Dados.subtitulosDisponiveis().map(v => `<option value="${v.code}" ${p.subtituloFavorito === v.code ? 'selected' : ''}>${v.rotulo}</option>`).join('')}
-          </select>
+          <div class="sel-custom" id="sub-fav-box">
+            <button type="button" class="campo sel-custom-botao" id="sub-fav-botao" aria-haspopup="listbox" aria-expanded="false">
+              <span id="sub-fav-rotulo">${(Dados.subtitulosDisponiveis().find(v => v.code === (p.subtituloFavorito || 'ACF')) || { rotulo: (p.subtituloFavorito || 'ACF') }).rotulo}</span>
+              <svg class="icone sel-custom-seta" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+            </button>
+            <div class="sel-custom-lista fechada" id="sub-fav-lista" role="listbox">
+              ${Dados.subtitulosDisponiveis().map(v => `<button type="button" role="option" class="sel-custom-item${(p.subtituloFavorito || 'ACF') === v.code ? ' sel' : ''}" data-val="${v.code}">${v.rotulo}</button>`).join('')}
+            </div>
+          </div>
         </div>
 
         <div class="rotulo-controle" style="margin-top:14px"><span>Letra do subtítulo</span></div>
@@ -3972,12 +3978,37 @@ const App = {
       };
     });
 
-    const favorito = achar('ctrl-subtitulo-favorito');
-    if (favorito) favorito.onchange = e => {
-      Prefs.set('subtituloFavorito', e.target.value);
-      this._vizCache = {};
-      this.ir(this.code, this.cap, null);
-    };
+    const favBox = achar('sub-fav-box');
+    if (favBox) {
+      const botao = achar('sub-fav-botao');
+      const lista = achar('sub-fav-lista');
+      const rotulo = achar('sub-fav-rotulo');
+      botao.onclick = () => {
+        const abrir = lista.classList.contains('fechada');
+        lista.classList.toggle('fechada');
+        botao.setAttribute('aria-expanded', String(abrir));
+      };
+      lista.querySelectorAll('.sel-custom-item').forEach(it => {
+        it.onclick = () => {
+          Prefs.set('subtituloFavorito', it.dataset.val);
+          rotulo.textContent = it.textContent;
+          lista.querySelectorAll('.sel-custom-item').forEach(x => x.classList.toggle('sel', x === it));
+          lista.classList.add('fechada');
+          botao.setAttribute('aria-expanded', 'false');
+          this._vizCache = {};
+          this.ir(this.code, this.cap, null);
+        };
+      });
+      if (!this._fecharSubFavLigado) {
+        this._fecharSubFavLigado = true;
+        document.addEventListener('pointerdown', e => {
+          const l = document.getElementById('sub-fav-lista');
+          if (!l || l.classList.contains('fechada')) return;
+          const alvo = e.target;
+          if (alvo && alvo.closest && !alvo.closest('#sub-fav-box')) l.classList.add('fechada');
+        });
+      }
+    }
 
     // estilo e alinhamento do subtítulo: só trocam um atributo no raiz, então
     // o CSS reflete na hora, sem redesenhar o texto
