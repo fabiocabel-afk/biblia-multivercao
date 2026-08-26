@@ -1900,6 +1900,9 @@ const App = {
         <button class="botao secundario" id="pdf-varios">
           <svg class="icone"><use href="#i-compartilhar"/></svg> Exportar PDF
         </button>
+        <button class="botao secundario" id="json-varios">
+          <svg class="icone"><use href="#i-backup"/></svg> Exportar JSON
+        </button>
       </div>` + estudos.map(e => {
       const trechos = Estudos.trechosDe(e);
       const listaTrechos = trechos.map((t, i) => `<div class="trecho-estudo">
@@ -1918,20 +1921,22 @@ const App = {
             <strong>${Leitura.escapar(Estudos.nomeDe(e))}</strong>
             <svg class="icone estudo-titulo-seta"><use href="#i-depois"/></svg>
           </button>
-          <span class="quando">${this._creditoRodape(e, Estudos.quandoDe(e))}</span>
+          <span class="quando">${this._rodapeEstudo(e)}</span>
         </div>
         <div class="trechos-lista">${listaTrechos}</div>
-        <div class="acoes-sessao">
-          <button class="pilula" data-ler="${e.id}">Ler</button>
-          <button class="pilula" data-editar="${e.id}">Editar</button>
+        <div class="acoes-sessao acoes-estudo">
+          <button class="pilula acao-estudo" data-ler="${e.id}">Ler</button>
+          <button class="pilula acao-estudo" data-tocar-est="${e.id}">Tocar</button>
+          <button class="pilula acao-estudo" data-editar="${e.id}">Editar</button>
           <div class="mais-opcoes">
-            <button class="pilula mais-btn" data-mais="${e.id}" aria-haspopup="true"
-              aria-expanded="false" aria-label="Mais opções">⋯ Mais</button>
+            <button class="pilula acao-estudo mais-btn" data-mais="${e.id}" aria-haspopup="true"
+              aria-expanded="false" aria-label="Mais opções">Mais</button>
             <div class="mais-lista" id="mais-${e.id}" hidden>
               <button class="mais-item" data-renomear="${e.id}">Renomear</button>
               <button class="mais-item" data-partilhar="${e.id}">Compartilhar</button>
               <button class="mais-item" data-copiar="${e.id}">Copiar</button>
               <button class="mais-item" data-pdf="${e.id}">Exportar PDF</button>
+              <button class="mais-item" data-json="${e.id}">Exportar JSON</button>
               <button class="mais-item perigo" data-remover="${e.id}">Excluir</button>
             </div>
           </div>
@@ -1949,6 +1954,9 @@ const App = {
     });
     corpo.querySelectorAll('[data-editar]').forEach(el => {
       el.onclick = () => this.editarEstudo(el.dataset.editar);
+    });
+    corpo.querySelectorAll('[data-tocar-est]').forEach(el => {
+      el.onclick = () => this.tocarEstudoPorId(el.dataset.tocarEst);
     });
 
     // Clicar no nome do autor (rodapé de crédito) abre o popup do perfil
@@ -2000,8 +2008,14 @@ const App = {
     });
 
     corpo.querySelectorAll('[data-est-rem]').forEach(el => {
-      el.onclick = e => {
+      el.onclick = async e => {
         e.stopPropagation();
+        const ok = await this.confirmar({
+          titulo: 'Remover trecho',
+          mensagem: 'Remover este trecho do estudo? Não dá para desfazer.',
+          confirmar: 'Remover', cancelar: 'Manter',
+        });
+        if (!ok) return;
         Estudos.removerTrecho(el.dataset.estRem, +el.dataset.trRem);
         this.desenharEstudos();
       };
@@ -2058,8 +2072,136 @@ const App = {
     corpo.querySelectorAll('[data-pdf]').forEach(el => {
       el.onclick = () => this.exportarPdf([el.dataset.pdf]);
     });
+    corpo.querySelectorAll('[data-json]').forEach(el => {
+      el.onclick = () => this.exportarEstudosJson([el.dataset.json]);
+    });
     const btVarios = document.getElementById('pdf-varios');
     if (btVarios) btVarios.onclick = () => this.montarPdfEstudos();
+    const btJson = document.getElementById('json-varios');
+    if (btJson) btJson.onclick = () => this.montarJsonEstudos();
+  },
+
+  /* Escolhe a permissão de uso e devolve o modo escolhido (ou null se cancelar).
+   * Overlay próprio, criado na hora — não depende de HTML fixo no index. */
+  _escolherPermissao({ titulo = 'Como quem receber poderá usar?' } = {}) {
+    return new Promise(resolve => {
+      const veu = document.createElement('div');
+      veu.className = 'dialogo-veu aberto perm-veu';
+      veu.setAttribute('role', 'dialog');
+      veu.setAttribute('aria-modal', 'true');
+      veu.innerHTML = `
+        <div class="dialogo perm-caixa">
+          <strong>${titulo}</strong>
+          <div class="perm-opcoes">
+            ${Importacao.MODOS.map((m, i) => `
+              <label class="backup-modo">
+                <input type="radio" name="perm-json" value="${m.id}" ${i === 0 ? 'checked' : ''}>
+                <span class="backup-modo-marca"></span>
+                <span class="backup-modo-texto">
+                  <strong>${m.icon} ${m.nome}</strong>
+                  <span>${m.descricao}</span>
+                </span>
+              </label>`).join('')}
+          </div>
+          <div class="dialogo-acoes">
+            <button class="botao secundario" id="perm-cancelar" type="button">Cancelar</button>
+            <button class="botao" id="perm-ok" type="button">Exportar</button>
+          </div>
+        </div>`;
+      document.body.appendChild(veu);
+
+      const fechar = valor => {
+        veu.remove();
+        document.removeEventListener('keydown', aoTeclar, true);
+        resolve(valor);
+      };
+      const aoTeclar = e => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); fechar(null); } };
+      veu.querySelector('#perm-ok').onclick = () => {
+        const el = veu.querySelector('input[name="perm-json"]:checked');
+        fechar(el ? el.value : 'somente-leitura');
+      };
+      veu.querySelector('#perm-cancelar').onclick = () => fechar(null);
+      veu.onclick = e => { if (e.target === veu) fechar(null); };
+      document.addEventListener('keydown', aoTeclar, true);
+    });
+  },
+
+  /* Exporta um conjunto de estudos (por id) como JSON, perguntando a permissão. */
+  async exportarEstudosJson(ids, nomeArquivo = null) {
+    if (!Array.isArray(ids) || !ids.length) return;
+    const modo = await this._escolherPermissao();
+    if (modo === null) return; // cancelou
+
+    const bundle = Exportacao.exportarEstudos(ids, modo,
+      ids.length > 1 ? 'Estudos' : (Estudos.nomeDe(Estudos.achar(ids[0])) || 'Estudo'));
+
+    let nome = nomeArquivo;
+    if (!nome) {
+      const data = new Date().toISOString().slice(0, 10);
+      if (ids.length === 1) {
+        const bruto = (Estudos.nomeDe(Estudos.achar(ids[0])) || 'estudo');
+        const limpo = bruto.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+          .replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-+|-+$/g, '').toLowerCase() || 'estudo';
+        nome = `estudo-${limpo}-${data}.json`;
+      } else {
+        nome = `estudos-${data}.json`;
+      }
+    }
+    Exportacao.salvarArquivo(bundle, nome);
+    this.avisoRapido(ids.length > 1 ? 'Estudos exportados' : 'Estudo exportado');
+  },
+
+  /* Montador "por fora" do JSON: escolher vários estudos e gerar um JSON só.
+   * Espelha a tela do PDF (selecionar + ordenar). */
+  montarJsonEstudos() {
+    const corpo = document.getElementById('corpo-estudos');
+    const todos = Estudos.todos();
+    const achar = id => todos.find(e => e.id === id);
+    const ordem = [];
+
+    const render = () => {
+      const sel = new Set(ordem);
+      const selecionados = ordem.map((id, i) => `
+        <div class="pdf-linha sel">
+          <span class="pdf-ord">${i + 1}</span>
+          <span class="pdf-nome">${Leitura.escapar(Estudos.nomeDe(achar(id)) || 'Estudo')}</span>
+          <span class="pdf-move">
+            <button class="xis" data-sobe="${id}" ${i === 0 ? 'disabled' : ''} aria-label="Subir">
+              <svg class="icone"><use href="#i-tri-cima"/></svg></button>
+            <button class="xis" data-desce="${id}" ${i === ordem.length - 1 ? 'disabled' : ''} aria-label="Descer">
+              <svg class="icone"><use href="#i-tri-baixo"/></svg></button>
+            <button class="xis" data-tira="${id}" aria-label="Tirar">
+              <svg class="icone"><use href="#i-fechar"/></svg></button>
+          </span>
+        </div>`).join('');
+      const disponiveis = todos.filter(e => !sel.has(e.id)).map(e => `
+        <button class="pdf-add" data-add="${e.id}">
+          <svg class="icone"><use href="#i-nota"/></svg>
+          ${Leitura.escapar(Estudos.nomeDe(e) || 'Estudo')}</button>`).join('');
+
+      corpo.innerHTML = `
+        <div class="pdf-montar">
+          <button class="botao secundario" id="json-voltar">
+            <svg class="icone"><use href="#i-antes"/></svg> Voltar</button>
+          <p class="pdf-ajuda">Escolha os estudos que entram no arquivo JSON. Você poderá
+            compartilhar esse arquivo para outra pessoa importar no app dela.</p>
+          <div class="pdf-secao-rot">Selecionados</div>
+          <div class="pdf-selecionados">${selecionados || '<div class="estado peq">Nenhum selecionado ainda.</div>'}</div>
+          <div class="pdf-secao-rot">Disponíveis</div>
+          <div class="pdf-disponiveis">${disponiveis || '<div class="estado peq">— todos já escolhidos —</div>'}</div>
+          <button class="botao pdf-gerar" id="json-gerar" ${ordem.length ? '' : 'disabled'}>
+            Exportar JSON${ordem.length ? ` (${ordem.length})` : ''}</button>
+        </div>`;
+
+      corpo.querySelectorAll('[data-add]').forEach(el => el.onclick = () => { ordem.push(el.dataset.add); render(); });
+      corpo.querySelectorAll('[data-tira]').forEach(el => el.onclick = () => { const i = ordem.indexOf(el.dataset.tira); if (i >= 0) ordem.splice(i, 1); render(); });
+      corpo.querySelectorAll('[data-sobe]').forEach(el => el.onclick = () => { const i = ordem.indexOf(el.dataset.sobe); if (i > 0) { [ordem[i - 1], ordem[i]] = [ordem[i], ordem[i - 1]]; render(); } });
+      corpo.querySelectorAll('[data-desce]').forEach(el => el.onclick = () => { const i = ordem.indexOf(el.dataset.desce); if (i >= 0 && i < ordem.length - 1) { [ordem[i + 1], ordem[i]] = [ordem[i], ordem[i + 1]]; render(); } });
+      document.getElementById('json-voltar').onclick = () => this.desenharEstudos();
+      const g = document.getElementById('json-gerar');
+      if (g) g.onclick = () => { if (ordem.length) this.exportarEstudosJson(ordem.slice()); };
+    };
+    render();
   },
 
   /* Montador "por fora": escolher vários estudos, ordenar e gerar um PDF só. */
@@ -3870,6 +4012,36 @@ const App = {
     </div>`;
   },
 
+  /* Rodapé específico do cartão de estudo. Para estudos PRÓPRIOS mostra só a
+   * data de criação (como sempre). Para estudos IMPORTADOS de outra pessoa,
+   * mostra o autor (clicável) e AS DUAS datas rotuladas: criação e importação. */
+  _rodapeEstudo(e) {
+    const criacao = Estudos.quandoDe(e);
+    if (!e || !e.autor) {
+      return `<span class="credito-data">${criacao}</span>`;
+    }
+    const nome = e.autor.nome || 'Autor';
+    const importacao = e.importadoEm ? this._dataCurta(e.importadoEm) : null;
+    return `<span class="estudo-credito">
+      <span class="estudo-credito-autor">
+        <span class="autor-nome" data-autor-id="${e.id}" role="button" tabindex="0">${Leitura.escapar(nome)}</span>
+      </span>
+      <span class="estudo-datas">
+        <span class="estudo-data-linha"><span class="estudo-data-rot">Criação:</span> ${criacao}</span>
+        ${importacao ? `<span class="estudo-data-linha"><span class="estudo-data-rot">Importação:</span> ${importacao}</span>` : ''}
+      </span>
+    </span>`;
+  },
+
+  /* Formata uma data ISO como "dd/mm/aaaa às hh:mm" (pt-BR). */
+  _dataCurta(iso) {
+    try {
+      const d = new Date(iso);
+      return d.toLocaleDateString('pt-BR') + ' às '
+        + d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    } catch { return ''; }
+  },
+
   /* Rodapé de crédito: nome do autor (clicável) + data, juntos.
    * Para itens PRÓPRIOS (sem autor), devolve só a data que foi passada.
    * Para itens de TERCEIROS, devolve "Nome · data".
@@ -4536,6 +4708,47 @@ const App = {
     }
   },
 
+  /* Lê TODOS os campos do formulário de perfil direto do DOM e devolve um
+   * objeto de perfil completo. Usado tanto pelo botão Salvar quanto antes de
+   * qualquer re-render no meio da edição — assim nada que o usuário digitou
+   * (nome, local, religião, vertentes, bio) se perde quando o formulário é
+   * redesenhado ao adicionar/remover uma rede social. Se um campo não estiver
+   * na tela (raro), cai para o valor já salvo, nunca para vazio. */
+  _coletarPerfilFormulario(corpo) {
+    const salvo = Perfil.todos();
+    const escopo = corpo || document;
+
+    const nomeEl = document.getElementById('perf-nome');
+    const localEl = document.getElementById('perf-local');
+    const religiaoDropdown = document.getElementById('perf-religiao-dropdown');
+    const denominacaoDropdown = document.getElementById('perf-denominacao-dropdown');
+    const propositoEl = document.getElementById('campo-proposito');
+
+    const nome = nomeEl ? ((nomeEl.value || '').trim() || 'Anônimo') : (salvo.nome || 'Anônimo');
+    const local = localEl ? (localEl.value || '').trim() : (salvo.local || '');
+    const religiao = religiaoDropdown ? (religiaoDropdown.dataset.value || '').trim() : (salvo.religiao || '');
+    const denominacao = denominacaoDropdown ? (denominacaoDropdown.dataset.value || '').trim() : (salvo.denominacao || '');
+    const proposito = propositoEl ? (propositoEl.value || '').trim() : (salvo.proposito || '');
+
+    // Vertentes: se a área existir na tela, lê dela; senão mantém as salvas
+    let vertentes;
+    const capsulas = escopo.querySelectorAll('.perfil-vertente-capsula');
+    if (capsulas.length || document.getElementById('vertentes-selecionadas')) {
+      vertentes = [...capsulas].map(c => c.textContent.trim()).filter(Boolean);
+    } else {
+      vertentes = Array.isArray(salvo.vertentes) ? salvo.vertentes : [];
+    }
+
+    // Contatos: parte da lista salva (tipos) e atualiza os valores digitados
+    const contatos = Array.isArray(salvo.contatos) ? salvo.contatos.map(c => ({ ...c })) : [];
+    escopo.querySelectorAll('.perfil-social-edit-item input').forEach(input => {
+      const idx = +input.dataset.idx;
+      if (idx >= 0 && idx < contatos.length) contatos[idx].valor = input.value.trim();
+    });
+
+    return { nome, local, religiao, denominacao, vertentes, proposito, contatos, foto: salvo.foto };
+  },
+
   desenharPerfilEdit(corpo) {
     try {
       const perfil = Perfil.todos();
@@ -4698,7 +4911,11 @@ const App = {
         if (file) {
           try {
             const base64 = await PerfilFoto.procesarArquivo(file);
-            PerfilFoto.salvar(base64);
+            // Preserva o que já foi digitado no formulário e anexa a foto,
+            // em vez de sobrescrever o perfil salvo (que pode estar desatualizado).
+            const atual = this._coletarPerfilFormulario(corpo);
+            atual.foto = base64;
+            Perfil.salvar(atual);
             fotoPreview.innerHTML = `<img src="${base64}" alt="Preview">`;
           } catch (err) {
             this.avisar({ titulo: 'Erro', html: err.message });
@@ -4899,29 +5116,17 @@ const App = {
       item.addEventListener('click', (e) => {
         e.preventDefault();
         const tipo = item.dataset.tipo;
-        
-        // ✅ CRÍTICO: Salvar valores dos inputs ANTES de adicionar novo
-        const inputsAntes = corpo.querySelectorAll('.perfil-social-edit-item input');
-        const contatosAtualizados = [...Perfil.todos().contatos];
-        inputsAntes.forEach(input => {
-          const idx = +input.dataset.idx;
-          if (idx < contatosAtualizados.length) {
-            contatosAtualizados[idx].valor = input.value.trim();
-          }
-        });
-        
-        // Salvar estado atual antes de re-renderizar
-        const perfilAtual = Perfil.todos();
-        Perfil.salvar({
-          ...perfilAtual,
-          contatos: contatosAtualizados
-        });
-        
+
+        // ✅ CRÍTICO: antes de re-renderizar, salvar o formulário INTEIRO
+        // (nome, local, religião, vertentes, bio E contatos) — não só contatos —
+        // senão o re-render abaixo apaga tudo que ainda não foi salvo.
+        Perfil.salvar(this._coletarPerfilFormulario(corpo));
+
         // Agora adiciona novo contato
         Perfil.adicionarContato(tipo, '');
         if (menu) menu.classList.remove('aberto');
-        
-        // Re-renderiza (agora com valores salvos)
+
+        // Re-renderiza (agora com tudo preservado)
         this.desenharPerfilEdit(corpo);
       });
     });
@@ -4931,6 +5136,8 @@ const App = {
       btn.addEventListener('click', (e) => {
         e.preventDefault();
         const idx = +btn.dataset.idx;
+        // Também preserva o formulário inteiro antes de re-renderizar
+        Perfil.salvar(this._coletarPerfilFormulario(corpo));
         Perfil.removerContato(idx);
         this.desenharPerfilEdit(corpo);
       });
@@ -4938,41 +5145,8 @@ const App = {
 
     // EVENTOS - SALVAR
     document.getElementById('btn-salvar-perfil').addEventListener('click', () => {
-      // Capturar DIRETAMENTE dos elementos
-      const nomeEl = document.getElementById('perf-nome');
-      const localEl = document.getElementById('perf-local');
-      const religiaoDropdown = document.getElementById('perf-religiao-dropdown');
-      const denominacaoDropdown = document.getElementById('perf-denominacao-dropdown');
-      
-      // Valores RAW
-      const nome = (nomeEl?.value || '').trim() || 'Anônimo';
-      const local = (localEl?.value || '').trim();
-      const religiao = (religiaoDropdown?.dataset.value || '').trim();
-      const denominacao = (denominacaoDropdown?.dataset.value || '').trim();
-
-      const proposito = (document.getElementById('campo-proposito').value || '').trim();
-
-      const vertentes = [];
-      document.querySelectorAll('.perfil-vertente-capsula').forEach(capsula => {
-        vertentes.push(capsula.textContent.trim());
-      });
-
-      const contatos = [...Perfil.todos().contatos];
-      corpo.querySelectorAll('.perfil-social-edit-item input').forEach(input => {
-        const idx = +input.dataset.idx;
-        if (idx < contatos.length) contatos[idx].valor = input.value.trim();
-      });
-
-      Perfil.salvar({
-        nome,
-        local,
-        religiao,
-        denominacao,
-        vertentes,
-        proposito,
-        contatos,
-        foto: Perfil.todos().foto,
-      });
+      // Usa o mesmo coletor do resto do fluxo — lê tudo do formulário de uma vez.
+      Perfil.salvar(this._coletarPerfilFormulario(corpo));
 
       this._modoPerfil = 'view';
       this.desenharPerfil();

@@ -2477,6 +2477,36 @@ body.selecionando .rodape { transform: translateY(110%); }
 .acoes-sessao { display: flex; gap: 4px; flex-wrap: wrap; padding: 4px 6px 6px; }
 .pilula.perigo { color: var(--rubrica); }
 
+/* Ações do cartão de estudo: Ler, Tocar, Editar, Mais — mesma largura, escuros */
+.acoes-estudo { flex-wrap: nowrap; gap: 6px; align-items: stretch; }
+.acoes-estudo > .acao-estudo,
+.acoes-estudo > .mais-opcoes { flex: 1 1 0; min-width: 0; }
+.acoes-estudo .mais-opcoes { position: relative; }
+.acoes-estudo .acao-estudo,
+.acoes-estudo .mais-opcoes > .mais-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--tinta);
+  color: var(--papel);
+  border-color: var(--tinta);
+  font-weight: 600;
+  padding: 9px 6px;
+}
+.acoes-estudo .acao-estudo:active,
+.acoes-estudo .mais-opcoes > .mais-btn:active { transform: scale(.97); }
+
+/* Datas rotuladas (estudo importado): criação e importação */
+.estudo-credito { display: flex; flex-direction: column; gap: 2px; }
+.estudo-datas { display: flex; flex-direction: column; gap: 1px; }
+.estudo-data-linha { font-size: 11px; color: var(--tinta-fraca); }
+.estudo-data-rot { font-weight: 600; }
+
+/* Picker de permissão (exportar JSON direto dos estudos) */
+.perm-opcoes { display: flex; flex-direction: column; gap: 8px; margin: 4px 0 14px; overflow-y: auto; }
+.perm-caixa strong { margin-bottom: 12px; }
+
 /* mais uma ação na barra de seleção: as ações passam a quebrar em duas linhas */
 .sel-acoes { flex-wrap: wrap; }
 .sel-acoes .botao { flex: 1 1 40%; }

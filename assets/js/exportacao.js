@@ -25,6 +25,23 @@ const Exportacao = {
     };
   },
 
+  /* ================================================== Exportar Estudos (por id)
+   * Recebe uma lista de ids de estudos e monta um bundle só com eles, na ordem
+   * dada. Usado pela exportação JSON direta (geral e individual) dos Estudos. */
+  exportarEstudos(ids = [], modo = 'somente-leitura', nomeGrupo = 'Estudos') {
+    const perfil = Perfil.todos();
+    const criado = new Date().toISOString();
+    const assinatura = Perfil.criarAssinatura(perfil, criado);
+
+    const grupo = this.criarGrupo(nomeGrupo);
+    const todos = Estudos.todos();
+    grupo.estudos = ids
+      .map(id => todos.find(e => e.id === id))
+      .filter(Boolean);
+
+    return this.montarBundle(perfil, [grupo], assinatura, criado, modo);
+  },
+
   /* ================================================== Exportar Tudo */
   exportarTudo(nomeGrupo = 'Meu Conteúdo', modo = 'somente-leitura') {
     const perfil = Perfil.todos();
