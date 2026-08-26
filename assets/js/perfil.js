@@ -20,7 +20,6 @@ const Perfil = {
   
   // Denominações cristãs (aparecem quando religião = Cristianismo)
   DENOMINACOES_CRISTIANISMO: [
-    'Nenhum',
     'Adventista do Sétimo Dia',
     'Anabatista',
     'Anglicano',
