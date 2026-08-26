@@ -1918,7 +1918,7 @@ const App = {
             <strong>${Leitura.escapar(Estudos.nomeDe(e))}</strong>
             <svg class="icone estudo-titulo-seta"><use href="#i-depois"/></svg>
           </button>
-          <span class="quando">${Estudos.quandoDe(e)}</span>
+          <span class="quando">${this._creditoRodape(e, Estudos.quandoDe(e))}</span>
         </div>
         <div class="trechos-lista">${listaTrechos}</div>
         <div class="acoes-sessao">
@@ -1949,6 +1949,14 @@ const App = {
     });
     corpo.querySelectorAll('[data-editar]').forEach(el => {
       el.onclick = () => this.editarEstudo(el.dataset.editar);
+    });
+
+    // Clicar no nome do autor (rodapé de crédito) abre o popup do perfil
+    corpo.querySelectorAll('.autor-nome').forEach(el => {
+      el.onclick = (ev) => {
+        ev.stopPropagation();
+        this.abrirPerfilAutorPorId(el.dataset.autorId);
+      };
     });
 
     // menu "⋯ Mais": abre/fecha a lista para baixo (um de cada vez)
@@ -2142,18 +2150,31 @@ const App = {
     }
 
     const conteudo = partes.join('') || '<div class="estado peq">Estudo vazio.</div>';
+
+    // Rodapé: se for estudo de terceiro em somente-leitura, sem botão Editar
+    const seloAutor = this._seloAutor(e);
+    const botaoEditar = e.somenteLeitura
+      ? `<div class="aviso-bloqueado">🔒 Compartilhado apenas para leitura.</div>`
+      : `<button class="pilula-lapis" id="estudo-ver-editar">
+          <svg class="icone"><use href="#i-lapis"/></svg> Editar
+        </button>`;
+
     corpo.innerHTML = `
       <div class="estudo-ver-conteudo">${conteudo}</div>
+      ${seloAutor ? `<div class="estudo-ver-autor">${seloAutor}</div>` : ''}
       <div class="estudo-ver-rodape">
         <button class="pilula-lapis pilula-tocar" id="estudo-ver-tocar">
           <svg class="icone"><use href="#i-play"/></svg> Ouvir
         </button>
-        <button class="pilula-lapis" id="estudo-ver-editar">
-          <svg class="icone"><use href="#i-lapis"/></svg> Editar
-        </button>
+        ${botaoEditar}
       </div>`;
-    document.getElementById('estudo-ver-editar').onclick = () => this.editarEstudo(id);
+    const btnEditar = document.getElementById('estudo-ver-editar');
+    if (btnEditar) btnEditar.onclick = () => this.editarEstudo(id);
     document.getElementById('estudo-ver-tocar').onclick = () => this.tocarEstudoPorId(id);
+
+    // Nome do autor abre o popup do perfil
+    const nomeBtn = corpo.querySelector('.autor-nome');
+    if (nomeBtn && e.autor) nomeBtn.onclick = () => this.abrirPerfilAutor(e.autor);
   },
 
   /* Um trecho vira uma ou mais "fatias" — uma por capítulo — cada uma com os
@@ -2723,6 +2744,13 @@ const App = {
   async editarEstudo(id) {
     const e = Estudos.todos().find(x => x.id === id);
     if (!e) return;
+
+    // Estudo de terceiro em modo leitura não pode ser editado
+    if (e.somenteLeitura) {
+      this.avisoRapido('Este estudo é somente leitura');
+      return;
+    }
+
     this._estudoAtual = id;
 
     // cópia de trabalho da sequência
@@ -3343,13 +3371,16 @@ const App = {
 
     corpo.innerHTML = listas.map(l => {
       const n = Listas.trechosDe(l).length;
+      const creditoAutor = l.autor
+        ? ` · <span class="autor-nome autor-inline" data-autor-id="${l.id}" role="button" tabindex="0">${Leitura.escapar(l.autor.nome || 'Autor')}</span>`
+        : '';
       return `<div class="lista-linha">
         <button class="lista-tocar" data-tocar="${l.id}" aria-label="Tocar lista" title="Tocar">
           <svg class="icone"><use href="#i-play"/></svg>
         </button>
         <button class="lista-abrir" data-abrir="${l.id}">
           <span class="lista-nome">${Leitura.escapar(Listas.nomeDe(l))}</span>
-          <span class="lista-sub">${Listas.refDe(l)} · ${n} trecho${n > 1 ? 's' : ''}</span>
+          <span class="lista-sub">${Listas.refDe(l)} · ${n} trecho${n > 1 ? 's' : ''}${creditoAutor}</span>
         </button>
         <svg class="icone lista-seta"><use href="#i-depois"/></svg>
       </div>`;
@@ -3360,6 +3391,13 @@ const App = {
     });
     corpo.querySelectorAll('[data-abrir]').forEach(el => {
       el.onclick = () => this.verLista(el.dataset.abrir);
+    });
+    corpo.querySelectorAll('.autor-nome').forEach(el => {
+      el.onclick = (ev) => {
+        ev.stopPropagation();
+        ev.preventDefault();
+        this.abrirPerfilAutorPorId(el.dataset.autorId);
+      };
     });
   },
 
@@ -3516,6 +3554,543 @@ const App = {
       // sem compartilhamento nativo, o botão vira um "copiar" também
       enviar.textContent = 'Copiar link';
       enviar.onclick = () => document.getElementById('copiar-link').click();
+    }
+  },
+
+  /* ============================================ Backup e Partilha (Export/Import) */
+  desenharBackup() {
+    const corpo = document.getElementById('corpo-backup');
+    if (!corpo) return;
+
+    corpo.innerHTML = `
+      <div class="backup-intro">
+        <p>Salve seu conteúdo (anotações, listas, estudos e marcadores) em um
+        arquivo, ou traga conteúdo de outra pessoa para o seu app.</p>
+      </div>
+
+      <div class="backup-acoes-principais">
+        <button class="backup-cartao-acao" id="backup-abrir-exportar">
+          <svg class="backup-cartao-icone" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke-linecap="round" stroke-linejoin="round" fill="none" stroke="currentColor" stroke-width="2"/><path d="M7 10l5 5 5-5" stroke-linecap="round" stroke-linejoin="round" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 15V3" stroke-linecap="round" stroke="currentColor" stroke-width="2"/></svg>
+          <span class="backup-cartao-titulo">Exportar</span>
+          <span class="backup-cartao-desc">Salvar meu conteúdo num arquivo para guardar ou partilhar</span>
+        </button>
+
+        <button class="backup-cartao-acao" id="backup-abrir-importar">
+          <svg class="backup-cartao-icone" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke-linecap="round" stroke-linejoin="round" fill="none" stroke="currentColor" stroke-width="2"/><path d="M7 8l5-5 5 5" stroke-linecap="round" stroke-linejoin="round" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 3v12" stroke-linecap="round" stroke="currentColor" stroke-width="2"/></svg>
+          <span class="backup-cartao-titulo">Importar</span>
+          <span class="backup-cartao-desc">Trazer conteúdo de um arquivo para o meu app</span>
+        </button>
+      </div>
+    `;
+
+    document.getElementById('backup-abrir-exportar').onclick = () => this._abrirModalExportar();
+    document.getElementById('backup-abrir-importar').onclick = () => this._abrirModalImportar();
+  },
+
+  /* Fecha qualquer modal de backup aberto */
+  _fecharModalBackup() {
+    const m = document.getElementById('modal-backup');
+    if (m) m.remove();
+  },
+
+  /* Cria a casca de um modal flutuante centralizado e devolve o elemento
+   * do corpo, onde o conteúdo específico é inserido. */
+  _abrirModalBackup(titulo, iconeSvg) {
+    this._fecharModalBackup();
+    const modal = document.createElement('div');
+    modal.id = 'modal-backup';
+    modal.innerHTML = `
+      <div class="mb-overlay" id="mb-overlay">
+        <div class="mb-caixa">
+          <div class="mb-cabeca">
+            <span class="mb-icone">${iconeSvg}</span>
+            <span class="mb-titulo">${titulo}</span>
+            <button class="mb-fechar" id="mb-fechar" aria-label="Fechar">&times;</button>
+          </div>
+          <div class="mb-corpo" id="mb-corpo"></div>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+
+    document.getElementById('mb-overlay').addEventListener('click', (e) => {
+      if (e.target.id === 'mb-overlay') this._fecharModalBackup();
+    });
+    document.getElementById('mb-fechar').addEventListener('click', () => this._fecharModalBackup());
+
+    return document.getElementById('mb-corpo');
+  },
+
+  /* ============================================ MODAL EXPORTAR */
+  _abrirModalExportar() {
+    const iconeExport = `<svg viewBox="0 0 24 24" width="22" height="22"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke-linecap="round" stroke-linejoin="round" fill="none" stroke="currentColor" stroke-width="2"/><path d="M7 10l5 5 5-5" stroke-linecap="round" stroke-linejoin="round" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 15V3" stroke-linecap="round" stroke="currentColor" stroke-width="2"/></svg>`;
+    const corpo = this._abrirModalBackup('Exportar', iconeExport);
+
+    // Coleta todos os itens para montar a árvore de seleção
+    const dados = {
+      marcadores: Exportacao.coletarMarcadores(),
+      anotacoes: Exportacao.coletarAnotacoes(),
+      listas: Exportacao.coletarListas(),
+      estudos: Exportacao.coletarEstudos(),
+    };
+    const total = dados.marcadores.length + dados.anotacoes.length + dados.listas.length + dados.estudos.length;
+
+    corpo.innerHTML = `
+      <div class="backup-permissao">
+        <div class="backup-permissao-titulo">Permissão de uso do seu conteúdo</div>
+        <p class="backup-ajuda">Você decide como quem receber poderá usar este arquivo.
+        A pessoa será informada da permissão que você escolher.</p>
+        ${Importacao.MODOS.map((m, i) => `
+          <label class="backup-modo">
+            <input type="radio" name="backup-permissao" value="${m.id}" ${i === 0 ? 'checked' : ''}>
+            <span class="backup-modo-marca"></span>
+            <span class="backup-modo-texto">
+              <strong>${m.icon} ${m.nome}</strong>
+              <span>${m.descricao}</span>
+            </span>
+          </label>
+        `).join('')}
+      </div>
+
+      <button class="botao backup-botao-primario" id="backup-exportar-tudo">Exportar tudo</button>
+      <button class="botao secundario backup-botao-detalhe" id="backup-toggle-seletivo">Escolher o que exportar…</button>
+
+      <div class="backup-seletivo-arvore" id="backup-seletivo-arvore" style="display:none;">
+        <p class="backup-preview-resumo">Marque os itens que deseja exportar. Toque no
+        título de um tipo para marcar ou desmarcar todos daquele tipo.</p>
+        <div class="backup-arvore" id="backup-arvore-export">
+          ${total ? this._montarArvoreSelecao('exp', dados) : '<p class="backup-ajuda">Você ainda não tem conteúdo para exportar.</p>'}
+        </div>
+        <button class="botao backup-botao-primario" id="backup-exportar-seletivo" style="margin-top:14px;">Exportar selecionados</button>
+      </div>
+    `;
+
+    const lerModo = () => {
+      const el = corpo.querySelector('input[name="backup-permissao"]:checked');
+      return el ? el.value : 'somente-leitura';
+    };
+
+    // Exportar tudo
+    corpo.querySelector('#backup-exportar-tudo').onclick = () => {
+      try {
+        const bundle = Exportacao.exportarTudo('Meu Conteúdo', lerModo());
+        Exportacao.salvarArquivo(bundle);
+        this._fecharModalBackup();
+        this.avisoRapido('Backup exportado com sucesso');
+      } catch (e) {
+        this.avisoRapido('Erro ao exportar: ' + e.message);
+      }
+    };
+
+    // Mostrar/ocultar árvore seletiva
+    const btnToggle = corpo.querySelector('#backup-toggle-seletivo');
+    const arvore = corpo.querySelector('#backup-seletivo-arvore');
+    btnToggle.onclick = () => {
+      const aberto = arvore.style.display !== 'none';
+      arvore.style.display = aberto ? 'none' : 'block';
+      btnToggle.textContent = aberto ? 'Escolher o que exportar…' : 'Ocultar seleção';
+    };
+
+    // Ligar a árvore (expandir + cascata)
+    this._ligarArvoreSelecao(corpo);
+
+    // Exportar selecionados
+    const btnSel = corpo.querySelector('#backup-exportar-seletivo');
+    if (btnSel) {
+      btnSel.onclick = () => {
+        const sel = this._colherSelecaoArvore(corpo, 'exp');
+        const grupo = Exportacao.criarGrupo('Conteúdo selecionado');
+        let algum = false;
+        if (sel.anotacoes.length) { grupo.anotacoes = sel.anotacoes.map(i => dados.anotacoes[i]); algum = true; }
+        if (sel.listas.length) { grupo.listas = sel.listas.map(i => dados.listas[i]); algum = true; }
+        if (sel.estudos.length) { grupo.estudos = sel.estudos.map(i => dados.estudos[i]); algum = true; }
+        if (sel.marcadores.length) { grupo.marcadores = sel.marcadores.map(i => dados.marcadores[i]); algum = true; }
+
+        if (!algum) { this.avisoRapido('Selecione ao menos um item'); return; }
+
+        try {
+          const bundle = Exportacao.exportarSeletivo([grupo], lerModo());
+          Exportacao.salvarArquivo(bundle);
+          this._fecharModalBackup();
+          this.avisoRapido('Backup exportado com sucesso');
+        } catch (e) {
+          this.avisoRapido('Erro ao exportar: ' + e.message);
+        }
+      };
+    }
+  },
+
+  /* ============================================ MODAL IMPORTAR */
+  _abrirModalImportar() {
+    const iconeImport = `<svg viewBox="0 0 24 24" width="22" height="22"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke-linecap="round" stroke-linejoin="round" fill="none" stroke="currentColor" stroke-width="2"/><path d="M7 8l5-5 5 5" stroke-linecap="round" stroke-linejoin="round" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 3v12" stroke-linecap="round" stroke="currentColor" stroke-width="2"/></svg>`;
+    const corpo = this._abrirModalBackup('Importar', iconeImport);
+
+    corpo.innerHTML = `
+      <p class="backup-ajuda">Selecione um arquivo <strong>.json</strong> exportado
+      por você ou por outra pessoa.</p>
+      <button class="botao backup-botao-primario" id="backup-escolher-arquivo">Escolher arquivo…</button>
+      <input type="file" id="backup-input-arquivo" accept=".json,application/json" style="display:none;">
+      <div class="backup-preview" id="backup-preview" style="display:none;"></div>
+    `;
+
+    const btnEscolher = corpo.querySelector('#backup-escolher-arquivo');
+    const inputArquivo = corpo.querySelector('#backup-input-arquivo');
+    btnEscolher.onclick = () => inputArquivo.click();
+
+    inputArquivo.onchange = async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      try {
+        const bundle = await Importacao.carregarArquivo(file);
+        const validacao = Importacao.validarBundle(bundle);
+        if (!validacao.ok) {
+          this.avisoRapido('Arquivo inválido: ' + validacao.erro);
+          return;
+        }
+        this._bundleImportado = bundle;
+        this._mostrarPreviewImportacao(validacao, bundle);
+      } catch (err) {
+        this.avisoRapido('Erro ao ler arquivo: ' + err.message);
+      }
+      inputArquivo.value = '';
+    };
+  },
+
+  /* ===== Árvore de seleção reutilizável (exportar E importar) =====
+   * prefixo distingue instâncias ('exp' na exportação, 'imp' na importação).
+   * dados = { marcadores:[], anotacoes:[], listas:[], estudos:[] } */
+  _montarArvoreSelecao(prefixo, dados) {
+    const TIPOS = [
+      { chave: 'marcadores', rotulo: 'Marcadores' },
+      { chave: 'anotacoes', rotulo: 'Anotações' },
+      { chave: 'listas', rotulo: 'Listas de leitura' },
+      { chave: 'estudos', rotulo: 'Estudos' },
+    ];
+
+    let html = '';
+    TIPOS.forEach(({ chave, rotulo }) => {
+      const itens = Array.isArray(dados[chave]) ? dados[chave] : [];
+      if (itens.length === 0) return;
+
+      const itensHtml = itens.map((item, ii) => `
+        <label class="backup-item">
+          <input type="checkbox" class="backup-item-chk" data-tipo="${chave}" data-idx="${ii}" checked>
+          <span class="backup-check-marca"></span>
+          <span class="backup-item-texto">${Leitura.escapar(this._rotuloItemBackup(chave, item))}</span>
+        </label>
+      `).join('');
+
+      html += `
+        <div class="backup-tipo" data-tipo="${chave}">
+          <div class="backup-tipo-cabeca">
+            <button class="backup-tipo-seta" type="button" aria-label="Expandir ou recolher">
+              <svg viewBox="0 0 24 24"><polyline points="9 6 15 12 9 18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+            <label class="backup-tipo-marca-wrap">
+              <input type="checkbox" class="backup-tipo-chk" data-tipo="${chave}" checked>
+              <span class="backup-check-marca"></span>
+            </label>
+            <span class="backup-tipo-rotulo">${rotulo}</span>
+            <span class="backup-contagem">${itens.length}</span>
+          </div>
+          <div class="backup-tipo-itens" style="display:none;">
+            ${itensHtml}
+          </div>
+        </div>
+      `;
+    });
+
+    return html || '<p class="backup-ajuda">Nenhum item.</p>';
+  },
+
+  /* Liga expandir (seta) e cascata (checkbox do tipo) numa árvore.
+   * Escopo = elemento que contém a árvore. */
+  _ligarArvoreSelecao(escopo) {
+    // SETA: expande/recolhe os itens
+    escopo.querySelectorAll('.backup-tipo-seta').forEach(seta => {
+      seta.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const tipoDiv = seta.closest('.backup-tipo');
+        const itens = tipoDiv.querySelector('.backup-tipo-itens');
+        const aberto = itens.style.display !== 'none';
+        itens.style.display = aberto ? 'none' : 'block';
+        seta.classList.toggle('aberta', !aberto);
+      });
+    });
+
+    // CHECKBOX DO TIPO: marca/desmarca TODOS os itens daquele tipo (cascata)
+    escopo.querySelectorAll('.backup-tipo-chk').forEach(chkTipo => {
+      chkTipo.addEventListener('change', () => {
+        const tipo = chkTipo.dataset.tipo;
+        const marcado = chkTipo.checked;
+        chkTipo.indeterminate = false;
+        escopo.querySelectorAll(`.backup-item-chk[data-tipo="${tipo}"]`)
+          .forEach(chk => { chk.checked = marcado; });
+      });
+    });
+
+    // CHECKBOX DE ITEM: reflete estado parcial no checkbox do tipo
+    escopo.querySelectorAll('.backup-item-chk').forEach(chkItem => {
+      chkItem.addEventListener('change', () => {
+        const tipo = chkItem.dataset.tipo;
+        const todos = [...escopo.querySelectorAll(`.backup-item-chk[data-tipo="${tipo}"]`)];
+        const marcados = todos.filter(c => c.checked).length;
+        const chkTipo = escopo.querySelector(`.backup-tipo-chk[data-tipo="${tipo}"]`);
+        if (chkTipo) {
+          chkTipo.checked = marcados === todos.length;
+          chkTipo.indeterminate = marcados > 0 && marcados < todos.length;
+        }
+      });
+    });
+  },
+
+  /* Colhe os índices marcados de uma árvore, por tipo. */
+  _colherSelecaoArvore(escopo, prefixo) {
+    const sel = { anotacoes: [], listas: [], estudos: [], marcadores: [] };
+    escopo.querySelectorAll('.backup-item-chk:checked').forEach(chk => {
+      const tipo = chk.dataset.tipo;
+      const idx = +chk.dataset.idx;
+      if (sel[tipo]) sel[tipo].push(idx);
+    });
+    return sel;
+  },
+  /* ========================================= Autoria de conteúdo importado */
+
+  /* Devolve o HTML de um "selo de autor" clicável para itens de terceiros.
+   * Retorna string vazia se o item for próprio (sem autor anexado). */
+  _seloAutor(item) {
+    if (!item || !item.autor) return '';
+    const nome = item.autor.nome || 'Autor';
+    const cadeado = item.somenteLeitura ? '<span class="autor-cadeado" title="Somente leitura">🔒</span>' : '';
+    return `<div class="autor-selo">
+      <span class="autor-por">por</span>
+      <button class="autor-nome" data-autor-id="${item.id}" type="button">${Leitura.escapar(nome)}</button>
+      ${cadeado}
+    </div>`;
+  },
+
+  /* Rodapé de crédito: nome do autor (clicável) + data, juntos.
+   * Para itens PRÓPRIOS (sem autor), devolve só a data que foi passada.
+   * Para itens de TERCEIROS, devolve "Nome · data".
+   * Usa <span> (não <button>) porque costuma ficar dentro de outro botão. */
+  _creditoRodape(item, dataTexto) {
+    if (!item || !item.autor) {
+      return dataTexto ? `<span class="credito-data">${dataTexto}</span>` : '';
+    }
+    const nome = item.autor.nome || 'Autor';
+    return `<span class="credito-autor-data">
+      <span class="autor-nome" data-autor-id="${item.id}" role="button" tabindex="0">${Leitura.escapar(nome)}</span>
+      ${dataTexto ? `<span class="credito-sep">·</span><span class="credito-data">${dataTexto}</span>` : ''}
+    </span>`;
+  },
+
+  /* Abre um popup com o perfil completo do autor de um item importado.
+   * `autor` é o objeto de perfil que veio anexado ao item. */
+  abrirPerfilAutor(autor) {
+    if (!autor) return;
+
+    // Remove popup anterior se houver
+    const antigo = document.getElementById('popup-autor');
+    if (antigo) antigo.remove();
+
+    const linhaInfo = (rotulo, valor) => valor
+      ? `<div class="pa-linha"><span class="pa-rotulo">${rotulo}</span><span class="pa-valor">${Leitura.escapar(valor)}</span></div>`
+      : '';
+
+    // Religião + denominação juntas quando fizer sentido
+    let religiaoTexto = autor.religiao || '';
+    if (autor.religiao === 'Cristianismo' && autor.denominacao) {
+      religiaoTexto = `${autor.religiao} / ${autor.denominacao}`;
+    }
+
+    // Contatos
+    const contatosHtml = (Array.isArray(autor.contatos) && autor.contatos.length)
+      ? autor.contatos.filter(c => c.tipo && c.valor).map(c =>
+          `<div class="pa-contato"><span class="pa-contato-tipo">${Leitura.escapar(c.tipo)}</span><span class="pa-contato-valor">${Leitura.escapar(c.valor)}</span></div>`
+        ).join('')
+      : '';
+
+    // Foto ou inicial
+    const fotoHtml = autor.foto
+      ? `<img class="pa-foto" src="${autor.foto}" alt="Foto de ${Leitura.escapar(autor.nome || 'autor')}">`
+      : `<div class="pa-foto pa-foto-vazia">${Leitura.escapar((autor.nome || '?').charAt(0).toUpperCase())}</div>`;
+
+    const modal = document.createElement('div');
+    modal.id = 'popup-autor';
+    modal.innerHTML = `
+      <div class="pa-overlay" id="pa-overlay">
+        <div class="pa-caixa">
+          <button class="pa-fechar" id="pa-fechar" aria-label="Fechar">&times;</button>
+          <div class="pa-cabeca">
+            ${fotoHtml}
+            <div class="pa-nome">${Leitura.escapar(autor.nome || 'Anônimo')}</div>
+            ${autor.local ? `<div class="pa-local">${Leitura.escapar(autor.local)}</div>` : ''}
+          </div>
+          <div class="pa-corpo">
+            ${linhaInfo('Religião', religiaoTexto)}
+            ${autor.proposito ? `<div class="pa-proposito">${Leitura.escapar(autor.proposito)}</div>` : ''}
+            ${contatosHtml ? `<div class="pa-contatos"><div class="pa-contatos-titulo">Contatos</div>${contatosHtml}</div>` : ''}
+          </div>
+          <div class="pa-rodape">
+            <span class="pa-aviso">Autor original deste conteúdo</span>
+          </div>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+
+    const fechar = () => modal.remove();
+    document.getElementById('pa-overlay').addEventListener('click', (e) => {
+      if (e.target.id === 'pa-overlay') fechar();
+    });
+    document.getElementById('pa-fechar').addEventListener('click', fechar);
+  },
+
+  /* Procura o autor de um item (anotação/estudo/lista) pelo id, em qualquer
+   * um dos armazenamentos, e abre o popup. */
+  abrirPerfilAutorPorId(itemId) {
+    let autor = null;
+    const acharEm = (lista) => {
+      const it = (lista || []).find(x => x && x.id === itemId);
+      return it && it.autor ? it.autor : null;
+    };
+    autor = acharEm(Anotacoes.todas()) || acharEm(Estudos.todos()) || acharEm(Listas.todos());
+    if (autor) this.abrirPerfilAutor(autor);
+  },
+
+  /* Gera um rótulo curto e legível para um item, conforme o tipo */
+  _rotuloItemBackup(tipo, item) {
+    try {
+      if (tipo === 'anotacoes') {
+        const ref = `${item.code || '?'} ${item.cap || '?'}:${Array.isArray(item.versiculos) ? item.versiculos.join(',') : (item.vers || '?')}`;
+        const texto = (item.corpo || '').replace(/<[^>]*>/g, '').trim();
+        const resumo = texto.length > 40 ? texto.slice(0, 40) + '…' : texto;
+        return resumo ? `${ref} — ${resumo}` : ref;
+      }
+      if (tipo === 'listas') {
+        const n = Array.isArray(item.trechos) ? item.trechos.length : 0;
+        return `${item.nome || 'Lista sem nome'} (${n} trecho${n === 1 ? '' : 's'})`;
+      }
+      if (tipo === 'estudos') {
+        return item.nome || item.titulo || 'Estudo sem nome';
+      }
+      if (tipo === 'marcadores') {
+        return `${item.code || '?'} ${item.cap || '?'}:${item.vers || '?'}`;
+      }
+    } catch {}
+    return 'Item';
+  },
+
+  _mostrarPreviewImportacao(validacao, bundle) {
+    const preview = document.getElementById('backup-preview');
+    if (!preview) return;
+
+    const selo = validacao.assinaturaValida
+      ? '<span class="backup-selo backup-selo-ok">✓ Assinatura válida</span>'
+      : '<span class="backup-selo backup-selo-aviso">⚠ Sem assinatura verificada</span>';
+
+    // MODO é INFORMATIVO — foi definido pelo dono na exportação
+    const modo = Importacao.modoDoBundle(bundle);
+    const infoModo = Importacao.descricaoModo(modo);
+
+    // Consolida itens de TODOS os grupos por tipo, guardando de qual grupo e
+    // índice cada item veio (para reconstruir a seleção que aplicarImportacao espera).
+    const TIPOS = ['marcadores', 'anotacoes', 'listas', 'estudos'];
+    const dados = { marcadores: [], anotacoes: [], listas: [], estudos: [] };
+    const mapa = { marcadores: [], anotacoes: [], listas: [], estudos: [] }; // {grupoId, idxNoGrupo}
+    bundle.grupos.forEach(grupo => {
+      TIPOS.forEach(tipo => {
+        const itens = Array.isArray(grupo[tipo]) ? grupo[tipo] : [];
+        itens.forEach((item, i) => {
+          dados[tipo].push(item);
+          mapa[tipo].push({ grupoId: grupo.id, idxNoGrupo: i });
+        });
+      });
+    });
+    this._mapaImport = mapa; // guardado para o confirmar
+
+    const total = dados.marcadores.length + dados.anotacoes.length + dados.listas.length + dados.estudos.length;
+
+    // Nome do autor clicável (abre popup do perfil do autor)
+    const nomeAutor = Leitura.escapar(validacao.criador.nome || 'Anônimo');
+
+    preview.innerHTML = `
+      <div class="backup-preview-cartao">
+        <div class="backup-preview-cabeca">
+          <div class="backup-preview-autor">De: <button class="autor-nome" id="backup-autor-link" type="button">${nomeAutor}</button></div>
+          ${selo}
+        </div>
+
+        <div class="backup-permissao-info">
+          <div class="backup-permissao-info-titulo">${infoModo.icon} Compartilhado como: ${infoModo.nome}</div>
+          <div class="backup-permissao-info-desc">${infoModo.descricao}</div>
+        </div>
+
+        <div class="backup-preview-resumo">
+          Marque os itens que deseja importar. Toque no título de um tipo para
+          marcar ou desmarcar todos daquele tipo.
+        </div>
+
+        <div class="backup-arvore" id="backup-arvore-import">
+          ${total ? this._montarArvoreSelecao('imp', dados) : '<p class="backup-ajuda">Nenhum item neste arquivo.</p>'}
+        </div>
+
+        <div class="backup-preview-acoes">
+          <button class="botao secundario" id="backup-cancelar-import">Cancelar</button>
+          <button class="botao" id="backup-confirmar-import">Importar selecionados</button>
+        </div>
+      </div>
+    `;
+
+    preview.style.display = 'block';
+
+    // Nome do autor abre o popup do perfil (dados vêm do bundle.criador)
+    const linkAutor = preview.querySelector('#backup-autor-link');
+    if (linkAutor) linkAutor.onclick = () => this.abrirPerfilAutor(bundle.criador);
+
+    // Liga a árvore (expandir + cascata) — mesma função da exportação
+    this._ligarArvoreSelecao(preview);
+
+    // Cancelar
+    const btnCancelar = preview.querySelector('#backup-cancelar-import');
+    if (btnCancelar) btnCancelar.onclick = () => this._fecharModalBackup();
+
+    // Confirmar
+    const btnConfirmar = preview.querySelector('#backup-confirmar-import');
+    if (btnConfirmar) {
+      btnConfirmar.onclick = () => {
+        // Colhe índices marcados (consolidados) e reconstrói a seleção por grupo
+        const consolidado = this._colherSelecaoArvore(preview, 'imp');
+        const selecao = {};
+        let total = 0;
+        Object.keys(consolidado).forEach(tipo => {
+          consolidado[tipo].forEach(idxConsolidado => {
+            const ref = this._mapaImport[tipo][idxConsolidado];
+            if (!ref) return;
+            if (!selecao[ref.grupoId]) selecao[ref.grupoId] = {};
+            if (!selecao[ref.grupoId][tipo]) selecao[ref.grupoId][tipo] = [];
+            selecao[ref.grupoId][tipo].push(ref.idxNoGrupo);
+            total++;
+          });
+        });
+
+        if (total === 0) { this.avisoRapido('Selecione ao menos um item'); return; }
+
+        try {
+          const grupos = bundle.grupos.map(g => g.id);
+          const resultado = Importacao.aplicarImportacao(bundle, grupos, selecao);
+          if (resultado.sucesso) {
+            this._fecharModalBackup();
+            this._bundleImportado = null;
+            this.avisoRapido(`${resultado.itemsImportados} item(ns) importado(s)`);
+          } else {
+            this.avisoRapido('Erro: ' + resultado.erro);
+          }
+        } catch (e) {
+          this.avisoRapido('Erro ao importar: ' + e.message);
+        }
+      };
     }
   },
 
@@ -3824,6 +4399,635 @@ const App = {
       guarda:     { titulo: 'Armazenamento',     html: guarda },
     };
   },
+
+  /* ============================================================ Perfil */
+
+  /* ============================================================ Perfil - Renderização Simples e Testada */
+
+  getIconePerfil() {
+    // Ícone minimalista de perfil: apenas contorno, sem preenchimento
+    return '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="#8B3E3E" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3-6 8-6s8 2 8 6"/></svg>';
+  },
+
+  getIconeSocial(tipo) {
+    const svgs = {
+      'Instagram': '<svg xmlns="http://w3.org" width="100" height="100" viewBox="0 0 100 100"><mask id="insta-mask"><circle cx="50" cy="50" r="50" fill="white"/><rect x="28" y="28" width="44" height="44" rx="11" ry="11" fill="none" stroke="black" stroke-width="4.5"/><circle cx="50" cy="50" r="9" fill="none" stroke="black" stroke-width="4.5"/><circle cx="63.5" cy="36.5" r="2.5" fill="black"/></mask><circle cx="50" cy="50" r="50" fill="#5D3E25" mask="url(#insta-mask)"/></svg>',
+      'Facebook': '<svg xmlns="http://w3.org" width="100" height="100" viewBox="0 0 100 100"><mask id="fb-mask"><circle cx="50" cy="50" r="50" fill="white"/><path d="M62 25h-7a11 11 0 0 0-11 11v7h-7v10h7v22h11V53h8l2-10h-10v-7a2.5 2.5 0 0 1 2.5-2.5H62z" fill="black"/></mask><circle cx="50" cy="50" r="50" fill="#5D3E25" mask="url(#fb-mask)"/></svg>',
+      'Twitter': '<svg xmlns="http://w3.org" width="100" height="100" viewBox="0 0 100 100"><mask id="x-mask"><circle cx="50" cy="50" r="50" fill="white"/><path d="M66.36 26h6.77l-14.8 16.9 17.41 23.1H62.13l-10.67-13.95L39.11 66h-6.79l15.82-18.08L31.5 26h14.01l9.64 12.75zm-2.38 35.9h3.75L43.83 29.83h-4.02z" fill="black"/></mask><circle cx="50" cy="50" r="50" fill="#5D3E25" mask="url(#x-mask)"/></svg>',
+      'WhatsApp': '<svg xmlns="http://w3.org" width="100" height="100" viewBox="0 0 100 100"><mask id="wa-perfect-mask"><circle cx="50" cy="50" r="50" fill="white"/><g transform="translate(22, 22) scale(2.333)"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L0 24l6.335-1.662c1.746.953 3.71 1.454 5.709 1.455h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" fill="black"/></g></mask><circle cx="50" cy="50" r="50" fill="#5D3E25" mask="url(#wa-perfect-mask)"/></svg>',
+      'Telegram': '<svg xmlns="http://w3.org" width="100" height="100" viewBox="0 0 100 100"><mask id="tg-fix"><circle cx="50" cy="50" r="50" fill="white"/><path d="M73.5 28.5L24 47.6c-1.2.5-1.2 1.9-.2 2.3l12.7 4 29.5-18.6c1.4-.9 2.7-.4 1.6.6L43.8 57.5l-.9 12.5c1.2 0 1.8-.6 2.4-1.2l5.9-5.7 12.2 9c2.3 1.3 3.9.6 4.5-2.1l8-37.7c.8-3.4-1.3-4.9-3.4-3.8z" fill="black"/></mask><circle cx="50" cy="50" r="50" fill="#5D3E25" mask="url(#tg-fix)"/></svg>',
+      'TikTok': '<svg xmlns="http://w3.org" width="100" height="100" viewBox="0 0 100 100"><path fill="#5D3E25" fill-rule="evenodd" d="M50 0C22.386 0 0 22.386 0 50s22.386 50 50 50 50-22.386 50-50S77.614 0 50 0zm25 36c-5.8 0-10.6-4.5-11-10.2V54.5c0 8.6-7 15.5-15.5 15.5S33 63.1 33 54.5s7-15.5 15.5-15.5c1.1 0 2.2.1 3.2.4v9c-1-.6-2.1-.9-3.2-.9-4.1 0-7.5 3.4-7.5 7.5s3.4 7.5 7.5 7.5 7.5-3.4 7.5-7.5V21h8c0 6.6 5.4 12 12 12v3z"/></svg>',
+      'Email': '<svg xmlns="http://w3.org" width="100" height="100" viewBox="0 0 100 100"><mask id="em-mask"><circle cx="50" cy="50" r="50" fill="white"/><rect x="25" y="32" width="50" height="36" rx="5" fill="none" stroke="black" stroke-width="4.5"/><path d="M26 35.5 l24 14.5 l24-14.5" fill="none" stroke="black" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/></mask><circle cx="50" cy="50" r="50" fill="#5D3E25" mask="url(#em-mask)"/></svg>',
+      'Telefone': '<svg xmlns="http://w3.org" width="100" height="100" viewBox="0 0 100 100"><mask id="tel-mask"><circle cx="50" cy="50" r="50" fill="white"/><path d="M69.6 57.6v6.9a4.6 4.6 0 0 1-5 4.6A45.5 45.5 0 0 1 24.8 29a4.6 4.6 0 0 1 4.6-5h6.9a4.6 4.6 0 0 1 4.6 4c.3 2.1.9 4.2 1.6 6.2a4.6 4.6 0 0 1-1 4.8l-2.9 2.9a36.8 36.8 0 0 0 13.8 13.8l2.9-2.9a4.6 4.6 0 0 1 4.8-1c2 .7 4.1 1.3 6.2 1.6a4.6 4.6 0 0 1 4 4.3z" fill="black"/></mask><circle cx="50" cy="50" r="50" fill="#5D3E25" mask="url(#tel-mask)"/></svg>',
+    };
+    return svgs[tipo] || '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="10"/></svg>';
+  },
+
+  desenharPerfil() {
+    const corpo = document.getElementById('corpo-perfil');
+    const modo = this._modoPerfil || 'view';
+    corpo.innerHTML = '';
+    
+    console.log(`🔍 desenharPerfil() - Modo: ${modo}`);
+
+    if (modo === 'view') {
+      console.log(`  ✓ Renderizando VIEW`);
+      this.desenharPerfilView(corpo);
+    } else {
+      console.log(`  ✓ Renderizando EDIT`);
+      this.desenharPerfilEdit(corpo);
+    }
+  },
+
+  desenharPerfilView(corpo) {
+    try {
+      const perfil = Perfil.todos();
+      
+      // Validação básica
+      if (!perfil || !perfil.nome) {
+        console.error('❌ PERFIL CORROMPIDO em VIEW! Resetando...');
+        Perfil.resetar();
+        return this.desenharPerfilView(corpo);
+      }
+      
+      let html = '<div class="perfil-view">';
+
+    // Avatar
+    html += '<div class="perfil-avatar-circulo">';
+    html += perfil.foto 
+      ? `<img src="${perfil.foto}" alt="Foto">` 
+      : `<span class="perfil-avatar-default">${this.getIconePerfil()}</span>`;
+    html += '</div>';
+
+    // Nome
+    html += '<div class="perfil-nome-apresentacao">';
+    html += Leitura.escapar(perfil.nome);
+    html += ' <span class="perfil-word-profile">Profile</span>';
+    html += '</div>';
+
+    // Info básica
+    if (perfil.local) {
+      html += `<div class="perfil-info-linha"><strong>Local:</strong> ${Leitura.escapar(perfil.local)}</div>`;
+    }
+    if (perfil.religiao) {
+      html += `<div class="perfil-info-linha"><strong>Religião:</strong> ${Leitura.escapar(perfil.religiao)}`;
+      // Se Denominação Cristã e religião = Cristianismo
+      if (perfil.religiao === 'Cristianismo' && perfil.denominacao) {
+        html += ` / ${Leitura.escapar(perfil.denominacao)}`;
+      }
+      html += '</div>';
+    }
+
+    // Vertentes
+    if (perfil.vertentes.length > 0) {
+      html += '<div class="perfil-secao">';
+      html += '<h3 class="perfil-secao-titulo">Vertentes Teológicas</h3>';
+      html += '<div class="perfil-badges-view">';
+      for (const v of perfil.vertentes) {
+        html += `<span class="perfil-badge-view">${Leitura.escapar(v)}</span>`;
+      }
+      html += '</div></div>';
+    }
+
+    // Social
+    if (perfil.contatos.length > 0) {
+      html += '<div class="perfil-secao">';
+      html += '<h3 class="perfil-secao-titulo">Redes Sociais</h3>';
+      html += '<div class="perfil-social-lista">';
+      for (const c of perfil.contatos) {
+        html += `<div class="perfil-social-capsula">
+          <div class="perfil-social-icone">${this.getIconeSocial(c.tipo)}</div>
+          <div class="perfil-social-usuario">
+            <span class="perfil-social-prefixo">@${Leitura.escapar(c.tipo)}</span>
+            <span class="perfil-social-valor">${Leitura.escapar(c.valor)}</span>
+          </div>
+        </div>`;
+      }
+      html += '</div></div>';
+    }
+
+    // Bio
+    if (perfil.proposito) {
+      html += '<div class="perfil-secao">';
+      html += '<h3 class="perfil-secao-titulo">Bio</h3>';
+      html += `<p class="perfil-bio-text">${Leitura.escapar(perfil.proposito)}</p>`;
+      html += '</div>';
+    }
+
+    html += '<button class="perfil-botao-editar" id="btn-editar-perfil">Editar</button>';
+    html += '</div>';
+
+    corpo.innerHTML = html;
+    document.getElementById('btn-editar-perfil').onclick = () => {
+      this._modoPerfil = 'edit';
+      this.desenharPerfil();
+    };
+    } catch (erro) {
+      console.error('❌ ERRO ao renderizar VIEW:', erro);
+      corpo.innerHTML = `
+        <div style="padding: 20px; text-align: center;">
+          <p style="color: #8B3E3E; font-weight: bold;">⚠️ Erro ao carregar perfil</p>
+          <p style="font-size: 12px; color: #666;">Dados foram resetados.</p>
+          <button onclick="location.reload()" style="padding: 8px 16px; background: #8B3E3E; color: white; border: none; border-radius: 4px; cursor: pointer;">
+            Recarregar página
+          </button>
+        </div>
+      `;
+    }
+  },
+
+  desenharPerfilEdit(corpo) {
+    try {
+      const perfil = Perfil.todos();
+      
+      // Validação: se perfil está corrompido, resetar
+      if (!perfil || !perfil.nome) {
+        console.error('❌ PERFIL CORROMPIDO! Resetando...');
+        Perfil.resetar();
+        return this.desenharPerfilEdit(corpo); // Tenta novamente
+      }
+      
+      let html = '<div class="perfil-edit">';
+
+    html += '<div class="perfil-edit-titulo">Editar Perfil</div>';
+
+    // FOTO
+    html += '<div class="perfil-foto-area">';
+    html += '<div class="perfil-foto-container">';
+    html += '<div class="perfil-avatar-edit" id="foto-preview">';
+    html += perfil.foto 
+      ? `<img src="${perfil.foto}" alt="Foto">` 
+      : `<span class="perfil-avatar-edit-default">${this.getIconePerfil()}</span>`;
+    html += '</div>';
+    html += '<div class="perfil-foto-badge" id="foto-badge">📸</div>';
+    html += '</div>';
+    html += '<span class="perfil-foto-texto">Alterar foto</span>';
+    html += '<input type="file" id="input-foto-perfil" accept="image/*">';
+    html += '</div>';
+
+    // CAMPOS - EM COLUNA (um embaixo do outro)
+    // SEM container intermediário - campos direto no HTML
+    html += `<div class="perfil-campo-item">
+      <label class="perfil-campo-label">Nome</label>
+      <input type="text" id="perf-nome" data-field="nome" value="${Leitura.escapar(perfil.nome)}">
+    </div>`;
+    html += `<div class="perfil-campo-item">
+      <label class="perfil-campo-label">Local</label>
+      <input type="text" id="perf-local" data-field="local" value="${Leitura.escapar(perfil.local)}" placeholder="Ex: São Paulo, Brasil">
+    </div>`;
+    html += `<div class="perfil-campo-item">
+      <label class="perfil-campo-label">Religião</label>
+      <div class="perfil-dropdown" id="perf-religiao-dropdown" data-field="religiao" data-value="${perfil.religiao}">
+        <div class="perfil-dropdown-trigger">
+          <span class="perfil-dropdown-text">${perfil.religiao || '— Nenhuma —'}</span>
+          <svg class="perfil-dropdown-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="6 9 12 15 18 9"></polyline>
+          </svg>
+        </div>
+        <div class="perfil-dropdown-menu" style="display: none;">
+          <div class="perfil-dropdown-option" data-value="">— Nenhuma —</div>
+          ${Perfil.RELIGIOES.map(r => `<div class="perfil-dropdown-option ${perfil.religiao === r ? 'selected' : ''}" data-value="${r}">${r}</div>`).join('')}
+        </div>
+      </div>
+    </div>`;
+    
+    // Denominação Cristã - SEMPRE no HTML, mas oculta inicialmente
+    html += `<div class="perfil-campo-item" data-religiao-dependente style="display: ${perfil.religiao === 'Cristianismo' ? 'block' : 'none'};">`;
+    html += '<label class="perfil-campo-label">Denominação Cristã</label>';
+    html += '<div class="perfil-denominacao-container">';
+    html += `<div class="perfil-dropdown" id="perf-denominacao-dropdown" data-field="denominacao" data-value="${perfil.denominacao}" style="flex: 1;">
+      <div class="perfil-dropdown-trigger">
+        <span class="perfil-dropdown-text">${perfil.denominacao || '— Nenhuma —'}</span>
+        <svg class="perfil-dropdown-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="6 9 12 15 18 9"></polyline>
+        </svg>
+      </div>
+      <div class="perfil-dropdown-menu" style="display: none;">
+        <div class="perfil-dropdown-option" data-value="">— Nenhuma —</div>
+        ${Perfil.DENOMINACOES_CRISTIANISMO.map(d => `<div class="perfil-dropdown-option ${perfil.denominacao === d ? 'selected' : ''}" data-value="${d}">${d}</div>`).join('')}
+      </div>
+    </div>`;
+    html += '<button class="perfil-btn-add-denominacao" id="btn-add-denom" type="button">+</button>';
+    html += '</div>';
+    html += '</div>';
+
+    // VERTENTES TEOLÓGICAS - Sistema de Tags Dinâmico
+    html += '<div class="perfil-vertentes-box">';
+    html += '<h3 class="perfil-secao-titulo">Vertentes Teológicas</h3>';
+    
+    // Campo de input + botão adicionar em cima
+    html += '<div class="perfil-vertentes-input-area">';
+    html += '<input type="text" id="vertente-input" class="perfil-vertente-input" placeholder="Digita a vertente..." autocomplete="off">';
+    html += '<button class="perfil-btn-add-vertente" id="btn-add-vertente" type="button">+</button>';
+    html += '</div>';
+    
+    // Cápsulas selecionadas (aparecem acima, clicando remove)
+    html += '<div class="perfil-vertentes-selecionadas" id="vertentes-selecionadas">';
+    for (const v of perfil.vertentes) {
+      html += `<div class="perfil-vertente-capsula" title="Clica para remover">${v}</div>`;
+    }
+    html += '</div>';
+    
+    // Lista dinâmica de opções (só mostra não selecionadas)
+    html += '<div class="perfil-vertentes-lista" id="vertentes-lista">';
+    for (const v of Perfil.VERTENTES_TEOLOGICAS) {
+      if (!perfil.vertentes.includes(v)) {
+        html += `<button class="perfil-vertente-opcao" data-vertente="${v}" type="button">${v}</button>`;
+      }
+    }
+    html += '</div>';
+    html += '</div>';
+
+    // BIO
+    html += '<div class="perfil-bio-box">';
+    html += '<label class="perfil-bio-label">Bio</label>';
+    html += `<textarea class="perfil-textarea-bio" id="campo-proposito" placeholder="Conte sobre você...">${Leitura.escapar(perfil.proposito)}</textarea>`;
+    html += '</div>';
+
+    // SOCIAL
+    html += '<div class="perfil-social-box">';
+    html += '<h3 class="perfil-secao-titulo">Redes Sociais</h3>';
+    html += '<div class="perfil-social-edit-lista" id="social-edit-lista">';
+    for (let i = 0; i < perfil.contatos.length; i++) {
+      const c = perfil.contatos[i];
+      html += `<div class="perfil-social-edit-item">
+        <div class="perfil-social-edit-icone">${this.getIconeSocial(c.tipo)}</div>
+        <div class="perfil-social-edit-input">
+          <span class="perfil-social-edit-prefixo">@${Leitura.escapar(c.tipo)}</span>
+          <input type="text" data-idx="${i}" value="${Leitura.escapar(c.valor)}" placeholder="usuário">
+        </div>
+        <button class="perfil-social-edit-remover" data-idx="${i}" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>`;
+    }
+    html += '</div>';
+
+    if (perfil.contatos.length < 3) {
+      html += '<div class="perfil-adicionar-social">';
+      html += '<button class="perfil-btn-adicionar" id="btn-add-social" type="button">+</button>';
+      html += '<div class="perfil-menu-adicionar" id="menu-social">';
+      for (const t of Perfil.TIPOS_CONTATO) {
+        html += `<button class="perfil-menu-item" data-tipo="${t}" type="button">@${t}</button>`;
+      }
+      html += '</div>';
+      html += '</div>';
+    }
+    html += '</div>';
+
+    // BOTÕES
+    html += '<div class="perfil-botoes-edit-area">';
+    html += '<button class="perfil-botao-salvar" id="btn-salvar-perfil" type="button">Salvar</button>';
+    html += '<button class="perfil-botao-voltar" id="btn-voltar-perfil" type="button">Cancelar</button>';
+    html += '</div>';
+
+    html += '</div>';
+    corpo.innerHTML = html;
+
+    // EVENTOS - FOTO
+    const inputFoto = document.getElementById('input-foto-perfil');
+    const fotoPreview = document.getElementById('foto-preview');
+    const fotoBadge = document.getElementById('foto-badge');
+
+    if (fotoPreview) fotoPreview.addEventListener('click', () => inputFoto?.click());
+    if (fotoBadge) fotoBadge.addEventListener('click', () => inputFoto?.click());
+
+    if (inputFoto) {
+      inputFoto.onchange = async (e) => {
+        const file = e.target.files?.[0];
+        if (file) {
+          try {
+            const base64 = await PerfilFoto.procesarArquivo(file);
+            PerfilFoto.salvar(base64);
+            fotoPreview.innerHTML = `<img src="${base64}" alt="Preview">`;
+          } catch (err) {
+            this.avisar({ titulo: 'Erro', html: err.message });
+          }
+        }
+      };
+    }
+
+    // EVENTOS - DROPDOWN CUSTOMIZADO RELIGIÃO
+    // Setup dropdown customizado para Religião
+    this._setupDropdown('perf-religiao-dropdown', () => {
+      const denominacaoContainer = document.querySelector('.perfil-campo-item[data-religiao-dependente]');
+      if (denominacaoContainer) {
+        const religiaoDrop = document.getElementById('perf-religiao-dropdown');
+        if (religiaoDrop.dataset.value === 'Cristianismo') {
+          denominacaoContainer.style.display = 'block';
+        } else {
+          denominacaoContainer.style.display = 'none';
+        }
+      }
+    });
+
+    // Setup dropdown customizado para Denominação
+    this._setupDropdown('perf-denominacao-dropdown');
+
+    // EVENTOS - BOTÃO "+" DENOMINAÇÃO (Adicionar customizada)
+    // Criar Modal Customizado em vez de usar prompt() nativo
+    const btnAddDenom = document.getElementById('btn-add-denom');
+    if (btnAddDenom) {
+      btnAddDenom.addEventListener('click', (e) => {
+        e.preventDefault();
+        
+        // Criar modal customizado
+        const modal = document.createElement('div');
+        modal.id = 'modal-denom-custom';
+        modal.innerHTML = `
+          <div class="modal-overlay" id="modal-overlay-denom">
+            <div class="modal-box">
+              <div class="modal-titulo">Adicionar Denominação Customizada</div>
+              <div class="modal-corpo">
+                <input type="text" id="modal-denom-input" class="modal-input" placeholder="Digite a denominação..." autofocus>
+              </div>
+              <div class="modal-botoes">
+                <button class="modal-botao modal-botao-cancelar" id="modal-denom-cancelar">Cancelar</button>
+                <button class="modal-botao modal-botao-confirmar" id="modal-denom-confirmar">Confirmar</button>
+              </div>
+            </div>
+          </div>
+        `;
+        
+        document.body.appendChild(modal);
+        
+        const overlay = document.getElementById('modal-overlay-denom');
+        const inputDenom = document.getElementById('modal-denom-input');
+        const btnConfirmar = document.getElementById('modal-denom-confirmar');
+        const btnCancelar = document.getElementById('modal-denom-cancelar');
+        
+        // Focar no input
+        inputDenom.focus();
+        
+        // Fechar ao clicar em overlay
+        overlay.addEventListener('click', (e) => {
+          if (e.target === overlay) {
+            modal.remove();
+          }
+        });
+        
+        // Cancelar
+        btnCancelar.addEventListener('click', () => {
+          modal.remove();
+        });
+        
+        // Confirmar
+        btnConfirmar.addEventListener('click', () => {
+          const valor = inputDenom.value.trim();
+          if (valor) {
+            const denomDropdown = document.getElementById('perf-denominacao-dropdown');
+            if (denomDropdown) {
+              const text = denomDropdown.querySelector('.perfil-dropdown-text');
+              if (text) text.textContent = valor;
+              denomDropdown.dataset.value = valor;
+            }
+          }
+          modal.remove();
+        });
+        
+        // Confirmar ao pressionar Enter
+        inputDenom.addEventListener('keypress', (e) => {
+          if (e.key === 'Enter') {
+            btnConfirmar.click();
+          }
+        });
+      });
+    }
+
+    // EVENTOS - VERTENTES TEOLÓGICAS (Sistema de Tags Dinâmico)
+    const inputVertente = document.getElementById('vertente-input');
+    const btnAddVertente = document.getElementById('btn-add-vertente');
+    const containerSelecionadas = document.getElementById('vertentes-selecionadas');
+    const containerLista = document.getElementById('vertentes-lista');
+    
+    // ✅ CRÍTICO: Adicionar eventos de click nas cápsulas renderizadas
+    containerSelecionadas.querySelectorAll('.perfil-vertente-capsula').forEach(capsula => {
+      capsula.addEventListener('click', (e) => {
+        e.preventDefault();
+        capsula.remove();
+        inputVertente.value = '';
+        atualizarVertentes();
+      });
+    });
+    
+    const atualizarVertentes = () => {
+      const selecionadas = [...containerSelecionadas.querySelectorAll('.perfil-vertente-capsula')];
+      const verticosSel = selecionadas.map(c => c.textContent.trim()); // ✅ Usar textContent em vez de data-vertente
+      
+      // Atualizar lista (só mostra não selecionadas)
+      containerLista.innerHTML = '';
+      for (const v of Perfil.VERTENTES_TEOLOGICAS) {
+        if (!verticosSel.includes(v)) {
+          const btn = document.createElement('button');
+          btn.className = 'perfil-vertente-opcao';
+          btn.type = 'button';
+          btn.dataset.vertente = v;
+          btn.textContent = v;
+          btn.addEventListener('click', (e) => {
+            e.preventDefault();
+            adicionarVertente(v);
+          });
+          containerLista.appendChild(btn);
+        }
+      }
+    };
+    
+    const adicionarVertente = (vertente) => {
+      if (!vertente || vertente.trim() === '') return;
+      
+      // Evitar duplicatas
+      const selecionadas = containerSelecionadas.querySelectorAll('.perfil-vertente-capsula');
+      if ([...selecionadas].some(c => c.dataset.vertente === vertente)) return;
+      
+      // Criar cápsula
+      const capsula = document.createElement('div');
+      capsula.className = 'perfil-vertente-capsula';
+      capsula.dataset.vertente = vertente;
+      capsula.textContent = vertente;
+      capsula.title = 'Clica para remover';
+      capsula.addEventListener('click', () => {
+        capsula.remove();
+        inputVertente.value = '';
+        atualizarVertentes();
+      });
+      
+      containerSelecionadas.appendChild(capsula);
+      inputVertente.value = '';
+      atualizarVertentes();
+    };
+    
+    // Botão "+"
+    if (btnAddVertente) {
+      btnAddVertente.addEventListener('click', (e) => {
+        e.preventDefault();
+        const valor = (inputVertente.value || '').trim();
+        if (valor) {
+          adicionarVertente(valor);
+        } else {
+          inputVertente.focus();
+        }
+      });
+    }
+    
+    // Enter no input
+    if (inputVertente) {
+      inputVertente.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          const valor = (inputVertente.value || '').trim();
+          if (valor) {
+            adicionarVertente(valor);
+          }
+        }
+      });
+    }
+    
+    atualizarVertentes();
+
+    // EVENTOS - MENU DROPDOWN
+    const btnAdd = document.getElementById('btn-add-social');
+    const menu = document.getElementById('menu-social');
+
+    if (btnAdd && menu) {
+      btnAdd.addEventListener('click', (e) => {
+        e.preventDefault();
+        menu.classList.toggle('aberto');
+      });
+    }
+
+    corpo.querySelectorAll('.perfil-menu-item').forEach(item => {
+      item.addEventListener('click', (e) => {
+        e.preventDefault();
+        const tipo = item.dataset.tipo;
+        
+        // ✅ CRÍTICO: Salvar valores dos inputs ANTES de adicionar novo
+        const inputsAntes = corpo.querySelectorAll('.perfil-social-edit-item input');
+        const contatosAtualizados = [...Perfil.todos().contatos];
+        inputsAntes.forEach(input => {
+          const idx = +input.dataset.idx;
+          if (idx < contatosAtualizados.length) {
+            contatosAtualizados[idx].valor = input.value.trim();
+          }
+        });
+        
+        // Salvar estado atual antes de re-renderizar
+        const perfilAtual = Perfil.todos();
+        Perfil.salvar({
+          ...perfilAtual,
+          contatos: contatosAtualizados
+        });
+        
+        // Agora adiciona novo contato
+        Perfil.adicionarContato(tipo, '');
+        if (menu) menu.classList.remove('aberto');
+        
+        // Re-renderiza (agora com valores salvos)
+        this.desenharPerfilEdit(corpo);
+      });
+    });
+
+    // EVENTOS - REMOVER
+    corpo.querySelectorAll('.perfil-social-edit-remover').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.preventDefault();
+        const idx = +btn.dataset.idx;
+        Perfil.removerContato(idx);
+        this.desenharPerfilEdit(corpo);
+      });
+    });
+
+    // EVENTOS - SALVAR
+    document.getElementById('btn-salvar-perfil').addEventListener('click', () => {
+      // Capturar DIRETAMENTE dos elementos
+      const nomeEl = document.getElementById('perf-nome');
+      const localEl = document.getElementById('perf-local');
+      const religiaoDropdown = document.getElementById('perf-religiao-dropdown');
+      const denominacaoDropdown = document.getElementById('perf-denominacao-dropdown');
+      
+      // Valores RAW
+      const nome = (nomeEl?.value || '').trim() || 'Anônimo';
+      const local = (localEl?.value || '').trim();
+      const religiao = (religiaoDropdown?.dataset.value || '').trim();
+      const denominacao = (denominacaoDropdown?.dataset.value || '').trim();
+
+      const proposito = (document.getElementById('campo-proposito').value || '').trim();
+
+      const vertentes = [];
+      document.querySelectorAll('.perfil-vertente-capsula').forEach(capsula => {
+        vertentes.push(capsula.textContent.trim());
+      });
+
+      const contatos = [...Perfil.todos().contatos];
+      corpo.querySelectorAll('.perfil-social-edit-item input').forEach(input => {
+        const idx = +input.dataset.idx;
+        if (idx < contatos.length) contatos[idx].valor = input.value.trim();
+      });
+
+      Perfil.salvar({
+        nome,
+        local,
+        religiao,
+        denominacao,
+        vertentes,
+        proposito,
+        contatos,
+        foto: Perfil.todos().foto,
+      });
+
+      this._modoPerfil = 'view';
+      this.desenharPerfil();
+    });
+
+    // EVENTOS - VOLTAR
+    document.getElementById('btn-voltar-perfil').addEventListener('click', () => {
+      this._modoPerfil = 'view';
+      this.desenharPerfil();
+    });
+    } catch (erro) {
+      console.error('❌ ERRO ao renderizar EDIT:', erro);
+      console.log('🔄 Tentando recuperar perfil...');
+      Perfil.resetar();
+      corpo.innerHTML = `
+        <div style="padding: 20px; text-align: center;">
+          <p style="color: #8B3E3E; font-weight: bold;">⚠️ Erro ao carregar perfil</p>
+          <p style="font-size: 12px; color: #666;">Dados foram resetados. Tente novamente.</p>
+          <button onclick="location.reload()" style="padding: 8px 16px; background: #8B3E3E; color: white; border: none; border-radius: 4px; cursor: pointer;">
+            Recarregar página
+          </button>
+        </div>
+      `;
+    }
+  },
+
+  /* ============================================================ Ajustes */
+
+  resetarTudo() {
+    console.log('🔄 RESETANDO TUDO...');
+    
+    // 1. Resetar perfil
+    Perfil.resetar();
+    
+    // 2. Limpar localStorage
+    localStorage.clear();
+    
+    // 3. Limpar Service Worker cache
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then(registrations => {
+        registrations.forEach(registration => {
+          registration.unregister();
+          console.log('✅ Service Worker removido');
+        });
+      });
+    }
+    
+    // 4. Recarregar página
+    console.log('🔄 Recarregando página...');
+    setTimeout(() => {
+      location.reload();
+    }, 500);
+  },
+
+  /* ============================================================ Ajustes */
 
   desenharAjustes() {
     const corpo = document.getElementById('corpo-ajustes');
@@ -4438,9 +5642,9 @@ const App = {
 
     const cartoes = notas.map(a => `<div class="cartao-anot">
         <button class="anot-corpo" data-editar="${a.id}">
-          <div class="anot-ref">${Anotacoes.refDe(a)}</div>
+          <div class="anot-ref">${Anotacoes.refDe(a)}${a.somenteLeitura ? ' <span class="autor-cadeado" title="Somente leitura">🔒</span>' : ''}</div>
           <div class="anot-previa">${Leitura.escapar(Anotacoes.resumo(a)) || '<em>(nota vazia)</em>'}</div>
-          <div class="quando">${Anotacoes.quandoDe(a)}</div>
+          <div class="quando">${this._creditoRodape(a, Anotacoes.quandoDe(a))}</div>
         </button>
         <button class="xis" data-excluir-anot="${a.id}" aria-label="Excluir anotação"
           title="Excluir anotação"><svg class="icone"><use href="#i-lixeira"/></svg></button>
@@ -4456,6 +5660,14 @@ const App = {
 
     corpo.querySelectorAll('[data-editar]').forEach(el => {
       el.onclick = () => this.editarAnotacao(vers, el.dataset.editar);
+    });
+
+    // Clicar no nome do autor abre o popup do perfil (sem abrir a nota)
+    corpo.querySelectorAll('.autor-nome').forEach(el => {
+      el.onclick = (e) => {
+        e.stopPropagation();
+        this.abrirPerfilAutorPorId(el.dataset.autorId);
+      };
     });
 
     corpo.querySelectorAll('[data-excluir-anot]').forEach(el => {
@@ -4483,6 +5695,13 @@ const App = {
     // nota que já existe, o conjunto vem dela e não muda aqui.
     this.anotVersiculos = (versiculos && versiculos.length) ? versiculos.slice() : [vers];
     const a = id ? Anotacoes.achar(id) : null;
+
+    // Conteúdo de terceiro em modo somente-leitura: não abre o editor.
+    // Mostra a nota em modo leitura, com o selo do autor.
+    if (a && a.somenteLeitura) {
+      return this._verAnotacaoBloqueada(vers, a);
+    }
+
     document.getElementById('titulo-anot').textContent =
       refLabel || (a ? Anotacoes.refDe(a) : this.refDaPassagem(vers));
     const corpo = document.getElementById('corpo-anot');
@@ -4524,6 +5743,35 @@ const App = {
       </div>`;
 
     this.ligarEditorAnotacao(vers, id);
+    this.abrir('painel-anot');
+  },
+
+  /* Exibe uma anotação de terceiro em modo somente-leitura: conteúdo visível,
+   * selo do autor clicável, sem editor. */
+  _verAnotacaoBloqueada(vers, a) {
+    document.getElementById('titulo-anot').textContent = Anotacoes.refDe(a);
+    const corpo = document.getElementById('corpo-anot');
+    corpo.classList.remove('corpo-editor');
+
+    corpo.innerHTML = `
+      <div class="leitura-anot">
+        <article class="folha-anot folha-bloqueada">
+          ${this._seloAutor(a)}
+          <div class="corpo-nota">${Anotacoes.limpar(a.corpo)}</div>
+          <div class="aviso-bloqueado">🔒 Este conteúdo foi compartilhado apenas para leitura.</div>
+        </article>
+      </div>
+      <div class="acoes-anot">
+        <button class="botao secundario" id="fechar-anot-bloq">Fechar</button>
+      </div>`;
+
+    const btn = document.getElementById('fechar-anot-bloq');
+    if (btn) btn.onclick = () => this.abrirAnotacoes(vers);
+
+    // Nome do autor abre o popup do perfil
+    const nomeBtn = corpo.querySelector('.autor-nome');
+    if (nomeBtn) nomeBtn.onclick = () => this.abrirPerfilAutor(a.autor);
+
     this.abrir('painel-anot');
   },
 
@@ -5766,7 +7014,9 @@ const App = {
       caderno: () => { this.desenharCaderno(); this.abrir('painel-caderno'); },
       referencias: () => this.abrirReferenciasCruzadas(),
       ouvir: () => this.iniciarOuvir(),
+      perfil: () => { this._modoPerfil = 'view'; this.desenharPerfil(); this.abrir('painel-perfil'); },
       ajustes: () => { this.dobraA = null; this.desenharAjustes(); this.abrir('painel-ajustes'); },
+      backup: () => { this.desenharBackup(); this.abrir('painel-backup'); },
       compartilhar: () => { this.desenharCompartilhar(); this.abrir('painel-compartilhar'); },
       'fechar-app': () => this.fecharAplicativo(),
     };
@@ -9085,6 +10335,58 @@ const App = {
         }
         this.desenharGrupo(id);
       };
+    });
+  },
+
+  /* Dropdown Customizado - Sem fechar ao scroll */
+  _setupDropdown(dropdownId, onChangeCallback = null) {
+    const dropdown = document.getElementById(dropdownId);
+    if (!dropdown) return;
+
+    const trigger = dropdown.querySelector('.perfil-dropdown-trigger');
+    const menu = dropdown.querySelector('.perfil-dropdown-menu');
+    const options = dropdown.querySelectorAll('.perfil-dropdown-option');
+    const text = dropdown.querySelector('.perfil-dropdown-text');
+
+    if (!trigger || !menu) return;
+
+    // Abrir/fechar dropdown
+    trigger.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const isOpen = menu.style.display !== 'none';
+      menu.style.display = isOpen ? 'none' : 'block';
+    });
+
+    // Selecionar opção
+    options.forEach(option => {
+      option.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const value = option.dataset.value;
+        
+        // Atualizar texto e valor
+        text.textContent = value || '— Nenhuma —';
+        dropdown.dataset.value = value;
+        
+        // Remover classe selected de todas
+        options.forEach(o => o.classList.remove('selected'));
+        // Adicionar selected à clicada
+        option.classList.add('selected');
+        
+        // Fechar menu
+        menu.style.display = 'none';
+        
+        // Callback se houver
+        if (onChangeCallback) {
+          onChangeCallback(value);
+        }
+      });
+    });
+
+    // Fechar dropdown ao clicar fora
+    document.addEventListener('click', (e) => {
+      if (!dropdown.contains(e.target)) {
+        menu.style.display = 'none';
+      }
     });
   },
 

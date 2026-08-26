@@ -38,6 +38,7 @@
   <symbol id="i-sair" viewBox="0 0 24 24"><path d="M12 3v9" stroke-linecap="round"/><path d="M6.4 7a8 8 0 1 0 11.2 0" stroke-linecap="round"/></symbol>
   <symbol id="i-referencias" viewBox="0 0 24 24"><circle cx="6" cy="5" r="2.2"/><circle cx="6" cy="19" r="2.2"/><circle cx="18" cy="12" r="2.2"/><path d="M6 7.2v9.6M8.1 5H12a4 4 0 0 1 4 4v.8M8.1 19H12a4 4 0 0 0 4-4v-.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="i-compartilhar" viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4" stroke-linecap="round"/></symbol>
+  <symbol id="i-backup" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke-linecap="round" stroke-linejoin="round"/><path d="M7 10l5 5 5-5" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 15V3" stroke-linecap="round"/></symbol>
   <symbol id="i-fixar" viewBox="0 0 24 24"><path d="M9 3h6l-1 7 3 3v2H7v-2l3-3z" stroke-linejoin="round"/><path d="M12 15v6" stroke-linecap="round"/></symbol>
   <symbol id="i-lixeira" viewBox="0 0 24 24"><path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13M10 11v6M14 11v6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="i-fechar" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" stroke-linecap="round"/></symbol>
@@ -67,6 +68,7 @@
   <symbol id="i-vers-antes" viewBox="0 0 24 24"><rect x="5" y="5" width="2.4" height="14" rx="1" fill="currentColor" stroke="none"/><path d="M20 5l-10 7 10 7z" fill="currentColor" stroke="none"/></symbol>
   <symbol id="i-vers-depois" viewBox="0 0 24 24"><path d="M4 5l10 7-10 7z" fill="currentColor" stroke="none"/><rect x="16.6" y="5" width="2.4" height="14" rx="1" fill="currentColor" stroke="none"/></symbol>
   <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5" stroke-linecap="round"/><circle cx="12" cy="7.6" r="1" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="i-usuario" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-3.3 3.6-6 8-6s8 2.7 8 6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
 </svg>
 
 <header class="topo">
@@ -105,7 +107,9 @@
   <button data-menu="caderno"><svg class="icone"><use href="#i-caderno"/></svg><span>Anotação</span></button>
   <button data-menu="referencias"><svg class="icone"><use href="#i-referencias"/></svg><span>Referências cruzadas</span></button>
   <button data-menu="ouvir"><svg class="icone"><use href="#i-ouvir"/></svg><span>Ouvir</span></button>
+  <button data-menu="perfil"><svg class="icone"><use href="#i-usuario"/></svg><span>Perfil</span></button>
   <button data-menu="ajustes"><svg class="icone"><use href="#i-ajustes"/></svg><span>Ajustes</span></button>
+  <button data-menu="backup"><svg class="icone"><use href="#i-backup"/></svg><span>Backup e Partilha</span></button>
   <button data-menu="compartilhar"><svg class="icone"><use href="#i-compartilhar"/></svg><span>Compartilhar</span></button>
   <button data-menu="fechar-app" class="menu-sair"><svg class="icone"><use href="#i-sair"/></svg><span>Fechar aplicativo</span></button>
 </div>
@@ -471,6 +475,15 @@
   <div class="corpo" id="corpo-anot"></div>
 </aside>
 
+<aside class="painel" id="painel-perfil" aria-hidden="true">
+  <header>
+    <button class="voltar-painel" data-voltar aria-label="Voltar"><svg class="icone"><use href="#i-antes"/></svg></button>
+    <h2>Perfil</h2>
+    <button data-fechar aria-label="Fechar"><svg class="icone"><use href="#i-fechar"/></svg></button>
+  </header>
+  <div class="corpo" id="corpo-perfil"></div>
+</aside>
+
 <aside class="painel" id="painel-ajustes" aria-hidden="true">
   <header>
     <button class="voltar-painel" data-voltar aria-label="Voltar"><svg class="icone"><use href="#i-antes"/></svg></button>
@@ -487,6 +500,15 @@
     <button data-fechar aria-label="Fechar"><svg class="icone"><use href="#i-fechar"/></svg></button>
   </header>
   <div class="corpo" id="corpo-compartilhar"></div>
+</aside>
+
+<aside class="painel" id="painel-backup" aria-hidden="true">
+  <header>
+    <button class="voltar-painel" data-voltar aria-label="Voltar"><svg class="icone"><use href="#i-antes"/></svg></button>
+    <h2>Backup e Partilha</h2>
+    <button data-fechar aria-label="Fechar"><svg class="icone"><use href="#i-fechar"/></svg></button>
+  </header>
+  <div class="corpo" id="corpo-backup"></div>
 </aside>
 
 <aside class="painel painel-refs" id="painel-refs-cruzadas" aria-hidden="true">
@@ -548,6 +570,7 @@
 <div id="pdf-raiz" data-estilo="historico" aria-hidden="true"></div>
 
 <script src="assets/js/dados.js"></script>
+<script src="assets/js/armazenamento-idb.js"></script>
 <script src="assets/js/armazenamento.js"></script>
 <script src="assets/js/cores.js"></script>
   <script src="assets/js/morfologia.js"></script>
@@ -556,6 +579,10 @@
 <script src="assets/js/busca.js"></script>
 <script src="assets/js/voz.js"></script>
 <script src="assets/js/seletor.js"></script>
+<script src="assets/js/perfil.js"></script>
+<script src="assets/js/perfil-foto.js"></script>
+<script src="assets/js/exportacao.js"></script>
+<script src="assets/js/importacao.js"></script>
 <script src="assets/js/app.js"></script>
 </body>
 </html>

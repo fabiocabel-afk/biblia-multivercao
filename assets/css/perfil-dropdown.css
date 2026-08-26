@@ -1,0 +1,44 @@
+/* Posicionamento do dropdown de rede social - CORRIGIDO */
+
+.perfil-adicionar-social {
+  position: relative;
+  display: inline-flex;
+  gap: 8px;
+}
+
+.perfil-menu-adicionar {
+  display: none;
+  position: absolute;
+  top: 100%;  /* Fica embaixo do botão */
+  right: 0;
+  background: white;
+  border: 1px solid #d4c5b0;
+  border-radius: 4px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  z-index: 1000;
+  min-width: 140px;
+  margin-top: 4px;
+}
+
+.perfil-menu-adicionar.aberto {
+  display: flex;
+  flex-direction: column;
+}
+
+.perfil-menu-item {
+  padding: 8px 12px;
+  font-size: 12px;
+  color: #2c1810;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  white-space: nowrap;
+  transition: background .15s;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.perfil-menu-item:hover {
+  background: rgba(107, 68, 35, 0.1);
+}

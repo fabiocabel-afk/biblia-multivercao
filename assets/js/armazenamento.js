@@ -4,25 +4,27 @@
  * O historico e o coracao do app: ele nunca apaga nada. Grava sozinho a cada
  * passagem aberta (rascunho), e o botao Salvar serve so para ORGANIZAR — para
  * declarar que uma pregacao terminou e comecar folha limpa.
+ *
+ * FASE 1 (Aug 24): Migração para IndexedDB com fallback automático para
+ * localStorage. Interface idêntica, mas agora com suporte a volumes maiores
+ * (50+ MB vs. 5-10 MB) e preparado para Imagem, Tabela e Linha do Tempo.
+ *
+ * O módulo GuardaIndexedDB (carregado antes) oferece a mesma interface síncrona
+ * que o Guarda legado. Isso aqui é o wrapper que delega para ele.
  */
 
 const Guarda = (() => {
-  const PREFIXO = 'biblia:';
-  let memoria = {};
-  let temLocalStorage = true;
-
-  try {
-    localStorage.setItem(PREFIXO + 'teste', '1');
-    localStorage.removeItem(PREFIXO + 'teste');
-  } catch {
-    temLocalStorage = false;
-  }
+  // Usa GuardaIndexedDB (carregado antes) como backend
+  // Se não estiver disponível (muito improvável), cai para fallback legado
+  const backend = typeof GuardaIndexedDB !== 'undefined' ? GuardaIndexedDB : null;
 
   function ler(chave, padrao) {
+    if (backend) {
+      return backend.ler(chave, padrao);
+    }
+    // Fallback legado (compatibilidade 100%)
     try {
-      const bruto = temLocalStorage
-        ? localStorage.getItem(PREFIXO + chave)
-        : memoria[chave];
+      const bruto = localStorage.getItem('biblia:' + chave);
       return bruto ? JSON.parse(bruto) : padrao;
     } catch {
       return padrao;
@@ -30,16 +32,54 @@ const Guarda = (() => {
   }
 
   function gravar(chave, valor) {
-    const bruto = JSON.stringify(valor);
+    if (backend) {
+      backend.gravar(chave, valor);
+      return;
+    }
+    // Fallback legado
     try {
-      if (temLocalStorage) localStorage.setItem(PREFIXO + chave, bruto);
-      else memoria[chave] = bruto;
-    } catch {
-      memoria[chave] = bruto;
+      localStorage.setItem('biblia:' + chave, JSON.stringify(valor));
+    } catch (e) {
+      console.warn(`Erro ao gravar ${chave}:`, e);
     }
   }
 
-  return { ler, gravar, persistente: () => temLocalStorage };
+  function persistente() {
+    if (backend) return backend.persistente();
+    try {
+      localStorage.setItem('biblia:teste', '1');
+      localStorage.removeItem('biblia:teste');
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  function deletar(chave) {
+    if (backend && backend.deletar) {
+      backend.deletar(chave);
+      return;
+    }
+    // Fallback legado
+    try {
+      localStorage.removeItem('biblia:' + chave);
+    } catch (e) {
+      console.warn(`Erro ao deletar ${chave}:`, e);
+    }
+  }
+
+  const exports = { ler, gravar, persistente, deletar };
+
+  // Garante que fica no escopo global (Node.js + navegador)
+  if (typeof globalThis !== 'undefined') {
+    globalThis.Guarda = exports;
+  } else if (typeof global !== 'undefined') {
+    global.Guarda = exports;
+  } else if (typeof window !== 'undefined') {
+    window.Guarda = exports;
+  }
+
+  return exports;
 })();
 
 /* ------------------------------------------------------------ preferencias */

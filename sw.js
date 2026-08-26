@@ -19,7 +19,7 @@
 /* A casca sobe de versao a cada mudanca no app, para o navegador nao servir a
  * versao antiga. Os textos biblicos ficam numa versao propria e estavel: eles
  * nunca mudam, e nao ha por que rebaixar tudo por causa de um ajuste de tela. */
-const CASCA = 'casca-biblia-v160';
+const CASCA = 'casca-biblia-v189-dedupe-nome-autor-rodape';
 const TEXTOS = 'textos-biblia-v1';
 
 const ESSENCIAIS = [
@@ -32,6 +32,7 @@ const ESSENCIAIS = [
   './assets/fonts/eb-garamond-latin-400-italic.woff2',
   './assets/fonts/eb-garamond-latin-600-normal.woff2',
   './assets/js/dados.js',
+  './assets/js/armazenamento-idb.js',
   './assets/js/armazenamento.js',
   './assets/js/cores.js',
   './assets/js/morfologia.js',
@@ -39,6 +40,11 @@ const ESSENCIAIS = [
   './assets/js/leitura.js',
   './assets/js/busca.js',
   './assets/js/voz.js',
+  './assets/js/seletor.js',
+  './assets/js/perfil.js',
+  './assets/js/perfil-foto.js',
+  './assets/js/exportacao.js',
+  './assets/js/importacao.js',
   './assets/js/app.js',
   './data/meta/versoes.json',
   './data/meta/estrutura.json',
