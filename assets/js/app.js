@@ -4667,10 +4667,13 @@ const App = {
       html += '<h3 class="perfil-secao-titulo">Redes Sociais</h3>';
       html += '<div class="perfil-social-lista">';
       for (const c of perfil.contatos) {
+        const regra = Perfil.regraContato(c.tipo);
+        const prefixo = regra.prefixo
+          ? `<span class="perfil-social-prefixo">${regra.prefixo}</span>` : '';
         html += `<div class="perfil-social-capsula">
           <div class="perfil-social-icone">${this.getIconeSocial(c.tipo)}</div>
           <div class="perfil-social-usuario">
-            <span class="perfil-social-prefixo">@${Leitura.escapar(c.tipo)}</span>
+            ${prefixo}
             <span class="perfil-social-valor">${Leitura.escapar(c.valor)}</span>
           </div>
         </div>`;
@@ -4739,11 +4742,15 @@ const App = {
       vertentes = Array.isArray(salvo.vertentes) ? salvo.vertentes : [];
     }
 
-    // Contatos: parte da lista salva (tipos) e atualiza os valores digitados
+    // Contatos: parte da lista salva (tipos) e atualiza os valores digitados,
+    // normalizando conforme o tipo (username sem @, telefone formatado, etc.)
     const contatos = Array.isArray(salvo.contatos) ? salvo.contatos.map(c => ({ ...c })) : [];
     escopo.querySelectorAll('.perfil-social-edit-item input').forEach(input => {
       const idx = +input.dataset.idx;
-      if (idx >= 0 && idx < contatos.length) contatos[idx].valor = input.value.trim();
+      if (idx >= 0 && idx < contatos.length) {
+        const tipo = input.dataset.tipoContato || contatos[idx].tipo;
+        contatos[idx].valor = Perfil.normalizarContato(tipo, input.value);
+      }
     });
 
     return { nome, local, religiao, denominacao, vertentes, proposito, contatos, foto: salvo.foto };
@@ -4863,15 +4870,23 @@ const App = {
     html += '<div class="perfil-social-edit-lista" id="social-edit-lista">';
     for (let i = 0; i < perfil.contatos.length; i++) {
       const c = perfil.contatos[i];
-      html += `<div class="perfil-social-edit-item">
-        <div class="perfil-social-edit-icone">${this.getIconeSocial(c.tipo)}</div>
-        <div class="perfil-social-edit-input">
-          <span class="perfil-social-edit-prefixo">@${Leitura.escapar(c.tipo)}</span>
-          <input type="text" data-idx="${i}" value="${Leitura.escapar(c.valor)}" placeholder="usuário">
+      const regra = Perfil.regraContato(c.tipo);
+      const inputmode = (regra.modo === 'telefone' || regra.modo === 'telOuLink') ? 'tel'
+        : (regra.modo === 'email' ? 'email' : 'text');
+      html += `<div class="perfil-social-edit-item" data-tipo="${Leitura.escapar(c.tipo)}">
+        <div class="perfil-social-edit-linha">
+          <div class="perfil-social-edit-icone">${this.getIconeSocial(c.tipo)}</div>
+          <div class="perfil-social-edit-input">
+            ${regra.prefixo ? `<span class="perfil-social-edit-prefixo">${regra.prefixo}</span>` : ''}
+            <input type="text" data-idx="${i}" data-tipo-contato="${Leitura.escapar(c.tipo)}"
+              value="${Leitura.escapar(c.valor)}" placeholder="${regra.placeholder}"
+              inputmode="${inputmode}" autocomplete="off" autocapitalize="none" spellcheck="false">
+          </div>
+          <button class="perfil-social-edit-remover" data-idx="${i}" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
         </div>
-        <button class="perfil-social-edit-remover" data-idx="${i}" type="button">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-        </button>
+        <span class="perfil-social-erro" data-erro-idx="${i}" hidden></span>
       </div>`;
     }
     html += '</div>';
@@ -4881,7 +4896,7 @@ const App = {
       html += '<button class="perfil-btn-adicionar" id="btn-add-social" type="button">+</button>';
       html += '<div class="perfil-menu-adicionar" id="menu-social">';
       for (const t of Perfil.TIPOS_CONTATO) {
-        html += `<button class="perfil-menu-item" data-tipo="${t}" type="button">@${t}</button>`;
+        html += `<button class="perfil-menu-item" data-tipo="${t}" type="button">${this.getIconeSocial(t)} ${t}</button>`;
       }
       html += '</div>';
       html += '</div>';
@@ -5027,25 +5042,29 @@ const App = {
       });
     });
     
+    // Normaliza para comparar sem acento e sem caixa (ex.: "calvin" acha "Calvinismo")
+    const _norm = s => (s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
     const atualizarVertentes = () => {
       const selecionadas = [...containerSelecionadas.querySelectorAll('.perfil-vertente-capsula')];
       const verticosSel = selecionadas.map(c => c.textContent.trim()); // ✅ Usar textContent em vez de data-vertente
-      
-      // Atualizar lista (só mostra não selecionadas)
+      const filtro = _norm((inputVertente && inputVertente.value) || '');
+
+      // Atualizar lista (só mostra não selecionadas E que casam com o filtro digitado)
       containerLista.innerHTML = '';
       for (const v of Perfil.VERTENTES_TEOLOGICAS) {
-        if (!verticosSel.includes(v)) {
-          const btn = document.createElement('button');
-          btn.className = 'perfil-vertente-opcao';
-          btn.type = 'button';
-          btn.dataset.vertente = v;
-          btn.textContent = v;
-          btn.addEventListener('click', (e) => {
-            e.preventDefault();
-            adicionarVertente(v);
-          });
-          containerLista.appendChild(btn);
-        }
+        if (verticosSel.includes(v)) continue;
+        if (filtro && !_norm(v).includes(filtro)) continue; // filtro dinâmico
+        const btn = document.createElement('button');
+        btn.className = 'perfil-vertente-opcao';
+        btn.type = 'button';
+        btn.dataset.vertente = v;
+        btn.textContent = v;
+        btn.addEventListener('click', (e) => {
+          e.preventDefault();
+          adicionarVertente(v); // ao clicar, adiciona e limpa a caixa (some o filtro)
+        });
+        containerLista.appendChild(btn);
       }
     };
     
@@ -5088,6 +5107,8 @@ const App = {
     
     // Enter no input
     if (inputVertente) {
+      // Filtro dinâmico: a cada tecla, filtra as cápsulas não selecionadas
+      inputVertente.addEventListener('input', () => atualizarVertentes());
       inputVertente.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
           e.preventDefault();
@@ -5143,8 +5164,74 @@ const App = {
       });
     });
 
+    // EVENTOS - VALIDAÇÃO E MÁSCARA DAS REDES SOCIAIS
+    // Cada input valida conforme o tipo; telefone (e telOuLink numérico) ganha
+    // máscara (DD) XXXXX-XXXX enquanto digita. O erro aparece embaixo do campo.
+    const mostrarErroContato = (input) => {
+      const item = input.closest('.perfil-social-edit-item');
+      if (!item) return true;
+      const tipo = input.dataset.tipoContato;
+      const alvoErro = item.querySelector('.perfil-social-erro');
+      const { ok, msg } = Perfil.validarContato(tipo, input.value);
+      input.classList.toggle('invalido', !ok);
+      if (alvoErro) {
+        alvoErro.textContent = ok ? '' : msg;
+        alvoErro.hidden = ok;
+      }
+      return ok;
+    };
+
+    corpo.querySelectorAll('.perfil-social-edit-input input').forEach(input => {
+      const tipo = input.dataset.tipoContato;
+      const regra = Perfil.regraContato(tipo);
+
+      input.addEventListener('input', () => {
+        // Máscara de telefone: aplica quando o tipo é telefone, ou é telOuLink
+        // e o que foi digitado ainda não parece um link (só números).
+        if (regra.modo === 'telefone' ||
+            (regra.modo === 'telOuLink' && !/[a-zA-Z/:]/.test(input.value))) {
+          const pos = input.selectionStart === input.value.length; // cursor no fim?
+          const fmt = Perfil.formatarTelefone(input.value);
+          if (fmt !== input.value) {
+            input.value = fmt;
+            if (pos) input.setSelectionRange(fmt.length, fmt.length);
+          }
+        }
+        // Username: remove @ do início e espaços conforme digita
+        if (regra.modo === 'username') {
+          const limpo = input.value.replace(/^@+/, '').replace(/\s+/g, '');
+          if (limpo !== input.value) {
+            const atras = input.value.length - input.selectionStart;
+            input.value = limpo;
+            const nova = Math.max(0, limpo.length - atras);
+            input.setSelectionRange(nova, nova);
+          }
+        }
+        mostrarErroContato(input);
+      });
+      input.addEventListener('blur', () => mostrarErroContato(input));
+    });
+
     // EVENTOS - SALVAR
     document.getElementById('btn-salvar-perfil').addEventListener('click', () => {
+      // Antes de salvar, valida as redes sociais preenchidas. Se alguma estiver
+      // fora do padrão, não salva: mostra o erro e leva o foco pro primeiro campo.
+      let primeiroInvalido = null;
+      corpo.querySelectorAll('.perfil-social-edit-input input').forEach(input => {
+        const { ok, msg } = Perfil.validarContato(input.dataset.tipoContato, input.value);
+        const item = input.closest('.perfil-social-edit-item');
+        const alvoErro = item && item.querySelector('.perfil-social-erro');
+        input.classList.toggle('invalido', !ok);
+        if (alvoErro) { alvoErro.textContent = ok ? '' : msg; alvoErro.hidden = ok; }
+        if (!ok && !primeiroInvalido) primeiroInvalido = input;
+      });
+      if (primeiroInvalido) {
+        this.avisar({ titulo: 'Rede social inválida',
+          html: 'Confira os campos destacados em vermelho antes de salvar.' });
+        primeiroInvalido.focus();
+        return;
+      }
+
       // Usa o mesmo coletor do resto do fluxo — lê tudo do formulário de uma vez.
       Perfil.salvar(this._coletarPerfilFormulario(corpo));
 

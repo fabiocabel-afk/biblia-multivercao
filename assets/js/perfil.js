@@ -176,6 +176,107 @@ const Perfil = {
     return this.todos().vertentes.includes(vertente);
   },
 
+  /* ================================================== Regras por tipo de contato
+   * Cada rede social tem um formato próprio:
+   *  - username: começa com @, só letras/números/ponto/underscore, sem espaço
+   *    (Instagram, Facebook, TikTok)
+   *  - telefone: número BR formatado (DD) XXXXX-XXXX
+   *  - telOuLink: aceita telefone OU um link (Telegram, WhatsApp)
+   *  - email: padrão nome@servidor.com
+   * O prefixo "@" só aparece nos usernames; os demais não levam @. */
+  REGRAS_CONTATO: {
+    Instagram: { modo: 'username', prefixo: '@', placeholder: 'usuario' },
+    Facebook:  { modo: 'username', prefixo: '@', placeholder: 'usuario' },
+    TikTok:    { modo: 'username', prefixo: '@', placeholder: 'usuario' },
+    Telegram:  { modo: 'telOuLink', prefixo: '', placeholder: 'telefone ou link' },
+    WhatsApp:  { modo: 'telOuLink', prefixo: '', placeholder: 'telefone ou link' },
+    Telefone:  { modo: 'telefone', prefixo: '', placeholder: '(00) 00000-0000' },
+    Email:     { modo: 'email', prefixo: '', placeholder: 'nome@servidor.com' },
+  },
+
+  regraContato(tipo) {
+    return this.REGRAS_CONTATO[tipo] || { modo: 'texto', prefixo: '', placeholder: '' };
+  },
+
+  /* Tira @ do começo e espaços; deixa só o que vale num @usuário. */
+  limparUsuario(v) {
+    return (v || '').trim().replace(/^@+/, '').replace(/\s+/g, '');
+  },
+
+  /* Formata um telefone BR: (DD) XXXXX-XXXX (11 díg.) ou (DD) XXXX-XXXX (10). */
+  formatarTelefone(bruto) {
+    const d = (bruto || '').replace(/\D/g, '').slice(0, 11);
+    if (d.length === 0) return '';
+    if (d.length <= 2) return `(${d}`;
+    if (d.length <= 6) return `(${d.slice(0, 2)}) ${d.slice(2)}`;
+    if (d.length <= 10) return `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`;
+    return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`;
+  },
+
+  /* Heurística: o texto parece um link? (http, www, ou domínio com barra/ponto) */
+  pareceLink(v) {
+    const s = (v || '').trim();
+    if (!s) return false;
+    return /^(https?:\/\/|www\.)/i.test(s) || /\b[a-z0-9-]+\.[a-z]{2,}(\/|$)/i.test(s) || /(t\.me|wa\.me)/i.test(s);
+  },
+
+  /* Valida um contato. Valor vazio é considerado OK (não obriga preencher).
+   * Devolve { ok, msg } — msg vazio quando ok. */
+  validarContato(tipo, valor) {
+    const v = (valor || '').trim();
+    if (!v) return { ok: true, msg: '' };
+    const regra = this.regraContato(tipo);
+
+    switch (regra.modo) {
+      case 'username': {
+        // Remove só o @ do início; espaço no meio deve ser sinalizado como inválido
+        const u = v.replace(/^@+/, '');
+        if (!u) return { ok: false, msg: 'Informe o usuário (sem @).' };
+        return /^[a-zA-Z0-9._]+$/.test(u)
+          ? { ok: true, msg: '' }
+          : { ok: false, msg: 'Use letras, números, ponto ou _ (sem espaços).' };
+      }
+      case 'telefone': {
+        const d = v.replace(/\D/g, '');
+        return (d.length === 10 || d.length === 11)
+          ? { ok: true, msg: '' }
+          : { ok: false, msg: 'Telefone: DDD + número, ex. (11) 91234-5678.' };
+      }
+      case 'telOuLink': {
+        if (this.pareceLink(v)) {
+          // link plausível: precisa ter um ponto de domínio
+          return /\.[a-z]{2,}/i.test(v) ? { ok: true, msg: '' }
+            : { ok: false, msg: 'Link inválido.' };
+        }
+        const d = v.replace(/\D/g, '');
+        return (d.length === 10 || d.length === 11)
+          ? { ok: true, msg: '' }
+          : { ok: false, msg: 'Informe um telefone (com DDD) ou um link.' };
+      }
+      case 'email':
+        return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)
+          ? { ok: true, msg: '' }
+          : { ok: false, msg: 'E-mail inválido (ex. nome@servidor.com).' };
+      default:
+        return { ok: true, msg: '' };
+    }
+  },
+
+  /* Normaliza um valor para salvar conforme o tipo (username sem @, telefone
+   * formatado, telOuLink formata se for número, resto como está). */
+  normalizarContato(tipo, valor) {
+    const v = (valor || '').trim();
+    if (!v) return '';
+    const regra = this.regraContato(tipo);
+    if (regra.modo === 'username') return this.limparUsuario(v);
+    if (regra.modo === 'telefone') return this.formatarTelefone(v);
+    if (regra.modo === 'telOuLink') {
+      // Só formata como telefone se claramente não é um link (sem letras/URL).
+      return /[a-zA-Z/:]/.test(v) ? v : this.formatarTelefone(v);
+    }
+    return v;
+  },
+
   /* ================================================== Adicionar contato */
   adicionarContato(tipo, valor) {
     const perfil = this.todos();

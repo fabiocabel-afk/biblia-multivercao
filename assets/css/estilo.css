@@ -6449,17 +6449,18 @@ html[data-il-abrev="sim"] .il-m-c .il-txt {
 
 .perfil-social-usuario {
   display: flex;
-  flex-direction: column;
-  gap: 1px;
+  flex-direction: row;
+  align-items: baseline;
+  gap: 0;
   flex: 1;
   min-width: 0;
 }
 
 .perfil-social-prefixo {
-  font-size: 9px;
-  color: #999;
-  font-weight: 600;
-  text-transform: uppercase;
+  font-size: 12px;
+  color: #8B3E3E;
+  font-weight: 700;
+  flex-shrink: 0;
 }
 
 .perfil-social-valor {
@@ -7127,11 +7128,16 @@ html[data-il-abrev="sim"] .il-m-c .il-txt {
 
 .perfil-social-edit-item {
   display: flex;
-  align-items: center;
-  gap: 8px;
+  flex-direction: column;
+  gap: 4px;
   padding: 9px;
   background: #fafafa;
   border-radius: 4px;
+}
+.perfil-social-edit-linha {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .perfil-social-edit-icone {
@@ -7156,29 +7162,40 @@ html[data-il-abrev="sim"] .il-m-c .il-txt {
   flex: 1;
   min-width: 0;
   display: flex;
-  flex-direction: column;
-  gap: 1px;
+  flex-direction: row;
+  align-items: center;
+  gap: 0;
+  border: 1px solid #d4c5b0;
+  border-radius: 3px;
+  padding: 0 8px;
+  background: #fff;
 }
+.perfil-social-edit-input:focus-within { border-color: #8B3E3E; }
 
 .perfil-social-edit-prefixo {
-  font-size: 8px;
-  color: #999;
+  font-size: 13px;
+  color: #8B3E3E;
   font-weight: 700;
-  text-transform: uppercase;
+  flex-shrink: 0;
 }
 
 .perfil-social-edit-input input {
-  padding: 6px 8px;
-  font-size: 11px;
-  border: 1px solid #d4c5b0;
-  border-radius: 3px;
+  padding: 7px 0;
+  font-size: 13px;
+  border: none;
+  outline: none;
+  background: transparent;
   width: 100%;
   box-sizing: border-box;
+  color: #2c1810;
 }
 
-.perfil-social-edit-input input:focus {
-  outline: none;
-  border-color: #8B3E3E;
+/* Campo com valor fora do padrão + mensagem de erro */
+.perfil-social-edit-input:has(input.invalido) { border-color: #c0392b; }
+.perfil-social-erro {
+  font-size: 11px;
+  color: #c0392b;
+  padding-left: 26px;
 }
 
 .perfil-social-edit-remover {
@@ -7259,6 +7276,16 @@ html[data-il-abrev="sim"] .il-m-c .il-txt {
   text-align: left;
   transition: background .15s;
   white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.perfil-menu-item svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  color: #8B3E3E;
 }
 
 .perfil-menu-item:hover {
