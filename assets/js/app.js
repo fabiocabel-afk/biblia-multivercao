@@ -4541,18 +4541,28 @@ const App = {
           ${p.versoesTirinha.includes(v.code) ? 'checked' : ''}></label>`).join('')}`;
 
     const listaMarc = Marcadores.lista();
-    const podeExcluirMarc = listaMarc.length > 1;   // sempre resta ao menos um
+    const podeExcluirMarc = true;   // pode excluir qualquer um, até ficar sem nenhum
     const marcadores = `
       <p class="contagem">Trocar a cor aqui recolore de uma vez todos os
       trechos ligados àquele marcador.</p>
+      ${listaMarc.length === 0
+        ? `<p class="contagem" style="margin:6px 0 2px">Nenhum marcador. Toque em
+           <strong>+ Novo marcador</strong> para criar.</p>`
+        : ''}
       ${listaMarc.map(m => `<div class="item-marcador" data-item="${m.id}">
         <button class="bolha-cor" data-abrir-cor="${m.id}"
           style="background:${m.cor}" title="Escolher a cor"></button>
         <input type="text" class="campo" value="${Leitura.escapar(m.nome)}" data-nome="${m.id}">
-        <span class="sub">${Marcadores.porMarcador(m.id).length}</span>
-        ${podeExcluirMarc ? `<button class="excluir-marcador" data-excluir="${m.id}"
+        <span class="sub" data-sub="${m.id}">${Marcadores.porMarcador(m.id).length}</span>
+        <button class="excluir-marcador" data-excluir="${m.id}"
           aria-label="Excluir marcador" title="Excluir marcador">
-          <svg class="icone"><use href="#i-lixeira"/></svg></button>` : ''}
+          <svg class="icone"><use href="#i-lixeira"/></svg></button>
+        <button class="confirmar-nome aplicar" data-aplicar-nome="${m.id}"
+          aria-label="Aplicar nome" title="Aplicar">
+          <svg class="icone"><use href="#i-check"/></svg></button>
+        <button class="confirmar-nome cancelar" data-cancelar-nome="${m.id}"
+          aria-label="Cancelar" title="Cancelar">
+          <svg class="icone"><use href="#i-fechar"/></svg></button>
       </div>
       <div class="caixa-cor fechada" data-caixa="${m.id}"></div>`).join('')}
       <button class="botao secundario add-marcador" id="add-marcador"
@@ -5646,13 +5656,52 @@ const App = {
     });
 
     corpo.querySelectorAll('[data-nome]').forEach(el => {
-      el.onchange = () => Marcadores.atualizar(+el.dataset.nome, { nome: el.value });
+      const id = +el.dataset.nome;
+      const item = el.closest('.item-marcador');
+      const lixeira = item.querySelector('[data-excluir]');
+      const btnAplicar = item.querySelector('[data-aplicar-nome]');
+      const btnCancelar = item.querySelector('[data-cancelar-nome]');
+      let original = el.value;
+
+      const modoEdicao = (lig) => {
+        // a classe controla tudo no CSS: no modo edição, o número e a lixeira
+        // somem e aparecem os botões aplicar/cancelar (sem mudar o layout)
+        item.classList.toggle('editando-nome', lig);
+      };
+      const aplicar = () => {
+        const novo = el.value.trim();
+        if (novo && novo !== original) {
+          Marcadores.atualizar(id, { nome: novo });
+          original = novo;
+          // reflete na hora em todo lugar (inclusive a lista de trás)
+          this._sincronizarMarcadores();
+        } else {
+          el.value = original;   // vazio ou igual: não muda
+        }
+        el.blur();
+        modoEdicao(false);
+      };
+      const cancelar = () => {
+        el.value = original;     // volta ao que era
+        el.blur();
+        modoEdicao(false);
+      };
+
+      el.onfocus = () => { original = el.value; modoEdicao(true); };
+      // não salva no blur automaticamente: exige o ✓ (ou Enter). O clique nos
+      // botões acontece antes do blur porque usamos mousedown.
+      el.onkeydown = (ev) => {
+        if (ev.key === 'Enter') { ev.preventDefault(); aplicar(); }
+        else if (ev.key === 'Escape') { ev.preventDefault(); cancelar(); }
+      };
+      if (btnAplicar) btnAplicar.onmousedown = (ev) => { ev.preventDefault(); aplicar(); };
+      if (btnCancelar) btnCancelar.onmousedown = (ev) => { ev.preventDefault(); cancelar(); };
     });
 
     const addMarc = achar('add-marcador');
     if (addMarc) addMarc.onclick = () => {
       if (!Marcadores.adicionar()) return;   // no teto de 66, não faz nada
-      this.desenharAjustes();   // redesenha; a seção Marcadores segue aberta
+      this._sincronizarMarcadores();          // popup, painel e caixa de trás
     };
 
     corpo.querySelectorAll('[data-excluir]').forEach(el => {
@@ -5670,9 +5719,7 @@ const App = {
         });
         if (!ok) return;
         Marcadores.remover(id);
-        // se um versículo aberto usava a cor, repinta a folha para tirá-la
-        this.desenharAjustes();
-        if (typeof this.repintarMarcasVisiveis === 'function') this.repintarMarcasVisiveis();
+        this._sincronizarMarcadores();   // popup, painel, caixa de trás e folha
       };
     });
 
@@ -5750,6 +5797,10 @@ const App = {
       document.removeEventListener('keydown', this._escAjustePopup);
       this._escAjustePopup = null;
     }
+    // callback opcional de quem abriu (ex.: voltar à lista de marcadores da tirinha)
+    const cb = this._aoFecharPopup;
+    this._aoFecharPopup = null;
+    if (cb) cb();
   },
 
   // Redesenha só o conteúdo do popup (sem fechar/reabrir), atualizando o HTML do
@@ -5773,6 +5824,34 @@ const App = {
   _redesenharAjustesContextual() {
     if (this._popupAjusteId) this._redesenharPopupAjuste();
     else this.desenharAjustes();
+  },
+
+  /* Reflete uma mudança de marcadores (novo, excluído, renomeado, recolorido) em
+   * TODOS os lugares abertos ao mesmo tempo: o painel de Ajustes, o popup de
+   * ajustes, e a caixa "Marcar" da seleção (sel-cores) que fica atrás do popup.
+   * Antes, a lista de trás só atualizava ao reabrir. */
+  _sincronizarMarcadores() {
+    // painel de Ajustes completo, se estiver aberto
+    const painel = document.getElementById('painel-ajustes');
+    if (painel && painel.classList.contains('aberto')) this.desenharAjustes();
+    // popup de ajustes, se aberto
+    if (this._popupAjusteId) this._redesenharPopupAjuste();
+    // caixa "Marcar" da seleção, se estiver aberta atrás
+    const sel = document.getElementById('sel-cores');
+    if (sel && !sel.classList.contains('fechada') && this.selecao) {
+      this._reabrirCoresSelecao();
+    }
+    // repinta as marcas visíveis na folha (cores podem ter mudado)
+    if (typeof this.repintarMarcasVisiveis === 'function') this.repintarMarcasVisiveis();
+  },
+
+  /* Redesenha só o conteúdo da caixa sel-cores sem alternar o aberto/fechado
+   * (o abrirCoresDaSelecao tem um toggle que fecharia se chamado com ela aberta). */
+  _reabrirCoresSelecao() {
+    const sel = document.getElementById('sel-cores');
+    if (!sel) return;
+    sel.classList.add('fechada');   // garante que o toggle reabra
+    this.abrirCoresDaSelecao();
   },
 
 
@@ -6979,10 +7058,13 @@ const App = {
         class="opcao-marcador ${m.id === atual ? 'ativa' : ''}">
         <span class="bolha ${m.id === atual ? 'com-x' : ''}"
           style="background:${m.cor}"></span>
-        <span>${Leitura.escapar(m.nome)}</span>
+        <span class="opcao-marcador-nome">${Leitura.escapar(m.nome)}</span>
       </button>`).join('')
       + (postos.size ? `<button data-sm="0" class="opcao-marcador tirar">
-          <span class="bolha vazia com-x"></span><span>Tirar a marca</span></button>` : '');
+          <span class="bolha vazia com-x"></span><span class="opcao-marcador-nome">Tirar a marca</span></button>` : '')
+      + `<button id="sel-novo-marcador" class="opcao-marcador novo-marcador-item"
+          ${Marcadores.podeAdicionar() ? '' : 'disabled'}>
+          <span class="bolha bolha-mais">+</span><span class="opcao-marcador-nome">Novo marcador</span></button>`;
 
     caixa.classList.remove('fechada');
 
@@ -6992,6 +7074,16 @@ const App = {
         this.marcarSelecao(id === atual ? 0 : id);
       };
     });
+
+    // "Novo marcador": abre o MESMO menu de Ajustes › Marcadores como popup
+    // flutuante — é ali (e só ali) que se adiciona e se REMOVE marcador (lixeira),
+    // para não excluir por acidente nesta lista. Ao fechar, reabre esta caixa.
+    { const nv = document.getElementById('sel-novo-marcador');
+      if (nv) nv.onclick = () => {
+        caixa.classList.add('fechada');
+        this._aoFecharPopup = () => this.abrirCoresDaSelecao();
+        this.abrirAjustePopup('marcadores');
+      }; }
   },
 
   marcarSelecao(marcadorId) {
