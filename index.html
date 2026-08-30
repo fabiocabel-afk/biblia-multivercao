@@ -341,6 +341,9 @@
   <header>
     <h2 id="titulo-arvore">Livros</h2>
     <button id="btn-recentes" hidden aria-label="Navegações recentes"><svg class="icone"><use href="#i-historico"/></svg></button>
+    <div class="versao-box" id="versao-box-arvore" title="Trocar versão">
+      <button id="btn-versao-arvore" class="versao-nome" aria-label="Trocar versão"><span class="sigla-txt" id="sigla-versao-arvore">—</span></button>
+    </div>
     <button data-ajuste-popup="livros" aria-label="Ajustes do painel de livros"><svg class="icone"><use href="#i-ajustes"/></svg></button>
     <button data-fechar aria-label="Fechar"><svg class="icone"><use href="#i-fechar"/></svg></button>
   </header>
@@ -554,7 +557,9 @@
 <section class="tirinha" id="tirinha" aria-hidden="true">
   <header>
     <strong id="tirinha-ref">—</strong>
-    <button class="botao secundario" id="tirinha-acoes" style="margin-left:auto;padding:7px 12px;font-size:13px">Ações</button>
+    <button id="tirinha-config-versoes" class="botao-cab-tirinha" aria-label="Escolher versões empilhadas" title="Escolher versões empilhadas"><svg class="icone"><use href="#i-ajustes"/></svg></button>
+    <button class="botao secundario" id="tirinha-acoes" style="padding:7px 12px;font-size:13px">Ações</button>
+    <button id="tirinha-refs-cruzadas" class="botao-cab-tirinha" aria-label="Abrir referências cruzadas" title="Abrir referências cruzadas" hidden><svg class="icone"><use href="#i-referencias"/></svg></button>
     <button id="tirinha-fixar" class="botao-cab-tirinha" aria-label="Fixar referências na tela" title="Fixar referências na tela" hidden><svg class="icone"><use href="#i-fixar"/></svg></button>
     <button data-fechar-tirinha class="botao-cab-tirinha" aria-label="Fechar"><svg class="icone" style="stroke:var(--tinta)"><use href="#i-fechar"/></svg></button>
   </header>
