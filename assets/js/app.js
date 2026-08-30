@@ -35,6 +35,21 @@ const App = {
     }
 
     const p = Prefs.todas();
+
+    // Pedido 3: na primeira vez (antes de o usuário configurar), as versões
+    // empilhadas já vêm com TODAS marcadas, exceto "A Mensagem" — senão vinham só
+    // umas poucas, muitas vezes parecidas, e a pessoa não descobria que dá para
+    // ver mais versões. Uma flag própria garante que isto rode UMA vez só: depois
+    // disso as escolhas do usuário mandam (inclusive desmarcar tudo).
+    if (!Prefs.get('versoesTirinhaIniciada')) {
+      const padrao = Dados.versoes
+        .filter(v => !/mensagem/i.test(v.name || '') && !/mensagem/i.test(v.code || ''))
+        .map(v => v.code);
+      Prefs.set('versoesTirinha', padrao);
+      Prefs.set('versoesTirinhaIniciada', true);
+      p.versoesTirinha = padrao;   // reflete já nesta sessão
+    }
+
     this.versao = Dados.versao(p.versao) ? p.versao : Dados.versoes[0].code;
     Leitura.aplicarEscuro(p.escuro);
     Leitura.aplicarTemperatura(p.temperatura);
@@ -352,6 +367,9 @@ const App = {
     document.getElementById('btn-ref').textContent =
       Dados.referencia(this.versao, this.code, this.cap);
     document.getElementById('sigla-versao').textContent = this.versao;
+    // mesma sigla no botão de versão dentro do painel de Livros (Pedido 2)
+    { const s = document.getElementById('sigla-versao-arvore');
+      if (s) s.textContent = this.versao; }
     // a engrenagem "Exibir" (dentro do quadradinho da versão) só no interlinear
     const ehInter = Dados.ehInterlinear(this.versao);
     const engrenagem = document.getElementById('btn-il-exibir');
@@ -685,6 +703,7 @@ const App = {
   },
 
   fecharPaineis() {
+    this._volta = null;   // fechar de vez limpa qualquer passo-anterior pendente
     document.querySelectorAll('.painel').forEach(p => {
       p.classList.remove('aberto');
       p.setAttribute('aria-hidden', 'true');
@@ -1398,6 +1417,27 @@ const App = {
         } else if (alvo === 'busca') {
           // troca a versão da busca e volta ao painel de busca
           this.trocarVersaoBusca(code);
+        } else if (alvo === 'arvore') {
+          // veio do painel de Livros: troca a versão e VOLTA para os Livros
+          // (mesmo efeito do X), já com a lista atualizada para a nova versão —
+          // é onde se vê a mudança de cânone. Não vai para a leitura.
+          this.alvoVersao = 'principal';
+          if (code !== this.versao) {
+            if (Dados.canoneDe(this.versao) !== Dados.canoneDe(code)) {
+              Busca.escopo = { tipo: 'tudo', id: null, nome: 'Toda a Bíblia' };
+            }
+            this.versao = code;
+            Prefs.set('versao', code);
+            // se o livro atual não existe na versão nova, cai num livro válido
+            if (!Dados.temLivro(code, this.code)) { this.code = 'GEN'; this.cap = 1; }
+            // atualiza JÁ a sigla dos botões de versão (barra principal e o de
+            // dentro dos Livros), e reprocessa a leitura de fundo na nova versão
+            this.atualizarBarra();
+            this.ir(this.code, this.cap);
+          }
+          this._volta = null;
+          this.desenharArvore();
+          this.abrir('painel-arvore');
         } else {
           this.trocarVersao(code);
         }
@@ -5593,6 +5633,13 @@ const App = {
         Prefs.set('versoesTirinha', el.checked
           ? [...new Set([...atuais, code])]
           : atuais.filter(c => c !== code));
+        // Se a tirinha estiver aberta na aba Versões (caso do atalho — Pedido 1),
+        // redesenha o empilhado ao vivo, para a mudança aparecer atrás do popup.
+        const t = document.getElementById('tirinha');
+        if (t && t.getAttribute('aria-hidden') === 'false' && this.abaTirinha === 'versoes'
+            && this.code != null && this.destaque != null) {
+          Leitura.tirinha(this.code, this.cap, this.destaque, this.versao);
+        }
       };
     });
 
@@ -7498,7 +7545,13 @@ const App = {
 
     q('veu').onclick = () => this.fecharPaineis();
     document.querySelectorAll('[data-fechar]').forEach(el => {
-      el.onclick = () => { this._volta = null; this.fecharPaineis(); };
+      el.onclick = () => {
+        // Se a tela atual tem um passo anterior definido (ex.: a troca de versão
+        // aberta de dentro do painel de Livros), o X volta para lá em vez de
+        // fechar tudo. Sem passo anterior (o padrão), fecha e volta à leitura.
+        if (this._volta) { this.voltar(); return; }
+        this.fecharPaineis();
+      };
     });
     // engrenagem nos cabeçalhos: abre o popup contextual com só aquele módulo
     document.querySelectorAll('[data-ajuste-popup]').forEach(el => {
@@ -7628,6 +7681,29 @@ const App = {
     q('tirinha-acoes').onclick = () => this.abrirAcoesTirinha();
     q('tirinha-fixar').onclick = () => this.alternarFixarPelaTirinha();
     q('desfixar-refs').onclick = () => this.desligarRefsFixas();
+    // Pedido 1: atalho de configuração das versões empilhadas, direto da tirinha.
+    // Reusa o MESMO popup flutuante dos Ajustes (bloco 'tirinha' = "Versões
+    // empilhadas"): abre por cima, a tirinha fica atrás visível, e como divide o
+    // mesmo estado (Prefs 'versoesTirinha') fica sincronizado com os Ajustes.
+    { const b = document.getElementById('tirinha-config-versoes');
+      if (b) b.onclick = () => this.abrirAjustePopup('tirinha'); }
+    // Atalho de referências cruzadas, na aba Referências da tirinha. Abre o mesmo
+    // menu de sempre; ao fechar, volta direto para onde a pessoa estava (a leitura),
+    // como se tivesse sido só uma consulta rápida — sem passar por telas no meio.
+    { const b = document.getElementById('tirinha-refs-cruzadas');
+      if (b) b.onclick = () => { this.fecharTirinha(); this.abrirReferenciasCruzadas(); this._volta = null; }; }
+    // Pedido 2: botão de trocar versão dentro do painel de Livros (entre o
+    // relógio de recentes e o de ajustes). Mesma ação do botão de versão da
+    // página principal; sincronizado porque compartilha o mesmo estado.
+    { const b = document.getElementById('btn-versao-arvore');
+      if (b) b.onclick = ev => {
+        ev.stopPropagation();
+        this.alvoVersao = 'arvore';   // veio do painel de Livros
+        this.desenharVersoes();
+        this.abrir('painel-versao');
+        // fechar no X volta para os Livros (não para a leitura)
+        this._volta = () => { this.desenharArvore(); this.abrir('painel-arvore'); };
+      }; }
     document.querySelectorAll('.aba-tirinha').forEach(el => {
       el.onclick = () => this.mostrarAbaTirinha(el.dataset.aba);
     });
@@ -9750,11 +9826,33 @@ const App = {
     this.abaTirinha = aba;
     document.querySelectorAll('.aba-tirinha').forEach(el =>
       el.classList.toggle('ativa', el.dataset.aba === aba));
-    // "Ações" só vale para o versículo em si (aba Versões);
-    // o fixar só faz sentido na aba Referências, que é o que se fixa na tela
-    document.getElementById('tirinha-acoes').style.display =
-      aba === 'versoes' ? '' : 'none';
-    document.getElementById('tirinha-fixar').hidden = aba !== 'refs';
+
+    // Cabeçalho por aba. Cada aba tem seu grupo de botões à DIREITA, sempre
+    // colados na extrema direita (o "empurrão" margin-left:auto fica no primeiro
+    // visível do grupo). O fechar (X) é comum às duas.
+    //   Versões:     [config-versoes] [Ações]              … [X]
+    //   Referências: [refs-cruzadas]  [fixar]              … [X]
+    const naVersoes = aba === 'versoes';
+    const cfg   = document.getElementById('tirinha-config-versoes');
+    const acoes = document.getElementById('tirinha-acoes');
+    const refsC = document.getElementById('tirinha-refs-cruzadas');
+    const fixar = document.getElementById('tirinha-fixar');
+
+    // visibilidade — remove/põe o atributo hidden (que o CSS respeita) E força
+    // display, para vencer o display:flex da classe .botao-cab-tirinha
+    if (cfg)   { cfg.hidden   = !naVersoes; cfg.style.display   = naVersoes ? '' : 'none'; }
+    if (acoes) {                            acoes.style.display = naVersoes ? '' : 'none'; }
+    if (refsC) { refsC.hidden = naVersoes;  refsC.style.display = naVersoes ? 'none' : ''; }
+    if (fixar) { fixar.hidden = naVersoes;  fixar.style.display = naVersoes ? 'none' : ''; }
+
+    // o empurrão para a direita fica só no PRIMEIRO botão visível do grupo,
+    // para o grupo colar na extrema direita sem duplo empurrão. Usa '0' explícito
+    // (não '') nos demais, para vencer regras de margin-left:auto do CSS antigo.
+    if (cfg)   cfg.style.marginLeft   = naVersoes ? 'auto' : '0';
+    if (refsC) refsC.style.marginLeft = naVersoes ? '0' : 'auto';
+    if (acoes) acoes.style.marginLeft = '0';
+    if (fixar) fixar.style.marginLeft = '0';
+
     if (aba === 'refs') this.sincronizarBotaoFixarTirinha();
     if (aba === 'versoes') {
       const t = document.getElementById('tirinha');
