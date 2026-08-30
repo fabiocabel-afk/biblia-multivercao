@@ -37,6 +37,64 @@
   }
   .marca-nota.marca-nota-inicio svg { stroke: #fff; }
   .marca-nota.marca-nota-inicio:hover { color: #fff; opacity: 1; }
+
+  /* Menu "Marcar" da barra de seleção (caixa #sel-cores): um marcador por linha,
+     sem quebra de linha no nome. Vence o grid de 2 colunas do CSS principal. */
+  #sel-cores {
+    display: flex !important;
+    flex-direction: column !important;
+    flex-wrap: nowrap !important;
+    grid-template-columns: none !important;
+    gap: 2px !important;
+    align-items: stretch !important;
+  }
+  #sel-cores .opcao-marcador {
+    width: 100%;
+    justify-content: flex-start;
+    text-align: left;
+  }
+  #sel-cores .opcao-marcador .opcao-marcador-nome {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  #sel-cores .bolha-mais {
+    display: inline-flex; align-items: center; justify-content: center;
+    color: var(--rubrica); font-weight: 700; font-size: 1.1em;
+    background: transparent;
+  }
+  /* BUG 1: a regra .sel-cores button:hover { transform: scale(1.1) } era para as
+     bolinhas antigas; nos itens-lista ela empurra/distorce. Anula o transform. */
+  #sel-cores .opcao-marcador:hover { transform: none !important; }
+  /* BUG 3: o diálogo de confirmação (excluir) precisa ficar ACIMA do popup de
+     ajustes (z-index 92), senão aparece por trás. */
+  .dialogo-veu { z-index: 120 !important; }
+
+  /* Botões aplicar/cancelar que substituem o número + lixeira ao editar o nome
+     do marcador. Por padrão ESCONDIDOS; só aparecem no modo .editando-nome. */
+  .confirmar-nome {
+    display: none;
+    align-items: center; justify-content: center;
+    width: 30px; height: 30px; border-radius: 8px; flex: 0 0 auto;
+    background: transparent; cursor: pointer;
+  }
+  .confirmar-nome .icone { width: 18px; height: 18px; }
+  .confirmar-nome.aplicar .icone { stroke: #2e7d32; }
+  .confirmar-nome.aplicar:hover { background: color-mix(in srgb, #2e7d32 14%, transparent); }
+  .confirmar-nome.cancelar .icone { stroke: var(--tinta-fraca); }
+  .confirmar-nome.cancelar:hover { background: color-mix(in srgb, var(--rubrica) 12%, transparent); }
+  .confirmar-nome.cancelar:hover .icone { stroke: var(--rubrica); }
+
+  /* No modo edição: some o número e a lixeira, aparecem aplicar/cancelar. */
+  .item-marcador.editando-nome .sub,
+  .item-marcador.editando-nome .excluir-marcador { display: none !important; }
+  .item-marcador.editando-nome .confirmar-nome { display: inline-flex; }
+  .item-marcador.editando-nome .campo {
+    outline: 2px solid color-mix(in srgb, var(--rubrica) 45%, transparent);
+    outline-offset: 1px; border-radius: 6px;
+  }
 </style>
 </head>
 <body>
@@ -60,6 +118,7 @@
   <symbol id="i-fixar" viewBox="0 0 24 24"><path d="M9 3h6l-1 7 3 3v2H7v-2l3-3z" stroke-linejoin="round"/><path d="M12 15v6" stroke-linecap="round"/></symbol>
   <symbol id="i-lixeira" viewBox="0 0 24 24"><path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13M10 11v6M14 11v6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="i-fechar" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" stroke-linecap="round"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="i-antes" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="i-depois" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="i-nota" viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z" stroke-linejoin="round"/><path d="M14 3v4h4" stroke-linejoin="round"/><path d="M9 12h6M9 16h4" stroke-linecap="round"/></symbol>
