@@ -226,6 +226,7 @@ const App = {
     this._aplicarDeslize(folha, desliza);   // transição lateral ao trocar de capítulo
     window.scrollTo(0, 0);
     this._marcarCortados();   // no modo abreviar, marca as palavras que cortaram
+    this._destacarInicioNotas();   // destaca o 1º versículo de cada nota
 
     if (vers) {
       // no modo Subtitulos, a mira e o proprio cabecalho da secao (topo);
@@ -328,6 +329,7 @@ const App = {
       }
     }
     this._marcarCortados();
+    this._destacarInicioNotas();
     this._prefetchVizinhos();
   },
 
@@ -5832,6 +5834,28 @@ const App = {
       } else if (!comNota.has(vers) && tem) {
         tem.remove();
       }
+    });
+    this._destacarInicioNotas();
+  },
+
+  /* Destaca o PRIMEIRO versículo de cada nota (a âncora), para se saber onde a
+   * nota começa quando o sinal aparece em vários versículos — inclusive quando
+   * a nota pula versículos. Só o início ganha a esfera invertida (classe
+   * .marca-nota-inicio); os demais seguem com o sinal comum. */
+  _destacarInicioNotas() {
+    const versificacao = Dados.versificacaoDe(this.versao);
+    // primeiro versículo de cada nota do capítulo atual
+    const inicios = new Set();
+    for (const a of Anotacoes.todas()) {
+      if (a.versificacao === versificacao && a.code === this.code && a.cap === this.cap) {
+        const vs = Array.isArray(a.versiculos) && a.versiculos.length ? a.versiculos : [a.vers];
+        const ini = Math.min(...vs.filter(Number.isFinite));
+        if (Number.isFinite(ini)) inicios.add(ini);
+      }
+    }
+    this._escopoVersos().querySelectorAll('.marca-nota').forEach(el => {
+      const vers = +el.dataset.notaVers;
+      el.classList.toggle('marca-nota-inicio', inicios.has(vers));
     });
   },
 
