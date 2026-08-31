@@ -1400,11 +1400,13 @@ const App = {
     const alvo = this.alvoVersao || 'principal';
 
     document.getElementById('titulo-versao').textContent =
-      alvo === 'comparar' ? 'Versão de baixo' : alvo === 'busca' ? 'Versão da busca' : 'Versões';
+      alvo === 'comparar' ? 'Versão de baixo' : alvo === 'busca' ? 'Versão da busca'
+        : alvo === 'subtitulo' ? 'Versão dos subtítulos' : 'Versões';
 
     corpo.innerHTML = this.htmlListaVersoes(
       alvo === 'comparar' ? Prefs.get('versaoComparar')
         : alvo === 'busca' ? (this.versaoBusca || this.versao)
+        : alvo === 'subtitulo' ? (this.versaoSubt || this.versao)
         : this.versao);
 
     corpo.querySelectorAll('[data-versao]').forEach(el => {
@@ -1419,6 +1421,12 @@ const App = {
         } else if (alvo === 'busca') {
           // troca a versão da busca e volta ao painel de busca
           this.trocarVersaoBusca(code);
+        } else if (alvo === 'subtitulo') {
+          // troca só a versão de SUBTÍTULO da pesquisa — NÃO mexe na Bíblia.
+          this.alvoVersao = 'principal';
+          this.versaoSubt = code;
+          this._volta = null;
+          this.abrirSubtitulos();
         } else if (alvo === 'arvore') {
           // veio do painel de Livros: troca a versão e VOLTA para os Livros
           // (mesmo efeito do X), já com a lista atualizada para a nova versão —
@@ -7439,6 +7447,7 @@ const App = {
       referencias: () => this.abrirReferenciasCruzadas(),
       ouvir: () => this.iniciarOuvir(),
       dicionario: () => { this.abrirDicionario(); },
+      subtitulos: () => { this.abrirSubtitulos(); },
       perfil: () => { this._modoPerfil = 'view'; this.desenharPerfil(); this.abrir('painel-perfil'); },
       ajustes: () => { this.dobraA = null; this.desenharAjustes(); this.abrir('painel-ajustes'); },
       backup: () => { this.desenharBackup(); this.abrir('painel-backup'); },
@@ -10164,6 +10173,159 @@ const App = {
    * Pesquisa no léxico Strong (hebraico + grego) que o app já carrega. A pessoa
    * digita em português e a lista filtra ao vivo; chips no topo ligam/desligam
    * cada idioma. Usa os mesmos dados de Dados.lexico / Dados.carregarLexico. */
+  /* ============================ SUBTÍTULOS ============================
+   * Pesquisa de subtítulos: lista todos os subtítulos de uma VERSÃO DE SUBTÍTULO
+   * (independente da versão aberta na Bíblia), filtrável por escopo e por texto.
+   * Layout copiado da Busca. Clicar navega pela REFERÊNCIA (1º versículo), sem
+   * mexer no subtítulo ativo da leitura. */
+  async abrirSubtitulos() {
+    this.abrir('painel-subtitulos');
+    if (!this.versaoSubt) this.versaoSubt = Prefs.get('subtituloFavorito') || 'ACF';
+    if (!this.escopoSubt) this.escopoSubt = { tipo: 'tudo', id: null, nome: 'Toda a Bíblia' };
+
+    this.atualizarSubtVersao();
+    this.desenharFiltrosSubt();
+
+    const campo = document.getElementById('campo-subtitulos');
+    if (!this._subtLigado) {
+      this._subtLigado = true;
+      campo.oninput = () => this._filtrarSubtitulos();
+      document.getElementById('subt-versao').onclick = () => {
+        this.alvoVersao = 'subtitulo';
+        this.desenharVersoes();
+        this.abrir('painel-versao');
+        this._volta = () => this.abrirSubtitulos();
+      };
+    }
+    await this._montarIndiceSubt();
+    this._filtrarSubtitulos();
+    setTimeout(() => campo.focus(), 60);
+  },
+
+  atualizarSubtVersao() {
+    const s = document.getElementById('subt-versao-sigla');
+    if (s) s.textContent = this.versaoSubt;
+  },
+
+  desenharFiltrosSubt() {
+    const alvo = document.getElementById('filtros-subtitulos');
+    const arv = Dados.arvore(this.versaoSubt);
+    const e = this.escopoSubt;
+    const nivel = e.tipo;
+    const niveis = [
+      ['tudo', 'Toda a Bíblia'], ['testamento', 'Por Testamento'],
+      ['categoria', 'Por Categoria'], ['livro', 'Por Livro'],
+    ];
+    const detalhes = this._opcoesDetalheSubt(nivel, arv);
+    const temDetalhe = nivel !== 'tudo';
+    alvo.innerHTML = `
+      <label class="campo-rotulo">
+        <span>Filtrar em</span>
+        <select class="campo-sel" id="subt-nivel">
+          ${niveis.map(([v, t]) => `<option value="${v}" ${v === nivel ? 'selected' : ''}>${t}</option>`).join('')}
+        </select>
+      </label>
+      <label class="campo-rotulo ${temDetalhe ? '' : 'oculto'}">
+        <span>Onde</span>
+        <select class="campo-sel" id="subt-detalhe">
+          ${detalhes.map(o => `<option value="${o.id}" ${o.id === e.id ? 'selected' : ''}>${Leitura.escapar(o.nome)}</option>`).join('')}
+        </select>
+      </label>`;
+    document.getElementById('subt-nivel').onchange = ev => {
+      const nv = ev.target.value;
+      if (nv === 'tudo') this.escopoSubt = { tipo: 'tudo', id: null, nome: 'Toda a Bíblia' };
+      else {
+        const ops = this._opcoesDetalheSubt(nv, arv);
+        const primeiro = ops[0] || { id: null, nome: '' };
+        this.escopoSubt = { tipo: nv, id: primeiro.id, nome: primeiro.nome };
+      }
+      this.desenharFiltrosSubt();
+      this._filtrarSubtitulos();
+    };
+    const det = document.getElementById('subt-detalhe');
+    if (det) det.onchange = ev => {
+      this.escopoSubt = { tipo: nivel, id: ev.target.value, nome: ev.target.selectedOptions[0].textContent.trim() };
+      this._filtrarSubtitulos();
+    };
+  },
+
+  _opcoesDetalheSubt(nivel, arv) {
+    arv = arv || Dados.arvore(this.versaoSubt);
+    if (nivel === 'testamento') return arv.testaments.map(t => ({ id: t.id, nome: t.name }));
+    if (nivel === 'categoria') return arv.testaments.flatMap(t => t.categories).map(c => ({ id: c.id, nome: c.name }));
+    if (nivel === 'livro') return Dados.livros(this.versaoSubt).map(b => ({ id: b.code, nome: b.name }));
+    return [];
+  },
+
+  async _montarIndiceSubt() {
+    if (this._subtIndiceVersao === this.versaoSubt && this._subtIndice) return;
+    const cont = document.getElementById('resultados-subtitulos');
+    cont.innerHTML = `<div class="estado">Carregando subtítulos…</div>`;
+    const dados = await Dados.carregarSecoes(this.versaoSubt);
+    const idx = [];
+    if (dados) {
+      for (const code of Object.keys(dados)) {
+        const info = Dados.infoLivro(this.versaoSubt, code) || {};
+        const livroNome = info.name || code;
+        const caps = dados[code] || {};
+        for (const cap of Object.keys(caps)) {
+          for (const s of (caps[cap] || [])) {
+            idx.push({
+              code, livroNome, cap: +cap, vers: s.i, titulo: s.t,
+              busca: (s.t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase(),
+              testamento: info.testament, categoria: info.category,
+            });
+          }
+        }
+      }
+    }
+    const ordem = Dados.livros(this.versaoSubt).map(b => b.code);
+    const peso = c => { const i = ordem.indexOf(c); return i < 0 ? 9999 : i; };
+    idx.sort((a, b) => peso(a.code) - peso(b.code) || a.cap - b.cap || a.vers - b.vers);
+    this._subtIndice = idx;
+    this._subtIndiceVersao = this.versaoSubt;
+  },
+
+  _filtrarSubtitulos() {
+    const cont = document.getElementById('resultados-subtitulos');
+    if (!this._subtIndice) return;
+    const campo = document.getElementById('campo-subtitulos');
+    const termo = (campo.value || '')
+      .trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    const esc = this.escopoSubt;
+
+    let itens = this._subtIndice;
+    if (esc.tipo === 'livro') itens = itens.filter(s => s.code === esc.id);
+    else if (esc.tipo === 'testamento') itens = itens.filter(s => s.testamento === esc.id);
+    else if (esc.tipo === 'categoria') itens = itens.filter(s => s.categoria === esc.id);
+    if (termo) itens = itens.filter(s => s.busca.includes(termo));
+
+    if (!this._subtIndice.length) {
+      cont.innerHTML = `<div class="estado">Esta versão não tem subtítulos.</div>`;
+      return;
+    }
+    if (!itens.length) {
+      cont.innerHTML = `<div class="estado">Nenhum subtítulo encontrado${termo ? ` para “${Leitura.escapar(campo.value.trim())}”` : ''}.</div>`;
+      return;
+    }
+    const MAX = 500;
+    const lista = itens.slice(0, MAX).map(s => `
+      <button class="subt-item" data-code="${s.code}" data-cap="${s.cap}" data-vers="${s.vers}">
+        <span class="subt-ref">${Leitura.escapar(s.livroNome)} ${s.cap}:${s.vers}</span>
+        <span class="subt-titulo">${Leitura.escapar(s.titulo)}</span>
+      </button>`).join('');
+    const nota = itens.length > MAX
+      ? `<div class="estado">Mostrando ${MAX} de ${itens.length.toLocaleString('pt-BR')}. Filtre para reduzir.</div>` : '';
+    cont.innerHTML = `<div class="subt-lista">${lista}</div>${nota}`;
+
+    cont.querySelectorAll('.subt-item').forEach(el => {
+      el.onclick = () => {
+        this.fecharPaineis();
+        this.ir(el.dataset.code, +el.dataset.cap, +el.dataset.vers);
+      };
+    });
+  },
+
   async abrirDicionario() {
     this.abrir('painel-dicionario');
     if (!this._dicLangs) this._dicLangs = { he: true, gr: true };
