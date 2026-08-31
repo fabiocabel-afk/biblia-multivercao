@@ -10210,43 +10210,67 @@ const App = {
       Dados.carregarLexico('gr'),
     ]);
     const norm = s => (s || '').toString().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
-    // detecta, em cada entrada, o campo que É a palavra original (tem letra
-    // hebraica \u0590-\u05FF ou grega \u0370-\u03FF/\u1F00-\u1FFF), sem depender
-    // de saber o nome do campo — e o campo da transliteração (latino, != pt).
-    const RE_HE = /[\u0590-\u05FF]/, RE_GR = /[\u0370-\u03FF\u1F00-\u1FFF]/;
-    const achaOriginal = (e, lang) => {
-      const re = lang === 'he' ? RE_HE : RE_GR;
-      for (const k of Object.keys(e)) {
-        const v = e[k];
-        if (typeof v === 'string' && re.test(v)) return v.trim();
-      }
-      return '';
-    };
-    const achaTranslit = (e, orig, pt) => {
-      // um campo curto, latino, que não seja o pt nem o en nem o original
-      for (const k of ['tr','translit','transliteration','tlit','pron','xlit']) {
-        if (typeof e[k] === 'string' && e[k].trim()) return e[k].trim();
-      }
-      return '';
-    };
+    // Estrutura real do léxico: l = palavra original, x = transliteração (costuma
+    // vir vazia), en = inglês, pt = português, src = metadado (NÃO exibir).
     const idx = [];
     for (const [lang, dic] of [['he', he], ['gr', gr]]) {
       for (const strong of Object.keys(dic || {})) {
         const e = dic[strong] || {};
         const pt = (e.pt || e.en || '').trim();
-        if (!pt) continue;
-        const orig = achaOriginal(e, lang);
-        const translit = achaTranslit(e, orig, pt);
+        const orig = (e.l || '').trim();
+        if (!pt && !orig) continue;
+        // transliteração: usa o campo x se vier preenchido; senão, gera a partir
+        // da palavra original (o campo x está vazio em ~100% do léxico atual).
+        let translit = (e.x || '').trim();
+        if (!translit && orig) translit = this._transliterar(orig, lang);
         idx.push({
           lang, strong, orig, translit, pt,
           busca: norm(pt) + ' ' + norm(translit) + ' ' + strong.toLowerCase(),
         });
       }
     }
-    // ordena por número Strong (ordem natural do léxico) para ficar estável
     const numDe = s => parseInt(String(s).replace(/\D/g, ''), 10) || 0;
     idx.sort((a, b) => a.lang.localeCompare(b.lang) || numDe(a.strong) - numDe(b.strong));
     this._dicIndice = idx;
+  },
+
+  /* Transliteração fonética simples de grego/hebraico para o alfabeto latino,
+   * gerada a partir da palavra original — porque o campo de transliteração do
+   * léxico vem vazio. Não é academicamente perfeita, mas dá a pronúncia. */
+  _transliterar(palavra, lang) {
+    const semAcento = palavra.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    if (lang === 'gr') {
+      const mapa = {
+        'α':'a','β':'b','γ':'g','δ':'d','ε':'e','ζ':'z','η':'e','θ':'th','ι':'i',
+        'κ':'k','λ':'l','μ':'m','ν':'n','ξ':'x','ο':'o','π':'p','ρ':'r','σ':'s',
+        'ς':'s','τ':'t','υ':'y','φ':'ph','χ':'ch','ψ':'ps','ω':'o'
+      };
+      let s = semAcento.toLowerCase();
+      // dígrafos e regras: γγ→ng, γκ→nk, ου→ou, αυ→au, ευ→eu
+      s = s.replace(/γγ/g,'ng').replace(/γκ/g,'nk').replace(/γξ/g,'nx').replace(/γχ/g,'nch');
+      let out = '';
+      for (const ch of s) out += (mapa[ch] ?? ch);
+      return out;
+    }
+    if (lang === 'he') {
+      const mapa = {
+        'א':'','ב':'v','ג':'g','ד':'d','ה':'h','ו':'v','ז':'z','ח':'ch','ט':'t',
+        'י':'y','כ':'k','ך':'k','ל':'l','מ':'m','ם':'m','נ':'n','ן':'n','ס':'s',
+        'ע':'','פ':'f','ף':'f','צ':'ts','ץ':'ts','ק':'q','ר':'r','שׁ':'sh','שׂ':'s','ש':'sh','ת':'t'
+      };
+      // vogais (niqqud) principais
+      const vogais = {
+        '\u05B0':'e','\u05B1':'e','\u05B2':'a','\u05B3':'o','\u05B4':'i','\u05B5':'e',
+        '\u05B6':'e','\u05B7':'a','\u05B8':'a','\u05B9':'o','\u05BA':'o','\u05BB':'u','\u05BC':''
+      };
+      let out = '';
+      for (const ch of palavra) {
+        if (mapa[ch] != null) out += mapa[ch];
+        else if (vogais[ch] != null) out += vogais[ch];
+      }
+      return out;
+    }
+    return '';
   },
 
   _filtrarDicionario() {
@@ -10274,21 +10298,19 @@ const App = {
     const MAX = 300;
     const total = itens.length;
     const lista = itens.slice(0, MAX).map((e) => {
-      // topo = palavra ORIGINAL; se o léxico não tiver, cai na transliteração;
-      // por último o Strong. NUNCA o português (que já aparece embaixo).
       const cabeca = e.orig || e.translit || e.strong;
       const temOrig = !!e.orig;
       return `
       <button class="dic-item" data-dic="${e.lang}:${Leitura.escaparAttr(e.strong)}">
         <div class="dic-item-orig-linha">
-          <span class="dic-orig dic-orig-${e.lang} ${temOrig ? '' : 'dic-orig-fallback'}">${Leitura.escapar(cabeca)}</span>
+          <span class="dic-cabeca">
+            <span class="dic-orig dic-orig-${e.lang} ${temOrig ? '' : 'dic-orig-fallback'}">${Leitura.escapar(cabeca)}</span>${
+            temOrig && e.translit ? ` <span class="dic-translit">(${Leitura.escapar(e.translit)})</span>` : ''}
+          </span>
           <span class="dic-tag dic-tag-${e.lang}">${e.lang === 'he' ? 'Hebr.' : 'Grego'}</span>
         </div>
-        <div class="dic-item-sub">
-          ${e.orig && e.translit ? `<span class="dic-translit">${Leitura.escapar(e.translit)}</span>` : ''}
-          <span class="dic-strong">${Leitura.escapar(e.strong)}</span>
-        </div>
         <div class="dic-pt">${Leitura.escapar(e.pt)}</div>
+        <div class="dic-strong-linha"><span class="dic-strong">${Leitura.escapar(e.strong)}</span></div>
       </button>`;
     }).join('');
     const nota = total > MAX
@@ -10322,9 +10344,10 @@ const App = {
 
     const linha = (idLinha, idVal, valor, comDir) => {
       const box = q(idLinha); if (!box) return;
-      if (!valor) { box.hidden = true; return; }
+      const val = q(idVal);
+      if (!valor) { box.hidden = true; if (val) val.textContent = ''; return; }
       box.hidden = false;
-      const val = q(idVal); val.textContent = valor;
+      val.textContent = valor;
       val.dir = comDir && rtl ? 'rtl' : '';
     };
     linha('pe-linha-t', 'pe-t', e.translit, false);
