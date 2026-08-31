@@ -77,6 +77,7 @@ const App = {
 
     Locutor.preparar();   // já pede a lista de vozes do aparelho (chega assíncrona)
     Seletor.iniciar();    // troca as listas suspensas nativas pelas do tema
+    this._corrigirScrollSeletor();
     this.ligarEventos();
     this.atualizarBotaoRecentes();   // mostra o relógio se já houver navegações
     // registra também a abertura: reabrir no mesmo lugar não duplica, porque o
@@ -10261,6 +10262,31 @@ const App = {
   atualizarSubtVersao() {
     const s = document.getElementById('subt-versao-sigla');
     if (s) s.textContent = this.versaoSubt;
+  },
+
+  /* Correção da lista suspensa (Seletor): o dropdown customizado fechava em
+   * QUALQUER scroll (inclusive ao rolar DENTRO da própria lista, no desktop e no
+   * toque). Aqui trocamos o fechador para só fechar quando o scroll acontece FORA
+   * da lista aberta (a página/painel de trás rolou de fato) — reposicionando a
+   * lista quando dá. Feito por cima do Seletor, sem editar o módulo. */
+  _corrigirScrollSeletor() {
+    if (typeof Seletor === 'undefined' || Seletor._scrollCorrigido) return;
+    Seletor._scrollCorrigido = true;
+    Seletor._fecharLig = (e) => {
+      const lista = Seletor._aberta;
+      if (!lista) return;
+      // rolagem dentro da própria lista → não faz nada (deixa rolar os itens)
+      if (e && e.target && lista.contains && lista.contains(e.target)) return;
+      // rolou algo atrás: reposiciona a lista na casca; se a casca saiu da tela,
+      // aí sim fecha.
+      const casca = Seletor._casca;
+      if (casca && Seletor._posicionar) {
+        const r = casca.getBoundingClientRect();
+        const visivel = r.bottom > 0 && r.top < (window.innerHeight || 600);
+        if (visivel) { Seletor._posicionar(lista, casca); return; }
+      }
+      Seletor.fechar();
+    };
   },
 
   /* Aplica o estilo de fundo (esfera) dos ícones do menu, via atributo no
