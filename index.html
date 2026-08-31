@@ -134,6 +134,21 @@
   .dic-pt { color: var(--rubrica); font-size: 14px; line-height: 1.45; margin-top: 2px; }
   .dic-strong-linha { margin-top: 2px; }
   .dic-strong { font-size: 11.5px; color: var(--tinta-numero); font-family: monospace; }
+
+  /* ===================== SUBTÍTULOS ===================== */
+  .subt-lista { display: flex; flex-direction: column; }
+  .subt-item {
+    display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+    width: 100%; text-align: left; cursor: pointer; background: transparent;
+    padding: 11px 14px;
+    border-bottom: 1px solid color-mix(in srgb, var(--tinta) 10%, transparent);
+  }
+  .subt-item:hover { background: color-mix(in srgb, var(--tinta) 6%, transparent); }
+  .subt-ref {
+    font-size: 12.5px; font-weight: 700; color: var(--rubrica);
+    font-family: var(--fonte-texto); letter-spacing: .2px;
+  }
+  .subt-titulo { font-size: 15px; color: var(--tinta); line-height: 1.35; }
   /* no overlay reaproveitado: quando o topo é transliteração/Strong (sem original),
      não usar o tamanho 2em de palavra original — fica menor e discreto. */
   #pe-o.pe-o-fallback { font-size: 1.15em; font-style: italic; color: var(--tinta-fraca); }
@@ -220,6 +235,7 @@
   <symbol id="i-fechar" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" stroke-linecap="round"/></symbol>
   <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="i-dicionario" viewBox="0 0 24 24"><path d="M5 4h9a3 3 0 0 1 3 3v13a2 2 0 0 0-2-2H5z" stroke-linejoin="round"/><path d="M8 8.5h5M8 11.5h5" stroke-linecap="round"/></symbol>
+  <symbol id="i-subtitulos" viewBox="0 0 24 24"><path d="M4 6h11M4 18h11" stroke-linecap="round"/><path d="M4 12h16" stroke-linecap="round" stroke-width="2.4"/></symbol>
   <symbol id="i-antes" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="i-depois" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="i-nota" viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z" stroke-linejoin="round"/><path d="M14 3v4h4" stroke-linejoin="round"/><path d="M9 12h6M9 16h4" stroke-linecap="round"/></symbol>
@@ -285,6 +301,7 @@
   <button data-menu="caderno"><svg class="icone"><use href="#i-caderno"/></svg><span>Anotação</span></button>
   <button data-menu="referencias"><svg class="icone"><use href="#i-referencias"/></svg><span>Referências cruzadas</span></button>
   <button data-menu="dicionario"><svg class="icone"><use href="#i-dicionario"/></svg><span>Léxico</span></button>
+  <button data-menu="subtitulos"><svg class="icone"><use href="#i-subtitulos"/></svg><span>Subtítulos</span></button>
   <button data-menu="ouvir"><svg class="icone"><use href="#i-ouvir"/></svg><span>Ouvir</span></button>
   <button data-menu="perfil"><svg class="icone"><use href="#i-usuario"/></svg><span>Perfil</span></button>
   <button data-menu="ajustes"><svg class="icone"><use href="#i-ajustes"/></svg><span>Ajustes</span></button>
@@ -691,6 +708,24 @@
     <button data-fechar aria-label="Fechar"><svg class="icone"><use href="#i-fechar"/></svg></button>
   </header>
   <div class="corpo" id="corpo-backup"></div>
+</aside>
+
+<aside class="painel" id="painel-subtitulos" aria-hidden="true">
+  <header>
+    <button class="voltar-painel" data-voltar aria-label="Voltar"><svg class="icone"><use href="#i-antes"/></svg></button>
+    <h2>Subtítulos</h2>
+    <button data-fechar aria-label="Fechar"><svg class="icone"><use href="#i-fechar"/></svg></button>
+  </header>
+  <div class="corpo">
+    <div class="busca-barra">
+      <input class="campo campo-busca" id="campo-subtitulos" type="search" placeholder="Filtrar subtítulos" autocomplete="off">
+      <button class="busca-versao" id="subt-versao" title="Versão dos subtítulos" aria-label="Versão dos subtítulos">
+        <span class="sigla" id="subt-versao-sigla">—</span>
+      </button>
+    </div>
+    <div class="busca-filtros" id="filtros-subtitulos"></div>
+    <div id="resultados-subtitulos"></div>
+  </div>
 </aside>
 
 <aside class="painel" id="painel-dicionario" aria-hidden="true">
