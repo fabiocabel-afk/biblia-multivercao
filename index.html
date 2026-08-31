@@ -57,6 +57,82 @@
     pointer-events: none;
   }
 
+  /* ===================== DICIONÁRIO ===================== */
+  .dic-topo {
+    padding: 12px 16px 10px;
+    border-bottom: 1px solid color-mix(in srgb, var(--tinta) 16%, transparent);
+    display: flex; flex-direction: column; gap: 10px; flex: 0 0 auto;
+  }
+  .dic-busca { position: relative; display: flex; align-items: center; }
+  .dic-busca .dic-lupa {
+    position: absolute; left: 12px; width: 18px; height: 18px;
+    stroke: var(--tinta-fraca); pointer-events: none;
+  }
+  .dic-busca .campo {
+    width: 100%; padding: 11px 38px; border-radius: 10px;
+    border: 1px solid color-mix(in srgb, var(--tinta) 22%, transparent);
+    background: color-mix(in srgb, var(--papel) 88%, #fff 12%);
+    color: var(--tinta); font-size: 15px; font-family: var(--fonte-texto);
+  }
+  .dic-busca .campo:focus {
+    outline: 2px solid color-mix(in srgb, var(--rubrica) 40%, transparent);
+    outline-offset: 1px;
+  }
+  .dic-limpar {
+    position: absolute; right: 8px; display: inline-flex; align-items: center;
+    justify-content: center; width: 26px; height: 26px; border-radius: 50%;
+    cursor: pointer; background: transparent;
+  }
+  .dic-limpar .icone { width: 14px; height: 14px; stroke: var(--tinta-fraca); }
+  .dic-limpar:hover { background: color-mix(in srgb, var(--tinta) 8%, transparent); }
+  .dic-filtros { display: flex; gap: 8px; }
+  .dic-chip {
+    flex: 1 1 0;                 /* mesma largura para os dois */
+    text-align: center;
+    text-transform: uppercase;   /* HEBRAICO / GREGO */
+    letter-spacing: .5px;
+    padding: 7px 0; border-radius: 999px; cursor: pointer; font-size: 12.5px;
+    font-weight: 600; font-family: var(--fonte-texto);
+    border: 1px solid color-mix(in srgb, var(--tinta) 30%, transparent);
+    background: transparent; color: var(--tinta-fraca);
+    transition: background .14s ease, color .14s ease, border-color .14s ease;
+  }
+  .dic-chip.ativo { background: var(--rubrica); color: var(--papel); border-color: var(--rubrica); }
+  .dic-corpo { padding: 6px 12px 20px; overflow-y: auto; }
+  .dic-vazio {
+    text-align: center; color: var(--tinta-fraca); font-size: 14px;
+    padding: 28px 20px; line-height: 1.5;
+  }
+  .dic-rodape { text-align: center; color: var(--tinta-fraca); font-size: 12.5px; padding: 14px; }
+  .dic-item {
+    display: block; width: 100%; text-align: left; cursor: pointer;
+    padding: 11px 12px; border-radius: 10px; background: transparent;
+    border-bottom: 1px solid color-mix(in srgb, var(--tinta) 10%, transparent);
+  }
+  .dic-item:hover { background: color-mix(in srgb, var(--tinta) 6%, transparent); }
+  .dic-item-orig-linha { display: flex; align-items: baseline; gap: 10px; }
+  .dic-orig {
+    font-size: 17px; color: var(--tinta); font-weight: 600; line-height: 1.3;
+    font-family: Georgia, 'Times New Roman', serif;
+  }
+  .dic-orig-he { direction: rtl; font-size: 18px; }
+  /* quando o léxico não traz a palavra original, o topo é a transliteração ou o
+     Strong — em tom menor e discreto, nunca o texto grande de original. */
+  .dic-orig-fallback { font-size: 14px; font-style: italic; color: var(--tinta-fraca); font-family: var(--fonte-texto); }
+  .dic-tag {
+    font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .3px;
+    padding: 2px 7px; border-radius: 6px; color: var(--papel); align-self: center;
+  }
+  .dic-tag-he { background: #5a6e3a; }
+  .dic-tag-gr { background: #4a5a78; }
+  .dic-item-sub { display: flex; align-items: baseline; gap: 8px; margin: 1px 0 3px; }
+  .dic-translit { font-size: 13px; color: var(--tinta-fraca); font-style: italic; }
+  .dic-strong { margin-left: auto; font-size: 11.5px; color: var(--tinta-numero); font-family: monospace; }
+  .dic-pt { color: var(--tinta); font-size: 14px; line-height: 1.45; }
+  /* no overlay reaproveitado: quando o topo é transliteração/Strong (sem original),
+     não usar o tamanho 2em de palavra original — fica menor e discreto. */
+  #pe-o.pe-o-fallback { font-size: 1.15em; font-style: italic; color: var(--tinta-fraca); }
+
   /* Menu "Marcar" da barra de seleção (caixa #sel-cores): um marcador por linha,
      sem quebra de linha no nome. Vence o grid de 2 colunas do CSS principal. */
   #sel-cores {
@@ -138,6 +214,7 @@
   <symbol id="i-lixeira" viewBox="0 0 24 24"><path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13M10 11v6M14 11v6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="i-fechar" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" stroke-linecap="round"/></symbol>
   <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-dicionario" viewBox="0 0 24 24"><path d="M5 4h9a3 3 0 0 1 3 3v13a2 2 0 0 0-2-2H5z" stroke-linejoin="round"/><path d="M8 8.5h5M8 11.5h5" stroke-linecap="round"/></symbol>
   <symbol id="i-antes" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="i-depois" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="i-nota" viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z" stroke-linejoin="round"/><path d="M14 3v4h4" stroke-linejoin="round"/><path d="M9 12h6M9 16h4" stroke-linecap="round"/></symbol>
@@ -202,6 +279,7 @@
   <button data-menu="listas"><svg class="icone"><use href="#i-lista"/></svg><span>Listas de leitura</span></button>
   <button data-menu="caderno"><svg class="icone"><use href="#i-caderno"/></svg><span>Anotação</span></button>
   <button data-menu="referencias"><svg class="icone"><use href="#i-referencias"/></svg><span>Referências cruzadas</span></button>
+  <button data-menu="dicionario"><svg class="icone"><use href="#i-dicionario"/></svg><span>Léxico</span></button>
   <button data-menu="ouvir"><svg class="icone"><use href="#i-ouvir"/></svg><span>Ouvir</span></button>
   <button data-menu="perfil"><svg class="icone"><use href="#i-usuario"/></svg><span>Perfil</span></button>
   <button data-menu="ajustes"><svg class="icone"><use href="#i-ajustes"/></svg><span>Ajustes</span></button>
@@ -608,6 +686,27 @@
     <button data-fechar aria-label="Fechar"><svg class="icone"><use href="#i-fechar"/></svg></button>
   </header>
   <div class="corpo" id="corpo-backup"></div>
+</aside>
+
+<aside class="painel" id="painel-dicionario" aria-hidden="true">
+  <header>
+    <h2>Léxico</h2>
+    <button data-fechar aria-label="Fechar"><svg class="icone"><use href="#i-fechar"/></svg></button>
+  </header>
+  <div class="dic-topo">
+    <div class="dic-busca">
+      <svg class="icone dic-lupa"><use href="#i-busca"/></svg>
+      <input type="text" id="dic-campo" class="campo" placeholder="Pesquisar palavra em português…"
+        autocomplete="off" autocapitalize="off" spellcheck="false">
+      <button id="dic-limpar" class="dic-limpar" aria-label="Limpar" hidden>
+        <svg class="icone"><use href="#i-fechar"/></svg></button>
+    </div>
+    <div class="dic-filtros" role="group" aria-label="Idiomas">
+      <button class="dic-chip ativo" data-lang="he" aria-pressed="true">Hebraico</button>
+      <button class="dic-chip ativo" data-lang="gr" aria-pressed="true">Grego</button>
+    </div>
+  </div>
+  <div class="corpo dic-corpo" id="dic-corpo"></div>
 </aside>
 
 <aside class="painel painel-refs" id="painel-refs-cruzadas" aria-hidden="true">
