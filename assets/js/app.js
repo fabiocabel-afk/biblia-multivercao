@@ -56,6 +56,7 @@ const App = {
     Pergaminho.aplicarIdade(p.pergaminhoIdade);
     Pergaminho.aplicarTema(p.historicoTema);
     Pergaminho.aplicarEstilo(p.estilo);
+    this.aplicarMenuFundo(p.menuFundo);
     Leitura.aplicarFonte(p.fonte);
     Leitura.aplicarModoVersiculo(p.versiculoPorLinha);
     Leitura.aplicarModoNotas(p.mostrarNotas);
@@ -693,6 +694,22 @@ const App = {
     this.fecharPaineis();
     const menu = document.getElementById('menu-flutuante');
     if (!menu) return;
+    // Contém a rolagem no menu: rola os itens se houver overflow e nunca deixa o
+    // scroll "vazar" para a página de trás (desktop). Liga uma vez só.
+    if (!menu._wheelPreso) {
+      menu._wheelPreso = true;
+      menu.addEventListener('wheel', (e) => {
+        const podeRolar = menu.scrollHeight > menu.clientHeight;
+        if (podeRolar) {
+          const noTopo = menu.scrollTop === 0 && e.deltaY < 0;
+          const noFim = Math.ceil(menu.scrollTop + menu.clientHeight) >= menu.scrollHeight && e.deltaY > 0;
+          if (!noTopo && !noFim) { e.stopPropagation(); return; }
+        }
+        // sem overflow (ou nas bordas): impede a página de trás de rolar
+        e.preventDefault();
+        e.stopPropagation();
+      }, { passive: false });
+    }
     menu.classList.add('aberto');
     menu.setAttribute('aria-hidden', 'false');
   },
@@ -4623,6 +4640,7 @@ const App = {
 
     return {
       folha:      { titulo: 'Página',            html: folha },
+      menu:       { titulo: 'Menu',              html: this._blocoMenuAjuste(p) },
       livros:     { titulo: 'Painel de livros',  html: livros },
       comparar:   { titulo: 'Comparar',          html: comparar },
       tirinha:    { titulo: 'Versões empilhadas', html: tirinha },
@@ -4630,6 +4648,25 @@ const App = {
       marcadores: { titulo: 'Marcadores',        html: marcadores },
       guarda:     { titulo: 'Armazenamento',     html: guarda },
     };
+  },
+
+  /* Bloco de Ajustes: fundo (esfera) atrás dos ícones do menu. */
+  _blocoMenuAjuste(p) {
+    const atual = p.menuFundo || 'vermelho';
+    const op = (val, titulo, desc) => `
+      <label class="opcao-radio">
+        <input type="radio" name="menu-fundo" value="${val}" ${atual === val ? 'checked' : ''}>
+        <span class="marca-radio"></span>
+        <span class="rotulo-radio"><strong>${titulo}</strong><span>${desc}</span></span>
+      </label>`;
+    return `
+      <div class="rotulo-controle"><span>Fundo dos ícones do menu</span></div>
+      <div class="escolha-radio">
+        ${op('vermelho', 'Vermelho', 'Esfera vermelha, ícone em tom creme (padrão)')}
+        ${op('marrom', 'Marrom', 'Esfera marrom escura, ícone claro')}
+        ${op('tema', 'Conforme o tema', 'Acompanha a cor do tema escolhido')}
+        ${op('nenhum', 'Sem fundo', 'Como é hoje, só o ícone')}
+      </div>`;
   },
 
   /* ============================================================ Perfil */
@@ -5356,6 +5393,7 @@ const App = {
 
     corpo.innerHTML =
       this.secao('folha', blocos.folha.titulo, blocos.folha.html) +
+      this.secao('menu', blocos.menu.titulo, blocos.menu.html) +
       this.secao('livros', blocos.livros.titulo, blocos.livros.html) +
       this.secao('comparar', blocos.comparar.titulo, blocos.comparar.html) +
       this.secao('tirinha', blocos.tirinha.titulo, blocos.tirinha.html) +
@@ -5398,6 +5436,13 @@ const App = {
       };
       temp.onchange = () => Prefs.set('temperatura', +temp.value);
     }
+
+    corpo.querySelectorAll('input[name="menu-fundo"]').forEach(el => {
+      el.onchange = () => {
+        Prefs.set('menuFundo', el.value);
+        this.aplicarMenuFundo(el.value);
+      };
+    });
 
     corpo.querySelectorAll('input[name="estilo-folha"]').forEach(el => {
       el.onchange = () => {
@@ -7664,10 +7709,19 @@ const App = {
 
     let atraso;
     q('campo-busca').oninput = () => {
+      const bl = document.getElementById('busca-limpar');
+      if (bl) bl.hidden = !q('campo-busca').value;
       clearTimeout(atraso);
       Busca.cancelar();
       atraso = setTimeout(() => this.rodarBusca(), 320);
     };
+    { const bl = document.getElementById('busca-limpar'); const cb = q('campo-busca');
+      if (bl) bl.onclick = () => {
+        cb.value = ''; bl.hidden = true;
+        Busca.cancelar();
+        if (typeof this.rodarBusca === 'function') this.rodarBusca();
+        cb.focus();
+      }; }
 
     q('veu').onclick = () => this.fecharPaineis();
     document.querySelectorAll('[data-fechar]').forEach(el => {
@@ -10189,7 +10243,9 @@ const App = {
     const campo = document.getElementById('campo-subtitulos');
     if (!this._subtLigado) {
       this._subtLigado = true;
-      campo.oninput = () => this._filtrarSubtitulos();
+      const limpar = document.getElementById('subt-limpar');
+      campo.oninput = () => { if (limpar) limpar.hidden = !campo.value; this._filtrarSubtitulos(); };
+      if (limpar) limpar.onclick = () => { campo.value = ''; limpar.hidden = true; this._filtrarSubtitulos(); campo.focus(); };
       document.getElementById('subt-versao').onclick = () => {
         this.alvoVersao = 'subtitulo';
         this.desenharVersoes();
@@ -10205,6 +10261,14 @@ const App = {
   atualizarSubtVersao() {
     const s = document.getElementById('subt-versao-sigla');
     if (s) s.textContent = this.versaoSubt;
+  },
+
+  /* Aplica o estilo de fundo (esfera) dos ícones do menu, via atributo no
+   * container do menu. O CSS cuida das cores por opção e por tema. */
+  aplicarMenuFundo(modo) {
+    const m = modo || Prefs.get('menuFundo') || 'vermelho';
+    const menu = document.getElementById('menu-flutuante');
+    if (menu) menu.setAttribute('data-fundo', m);
   },
 
   desenharFiltrosSubt() {
