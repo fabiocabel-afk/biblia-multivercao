@@ -7438,6 +7438,7 @@ const App = {
       caderno: () => { this.desenharCaderno(); this.abrir('painel-caderno'); },
       referencias: () => this.abrirReferenciasCruzadas(),
       ouvir: () => this.iniciarOuvir(),
+      dicionario: () => { this.abrirDicionario(); },
       perfil: () => { this._modoPerfil = 'view'; this.desenharPerfil(); this.abrir('painel-perfil'); },
       ajustes: () => { this.dobraA = null; this.desenharAjustes(); this.abrir('painel-ajustes'); },
       backup: () => { this.desenharBackup(); this.abrir('painel-backup'); },
@@ -10157,6 +10158,184 @@ const App = {
     this.refsHist.push(limpo);
     this.refsRaiz = limpo;
     this._salvarHistRefs();
+  },
+
+  /* ============================ DICIONÁRIO ============================
+   * Pesquisa no léxico Strong (hebraico + grego) que o app já carrega. A pessoa
+   * digita em português e a lista filtra ao vivo; chips no topo ligam/desligam
+   * cada idioma. Usa os mesmos dados de Dados.lexico / Dados.carregarLexico. */
+  async abrirDicionario() {
+    this.abrir('painel-dicionario');
+    if (!this._dicLangs) this._dicLangs = { he: true, gr: true };
+
+    const campo = document.getElementById('dic-campo');
+    const limpar = document.getElementById('dic-limpar');
+    const corpo = document.getElementById('dic-corpo');
+
+    // carrega os dois léxicos uma vez e monta um índice de busca leve
+    if (!this._dicIndice) {
+      corpo.innerHTML = `<p class="dic-vazio">Carregando dicionário…</p>`;
+      await this._montarIndiceDic();
+    }
+
+    // liga os controles só uma vez
+    if (!this._dicLigado) {
+      this._dicLigado = true;
+      const redesenha = () => this._filtrarDicionario();
+      campo.oninput = () => {
+        limpar.hidden = !campo.value;
+        redesenha();
+      };
+      limpar.onclick = () => { campo.value = ''; limpar.hidden = true; redesenha(); campo.focus(); };
+      document.querySelectorAll('#painel-dicionario .dic-chip').forEach(chip => {
+        chip.onclick = () => {
+          const lang = chip.dataset.lang;
+          // não deixa desligar os dois ao mesmo tempo
+          const outro = lang === 'he' ? 'gr' : 'he';
+          if (this._dicLangs[lang] && !this._dicLangs[outro]) return;
+          this._dicLangs[lang] = !this._dicLangs[lang];
+          chip.classList.toggle('ativo', this._dicLangs[lang]);
+          chip.setAttribute('aria-pressed', this._dicLangs[lang] ? 'true' : 'false');
+          redesenha();
+        };
+      });
+    }
+    this._filtrarDicionario();
+    setTimeout(() => campo.focus(), 60);
+  },
+
+  async _montarIndiceDic() {
+    const [he, gr] = await Promise.all([
+      Dados.carregarLexico('he'),
+      Dados.carregarLexico('gr'),
+    ]);
+    const norm = s => (s || '').toString().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    // detecta, em cada entrada, o campo que É a palavra original (tem letra
+    // hebraica \u0590-\u05FF ou grega \u0370-\u03FF/\u1F00-\u1FFF), sem depender
+    // de saber o nome do campo — e o campo da transliteração (latino, != pt).
+    const RE_HE = /[\u0590-\u05FF]/, RE_GR = /[\u0370-\u03FF\u1F00-\u1FFF]/;
+    const achaOriginal = (e, lang) => {
+      const re = lang === 'he' ? RE_HE : RE_GR;
+      for (const k of Object.keys(e)) {
+        const v = e[k];
+        if (typeof v === 'string' && re.test(v)) return v.trim();
+      }
+      return '';
+    };
+    const achaTranslit = (e, orig, pt) => {
+      // um campo curto, latino, que não seja o pt nem o en nem o original
+      for (const k of ['tr','translit','transliteration','tlit','pron','xlit']) {
+        if (typeof e[k] === 'string' && e[k].trim()) return e[k].trim();
+      }
+      return '';
+    };
+    const idx = [];
+    for (const [lang, dic] of [['he', he], ['gr', gr]]) {
+      for (const strong of Object.keys(dic || {})) {
+        const e = dic[strong] || {};
+        const pt = (e.pt || e.en || '').trim();
+        if (!pt) continue;
+        const orig = achaOriginal(e, lang);
+        const translit = achaTranslit(e, orig, pt);
+        idx.push({
+          lang, strong, orig, translit, pt,
+          busca: norm(pt) + ' ' + norm(translit) + ' ' + strong.toLowerCase(),
+        });
+      }
+    }
+    // ordena por número Strong (ordem natural do léxico) para ficar estável
+    const numDe = s => parseInt(String(s).replace(/\D/g, ''), 10) || 0;
+    idx.sort((a, b) => a.lang.localeCompare(b.lang) || numDe(a.strong) - numDe(b.strong));
+    this._dicIndice = idx;
+  },
+
+  _filtrarDicionario() {
+    const corpo = document.getElementById('dic-corpo');
+    const termoBruto = (document.getElementById('dic-campo').value || '').trim();
+    const norm = s => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    const termo = norm(termoBruto);
+    const langs = this._dicLangs;
+
+    if (!this._dicIndice || !this._dicIndice.length) {
+      corpo.innerHTML = `<p class="dic-vazio">O dicionário (léxico) não está disponível.</p>`;
+      return;
+    }
+
+    let itens = this._dicIndice.filter(e => langs[e.lang]);
+    if (termo) itens = itens.filter(e => e.busca.includes(termo));
+
+    // Sem termo: mostra TODAS as palavras (a pessoa rola e filtra ao digitar) —
+    // dá cara de dicionário de verdade, não de tela de busca vazia.
+    if (termo && !itens.length) {
+      corpo.innerHTML = `<p class="dic-vazio">Nada encontrado para “${Leitura.escapar(termoBruto)}”.</p>`;
+      return;
+    }
+
+    const MAX = 300;
+    const total = itens.length;
+    const lista = itens.slice(0, MAX).map((e) => {
+      // topo = palavra ORIGINAL; se o léxico não tiver, cai na transliteração;
+      // por último o Strong. NUNCA o português (que já aparece embaixo).
+      const cabeca = e.orig || e.translit || e.strong;
+      const temOrig = !!e.orig;
+      return `
+      <button class="dic-item" data-dic="${e.lang}:${Leitura.escaparAttr(e.strong)}">
+        <div class="dic-item-orig-linha">
+          <span class="dic-orig dic-orig-${e.lang} ${temOrig ? '' : 'dic-orig-fallback'}">${Leitura.escapar(cabeca)}</span>
+          <span class="dic-tag dic-tag-${e.lang}">${e.lang === 'he' ? 'Hebr.' : 'Grego'}</span>
+        </div>
+        <div class="dic-item-sub">
+          ${e.orig && e.translit ? `<span class="dic-translit">${Leitura.escapar(e.translit)}</span>` : ''}
+          <span class="dic-strong">${Leitura.escapar(e.strong)}</span>
+        </div>
+        <div class="dic-pt">${Leitura.escapar(e.pt)}</div>
+      </button>`;
+    }).join('');
+    const nota = total > MAX
+      ? `<p class="dic-vazio">Mostrando ${MAX} de ${total.toLocaleString('pt-BR')} palavras. ${
+          termo ? 'Refine a busca.' : 'Comece a digitar para filtrar.'}</p>`
+      : (!termo ? `<p class="dic-rodape">${total.toLocaleString('pt-BR')} palavras no dicionário.</p>` : '');
+    corpo.innerHTML = lista + nota;
+
+    // clicar num item abre o MESMO layout de estudo da palavra da leitura
+    corpo.querySelectorAll('[data-dic]').forEach(el => {
+      el.onclick = () => {
+        const [lang, strong] = el.dataset.dic.split(':');
+        this._abrirPalavraDoDicionario(lang, strong);
+      };
+    });
+  },
+
+  /* Reaproveita o overlay 'palavra-veu' da leitura (original grande no topo,
+   * transliteração, português, Strong, lema) para mostrar a palavra escolhida
+   * no dicionário — sem inventar outro layout. */
+  _abrirPalavraDoDicionario(lang, strong) {
+    const e = (this._dicIndice || []).find(x => x.lang === lang && x.strong === strong);
+    if (!e) return;
+    const q = id => document.getElementById(id);
+    const rtl = lang === 'he';
+
+    const alvoO = q('pe-o');
+    alvoO.textContent = e.orig || e.translit || e.strong;
+    alvoO.dir = rtl && e.orig ? 'rtl' : '';
+    alvoO.classList.toggle('pe-o-fallback', !e.orig);
+
+    const linha = (idLinha, idVal, valor, comDir) => {
+      const box = q(idLinha); if (!box) return;
+      if (!valor) { box.hidden = true; return; }
+      box.hidden = false;
+      const val = q(idVal); val.textContent = valor;
+      val.dir = comDir && rtl ? 'rtl' : '';
+    };
+    linha('pe-linha-t', 'pe-t', e.translit, false);
+    linha('pe-linha-g', 'pe-g', e.pt, false);
+    linha('pe-linha-m', 'pe-m', lang === 'he' ? 'Hebraico' : 'Grego', false);
+    linha('pe-linha-s', 'pe-s', e.strong, false);
+    linha('pe-linha-l', 'pe-l', e.orig, true);
+
+    const veu = q('palavra-veu');
+    veu.classList.add('aberto');
+    veu.setAttribute('aria-hidden', 'false');
   },
 
   abrirReferenciasCruzadas() {
