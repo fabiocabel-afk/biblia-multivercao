@@ -35,12 +35,28 @@ const App = {
     }
 
     const p = Prefs.todas();
+
+    // Pedido 3: na primeira vez (antes de o usuário configurar), as versões
+    // empilhadas já vêm com TODAS marcadas, exceto "A Mensagem" — senão vinham só
+    // umas poucas, muitas vezes parecidas, e a pessoa não descobria que dá para
+    // ver mais versões. Uma flag própria garante que isto rode UMA vez só: depois
+    // disso as escolhas do usuário mandam (inclusive desmarcar tudo).
+    if (!Prefs.get('versoesTirinhaIniciada')) {
+      const padrao = Dados.versoes
+        .filter(v => !/mensagem/i.test(v.name || '') && !/mensagem/i.test(v.code || ''))
+        .map(v => v.code);
+      Prefs.set('versoesTirinha', padrao);
+      Prefs.set('versoesTirinhaIniciada', true);
+      p.versoesTirinha = padrao;   // reflete já nesta sessão
+    }
+
     this.versao = Dados.versao(p.versao) ? p.versao : Dados.versoes[0].code;
     Leitura.aplicarEscuro(p.escuro);
     Leitura.aplicarTemperatura(p.temperatura);
     Pergaminho.aplicarIdade(p.pergaminhoIdade);
     Pergaminho.aplicarTema(p.historicoTema);
     Pergaminho.aplicarEstilo(p.estilo);
+    this.aplicarMenuFundo(p.menuFundo);
     Leitura.aplicarFonte(p.fonte);
     Leitura.aplicarModoVersiculo(p.versiculoPorLinha);
     Leitura.aplicarModoNotas(p.mostrarNotas);
@@ -211,6 +227,7 @@ const App = {
     this._aplicarDeslize(folha, desliza);   // transição lateral ao trocar de capítulo
     window.scrollTo(0, 0);
     this._marcarCortados();   // no modo abreviar, marca as palavras que cortaram
+    this._destacarInicioNotas();   // destaca o 1º versículo de cada nota
 
     if (vers) {
       // no modo Subtitulos, a mira e o proprio cabecalho da secao (topo);
@@ -313,6 +330,7 @@ const App = {
       }
     }
     this._marcarCortados();
+    this._destacarInicioNotas();
     this._prefetchVizinhos();
   },
 
@@ -352,6 +370,9 @@ const App = {
     document.getElementById('btn-ref').textContent =
       Dados.referencia(this.versao, this.code, this.cap);
     document.getElementById('sigla-versao').textContent = this.versao;
+    // mesma sigla no botão de versão dentro do painel de Livros (Pedido 2)
+    { const s = document.getElementById('sigla-versao-arvore');
+      if (s) s.textContent = this.versao; }
     // a engrenagem "Exibir" (dentro do quadradinho da versão) só no interlinear
     const ehInter = Dados.ehInterlinear(this.versao);
     const engrenagem = document.getElementById('btn-il-exibir');
@@ -673,6 +694,22 @@ const App = {
     this.fecharPaineis();
     const menu = document.getElementById('menu-flutuante');
     if (!menu) return;
+    // Contém a rolagem no menu: rola os itens se houver overflow e nunca deixa o
+    // scroll "vazar" para a página de trás (desktop). Liga uma vez só.
+    if (!menu._wheelPreso) {
+      menu._wheelPreso = true;
+      menu.addEventListener('wheel', (e) => {
+        const podeRolar = menu.scrollHeight > menu.clientHeight;
+        if (podeRolar) {
+          const noTopo = menu.scrollTop === 0 && e.deltaY < 0;
+          const noFim = Math.ceil(menu.scrollTop + menu.clientHeight) >= menu.scrollHeight && e.deltaY > 0;
+          if (!noTopo && !noFim) { e.stopPropagation(); return; }
+        }
+        // sem overflow (ou nas bordas): impede a página de trás de rolar
+        e.preventDefault();
+        e.stopPropagation();
+      }, { passive: false });
+    }
     menu.classList.add('aberto');
     menu.setAttribute('aria-hidden', 'false');
   },
@@ -685,6 +722,7 @@ const App = {
   },
 
   fecharPaineis() {
+    this._volta = null;   // fechar de vez limpa qualquer passo-anterior pendente
     document.querySelectorAll('.painel').forEach(p => {
       p.classList.remove('aberto');
       p.setAttribute('aria-hidden', 'true');
@@ -1379,11 +1417,13 @@ const App = {
     const alvo = this.alvoVersao || 'principal';
 
     document.getElementById('titulo-versao').textContent =
-      alvo === 'comparar' ? 'Versão de baixo' : alvo === 'busca' ? 'Versão da busca' : 'Versões';
+      alvo === 'comparar' ? 'Versão de baixo' : alvo === 'busca' ? 'Versão da busca'
+        : alvo === 'subtitulo' ? 'Versão dos subtítulos' : 'Versões';
 
     corpo.innerHTML = this.htmlListaVersoes(
       alvo === 'comparar' ? Prefs.get('versaoComparar')
         : alvo === 'busca' ? (this.versaoBusca || this.versao)
+        : alvo === 'subtitulo' ? (this.versaoSubt || this.versao)
         : this.versao);
 
     corpo.querySelectorAll('[data-versao]').forEach(el => {
@@ -1398,6 +1438,33 @@ const App = {
         } else if (alvo === 'busca') {
           // troca a versão da busca e volta ao painel de busca
           this.trocarVersaoBusca(code);
+        } else if (alvo === 'subtitulo') {
+          // troca só a versão de SUBTÍTULO da pesquisa — NÃO mexe na Bíblia.
+          this.alvoVersao = 'principal';
+          this.versaoSubt = code;
+          this._volta = null;
+          this.abrirSubtitulos();
+        } else if (alvo === 'arvore') {
+          // veio do painel de Livros: troca a versão e VOLTA para os Livros
+          // (mesmo efeito do X), já com a lista atualizada para a nova versão —
+          // é onde se vê a mudança de cânone. Não vai para a leitura.
+          this.alvoVersao = 'principal';
+          if (code !== this.versao) {
+            if (Dados.canoneDe(this.versao) !== Dados.canoneDe(code)) {
+              Busca.escopo = { tipo: 'tudo', id: null, nome: 'Toda a Bíblia' };
+            }
+            this.versao = code;
+            Prefs.set('versao', code);
+            // se o livro atual não existe na versão nova, cai num livro válido
+            if (!Dados.temLivro(code, this.code)) { this.code = 'GEN'; this.cap = 1; }
+            // atualiza JÁ a sigla dos botões de versão (barra principal e o de
+            // dentro dos Livros), e reprocessa a leitura de fundo na nova versão
+            this.atualizarBarra();
+            this.ir(this.code, this.cap);
+          }
+          this._volta = null;
+          this.desenharArvore();
+          this.abrir('painel-arvore');
         } else {
           this.trocarVersao(code);
         }
@@ -1900,6 +1967,9 @@ const App = {
         <button class="botao secundario" id="pdf-varios">
           <svg class="icone"><use href="#i-compartilhar"/></svg> Exportar PDF
         </button>
+        <button class="botao secundario" id="json-varios">
+          <svg class="icone"><use href="#i-backup"/></svg> Exportar JSON
+        </button>
       </div>` + estudos.map(e => {
       const trechos = Estudos.trechosDe(e);
       const listaTrechos = trechos.map((t, i) => `<div class="trecho-estudo">
@@ -1918,20 +1988,22 @@ const App = {
             <strong>${Leitura.escapar(Estudos.nomeDe(e))}</strong>
             <svg class="icone estudo-titulo-seta"><use href="#i-depois"/></svg>
           </button>
-          <span class="quando">${Estudos.quandoDe(e)}</span>
+          <span class="quando">${this._rodapeEstudo(e)}</span>
         </div>
         <div class="trechos-lista">${listaTrechos}</div>
-        <div class="acoes-sessao">
-          <button class="pilula" data-ler="${e.id}">Ler</button>
-          <button class="pilula" data-editar="${e.id}">Editar</button>
+        <div class="acoes-sessao acoes-estudo">
+          <button class="pilula acao-estudo" data-ler="${e.id}">Ler</button>
+          <button class="pilula acao-estudo" data-tocar-est="${e.id}">Tocar</button>
+          <button class="pilula acao-estudo" data-editar="${e.id}">Editar</button>
           <div class="mais-opcoes">
-            <button class="pilula mais-btn" data-mais="${e.id}" aria-haspopup="true"
-              aria-expanded="false" aria-label="Mais opções">⋯ Mais</button>
+            <button class="pilula acao-estudo mais-btn" data-mais="${e.id}" aria-haspopup="true"
+              aria-expanded="false" aria-label="Mais opções">Mais</button>
             <div class="mais-lista" id="mais-${e.id}" hidden>
               <button class="mais-item" data-renomear="${e.id}">Renomear</button>
               <button class="mais-item" data-partilhar="${e.id}">Compartilhar</button>
               <button class="mais-item" data-copiar="${e.id}">Copiar</button>
               <button class="mais-item" data-pdf="${e.id}">Exportar PDF</button>
+              <button class="mais-item" data-json="${e.id}">Exportar JSON</button>
               <button class="mais-item perigo" data-remover="${e.id}">Excluir</button>
             </div>
           </div>
@@ -1949,6 +2021,17 @@ const App = {
     });
     corpo.querySelectorAll('[data-editar]').forEach(el => {
       el.onclick = () => this.editarEstudo(el.dataset.editar);
+    });
+    corpo.querySelectorAll('[data-tocar-est]').forEach(el => {
+      el.onclick = () => this.tocarEstudoPorId(el.dataset.tocarEst);
+    });
+
+    // Clicar no nome do autor (rodapé de crédito) abre o popup do perfil
+    corpo.querySelectorAll('.autor-nome').forEach(el => {
+      el.onclick = (ev) => {
+        ev.stopPropagation();
+        this.abrirPerfilAutorPorId(el.dataset.autorId);
+      };
     });
 
     // menu "⋯ Mais": abre/fecha a lista para baixo (um de cada vez)
@@ -1992,8 +2075,14 @@ const App = {
     });
 
     corpo.querySelectorAll('[data-est-rem]').forEach(el => {
-      el.onclick = e => {
+      el.onclick = async e => {
         e.stopPropagation();
+        const ok = await this.confirmar({
+          titulo: 'Remover trecho',
+          mensagem: 'Remover este trecho do estudo? Não dá para desfazer.',
+          confirmar: 'Remover', cancelar: 'Manter',
+        });
+        if (!ok) return;
         Estudos.removerTrecho(el.dataset.estRem, +el.dataset.trRem);
         this.desenharEstudos();
       };
@@ -2050,8 +2139,136 @@ const App = {
     corpo.querySelectorAll('[data-pdf]').forEach(el => {
       el.onclick = () => this.exportarPdf([el.dataset.pdf]);
     });
+    corpo.querySelectorAll('[data-json]').forEach(el => {
+      el.onclick = () => this.exportarEstudosJson([el.dataset.json]);
+    });
     const btVarios = document.getElementById('pdf-varios');
     if (btVarios) btVarios.onclick = () => this.montarPdfEstudos();
+    const btJson = document.getElementById('json-varios');
+    if (btJson) btJson.onclick = () => this.montarJsonEstudos();
+  },
+
+  /* Escolhe a permissão de uso e devolve o modo escolhido (ou null se cancelar).
+   * Overlay próprio, criado na hora — não depende de HTML fixo no index. */
+  _escolherPermissao({ titulo = 'Como quem receber poderá usar?' } = {}) {
+    return new Promise(resolve => {
+      const veu = document.createElement('div');
+      veu.className = 'dialogo-veu aberto perm-veu';
+      veu.setAttribute('role', 'dialog');
+      veu.setAttribute('aria-modal', 'true');
+      veu.innerHTML = `
+        <div class="dialogo perm-caixa">
+          <strong>${titulo}</strong>
+          <div class="perm-opcoes">
+            ${Importacao.MODOS.map((m, i) => `
+              <label class="backup-modo">
+                <input type="radio" name="perm-json" value="${m.id}" ${i === 0 ? 'checked' : ''}>
+                <span class="backup-modo-marca"></span>
+                <span class="backup-modo-texto">
+                  <strong>${m.icon} ${m.nome}</strong>
+                  <span>${m.descricao}</span>
+                </span>
+              </label>`).join('')}
+          </div>
+          <div class="dialogo-acoes">
+            <button class="botao secundario" id="perm-cancelar" type="button">Cancelar</button>
+            <button class="botao" id="perm-ok" type="button">Exportar</button>
+          </div>
+        </div>`;
+      document.body.appendChild(veu);
+
+      const fechar = valor => {
+        veu.remove();
+        document.removeEventListener('keydown', aoTeclar, true);
+        resolve(valor);
+      };
+      const aoTeclar = e => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); fechar(null); } };
+      veu.querySelector('#perm-ok').onclick = () => {
+        const el = veu.querySelector('input[name="perm-json"]:checked');
+        fechar(el ? el.value : 'somente-leitura');
+      };
+      veu.querySelector('#perm-cancelar').onclick = () => fechar(null);
+      veu.onclick = e => { if (e.target === veu) fechar(null); };
+      document.addEventListener('keydown', aoTeclar, true);
+    });
+  },
+
+  /* Exporta um conjunto de estudos (por id) como JSON, perguntando a permissão. */
+  async exportarEstudosJson(ids, nomeArquivo = null) {
+    if (!Array.isArray(ids) || !ids.length) return;
+    const modo = await this._escolherPermissao();
+    if (modo === null) return; // cancelou
+
+    const bundle = Exportacao.exportarEstudos(ids, modo,
+      ids.length > 1 ? 'Estudos' : (Estudos.nomeDe(Estudos.achar(ids[0])) || 'Estudo'));
+
+    let nome = nomeArquivo;
+    if (!nome) {
+      const data = new Date().toISOString().slice(0, 10);
+      if (ids.length === 1) {
+        const bruto = (Estudos.nomeDe(Estudos.achar(ids[0])) || 'estudo');
+        const limpo = bruto.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+          .replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-+|-+$/g, '').toLowerCase() || 'estudo';
+        nome = `estudo-${limpo}-${data}.json`;
+      } else {
+        nome = `estudos-${data}.json`;
+      }
+    }
+    Exportacao.salvarArquivo(bundle, nome);
+    this.avisoRapido(ids.length > 1 ? 'Estudos exportados' : 'Estudo exportado');
+  },
+
+  /* Montador "por fora" do JSON: escolher vários estudos e gerar um JSON só.
+   * Espelha a tela do PDF (selecionar + ordenar). */
+  montarJsonEstudos() {
+    const corpo = document.getElementById('corpo-estudos');
+    const todos = Estudos.todos();
+    const achar = id => todos.find(e => e.id === id);
+    const ordem = [];
+
+    const render = () => {
+      const sel = new Set(ordem);
+      const selecionados = ordem.map((id, i) => `
+        <div class="pdf-linha sel">
+          <span class="pdf-ord">${i + 1}</span>
+          <span class="pdf-nome">${Leitura.escapar(Estudos.nomeDe(achar(id)) || 'Estudo')}</span>
+          <span class="pdf-move">
+            <button class="xis" data-sobe="${id}" ${i === 0 ? 'disabled' : ''} aria-label="Subir">
+              <svg class="icone"><use href="#i-tri-cima"/></svg></button>
+            <button class="xis" data-desce="${id}" ${i === ordem.length - 1 ? 'disabled' : ''} aria-label="Descer">
+              <svg class="icone"><use href="#i-tri-baixo"/></svg></button>
+            <button class="xis" data-tira="${id}" aria-label="Tirar">
+              <svg class="icone"><use href="#i-fechar"/></svg></button>
+          </span>
+        </div>`).join('');
+      const disponiveis = todos.filter(e => !sel.has(e.id)).map(e => `
+        <button class="pdf-add" data-add="${e.id}">
+          <svg class="icone"><use href="#i-nota"/></svg>
+          ${Leitura.escapar(Estudos.nomeDe(e) || 'Estudo')}</button>`).join('');
+
+      corpo.innerHTML = `
+        <div class="pdf-montar">
+          <button class="botao secundario" id="json-voltar">
+            <svg class="icone"><use href="#i-antes"/></svg> Voltar</button>
+          <p class="pdf-ajuda">Escolha os estudos que entram no arquivo JSON. Você poderá
+            compartilhar esse arquivo para outra pessoa importar no app dela.</p>
+          <div class="pdf-secao-rot">Selecionados</div>
+          <div class="pdf-selecionados">${selecionados || '<div class="estado peq">Nenhum selecionado ainda.</div>'}</div>
+          <div class="pdf-secao-rot">Disponíveis</div>
+          <div class="pdf-disponiveis">${disponiveis || '<div class="estado peq">— todos já escolhidos —</div>'}</div>
+          <button class="botao pdf-gerar" id="json-gerar" ${ordem.length ? '' : 'disabled'}>
+            Exportar JSON${ordem.length ? ` (${ordem.length})` : ''}</button>
+        </div>`;
+
+      corpo.querySelectorAll('[data-add]').forEach(el => el.onclick = () => { ordem.push(el.dataset.add); render(); });
+      corpo.querySelectorAll('[data-tira]').forEach(el => el.onclick = () => { const i = ordem.indexOf(el.dataset.tira); if (i >= 0) ordem.splice(i, 1); render(); });
+      corpo.querySelectorAll('[data-sobe]').forEach(el => el.onclick = () => { const i = ordem.indexOf(el.dataset.sobe); if (i > 0) { [ordem[i - 1], ordem[i]] = [ordem[i], ordem[i - 1]]; render(); } });
+      corpo.querySelectorAll('[data-desce]').forEach(el => el.onclick = () => { const i = ordem.indexOf(el.dataset.desce); if (i >= 0 && i < ordem.length - 1) { [ordem[i + 1], ordem[i]] = [ordem[i], ordem[i + 1]]; render(); } });
+      document.getElementById('json-voltar').onclick = () => this.desenharEstudos();
+      const g = document.getElementById('json-gerar');
+      if (g) g.onclick = () => { if (ordem.length) this.exportarEstudosJson(ordem.slice()); };
+    };
+    render();
   },
 
   /* Montador "por fora": escolher vários estudos, ordenar e gerar um PDF só. */
@@ -2142,18 +2359,31 @@ const App = {
     }
 
     const conteudo = partes.join('') || '<div class="estado peq">Estudo vazio.</div>';
+
+    // Rodapé: se for estudo de terceiro em somente-leitura, sem botão Editar
+    const seloAutor = this._seloAutor(e);
+    const botaoEditar = e.somenteLeitura
+      ? `<div class="aviso-bloqueado">🔒 Compartilhado apenas para leitura.</div>`
+      : `<button class="pilula-lapis" id="estudo-ver-editar">
+          <svg class="icone"><use href="#i-lapis"/></svg> Editar
+        </button>`;
+
     corpo.innerHTML = `
       <div class="estudo-ver-conteudo">${conteudo}</div>
+      ${seloAutor ? `<div class="estudo-ver-autor">${seloAutor}</div>` : ''}
       <div class="estudo-ver-rodape">
         <button class="pilula-lapis pilula-tocar" id="estudo-ver-tocar">
           <svg class="icone"><use href="#i-play"/></svg> Ouvir
         </button>
-        <button class="pilula-lapis" id="estudo-ver-editar">
-          <svg class="icone"><use href="#i-lapis"/></svg> Editar
-        </button>
+        ${botaoEditar}
       </div>`;
-    document.getElementById('estudo-ver-editar').onclick = () => this.editarEstudo(id);
+    const btnEditar = document.getElementById('estudo-ver-editar');
+    if (btnEditar) btnEditar.onclick = () => this.editarEstudo(id);
     document.getElementById('estudo-ver-tocar').onclick = () => this.tocarEstudoPorId(id);
+
+    // Nome do autor abre o popup do perfil
+    const nomeBtn = corpo.querySelector('.autor-nome');
+    if (nomeBtn && e.autor) nomeBtn.onclick = () => this.abrirPerfilAutor(e.autor);
   },
 
   /* Um trecho vira uma ou mais "fatias" — uma por capítulo — cada uma com os
@@ -2723,6 +2953,13 @@ const App = {
   async editarEstudo(id) {
     const e = Estudos.todos().find(x => x.id === id);
     if (!e) return;
+
+    // Estudo de terceiro em modo leitura não pode ser editado
+    if (e.somenteLeitura) {
+      this.avisoRapido('Este estudo é somente leitura');
+      return;
+    }
+
     this._estudoAtual = id;
 
     // cópia de trabalho da sequência
@@ -3343,13 +3580,16 @@ const App = {
 
     corpo.innerHTML = listas.map(l => {
       const n = Listas.trechosDe(l).length;
+      const creditoAutor = l.autor
+        ? ` · <span class="autor-nome autor-inline" data-autor-id="${l.id}" role="button" tabindex="0">${Leitura.escapar(l.autor.nome || 'Autor')}</span>`
+        : '';
       return `<div class="lista-linha">
         <button class="lista-tocar" data-tocar="${l.id}" aria-label="Tocar lista" title="Tocar">
           <svg class="icone"><use href="#i-play"/></svg>
         </button>
         <button class="lista-abrir" data-abrir="${l.id}">
           <span class="lista-nome">${Leitura.escapar(Listas.nomeDe(l))}</span>
-          <span class="lista-sub">${Listas.refDe(l)} · ${n} trecho${n > 1 ? 's' : ''}</span>
+          <span class="lista-sub">${Listas.refDe(l)} · ${n} trecho${n > 1 ? 's' : ''}${creditoAutor}</span>
         </button>
         <svg class="icone lista-seta"><use href="#i-depois"/></svg>
       </div>`;
@@ -3360,6 +3600,13 @@ const App = {
     });
     corpo.querySelectorAll('[data-abrir]').forEach(el => {
       el.onclick = () => this.verLista(el.dataset.abrir);
+    });
+    corpo.querySelectorAll('.autor-nome').forEach(el => {
+      el.onclick = (ev) => {
+        ev.stopPropagation();
+        ev.preventDefault();
+        this.abrirPerfilAutorPorId(el.dataset.autorId);
+      };
     });
   },
 
@@ -3516,6 +3763,573 @@ const App = {
       // sem compartilhamento nativo, o botão vira um "copiar" também
       enviar.textContent = 'Copiar link';
       enviar.onclick = () => document.getElementById('copiar-link').click();
+    }
+  },
+
+  /* ============================================ Backup e Partilha (Export/Import) */
+  desenharBackup() {
+    const corpo = document.getElementById('corpo-backup');
+    if (!corpo) return;
+
+    corpo.innerHTML = `
+      <div class="backup-intro">
+        <p>Salve seu conteúdo (anotações, listas, estudos e marcadores) em um
+        arquivo, ou traga conteúdo de outra pessoa para o seu app.</p>
+      </div>
+
+      <div class="backup-acoes-principais">
+        <button class="backup-cartao-acao" id="backup-abrir-exportar">
+          <svg class="backup-cartao-icone" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke-linecap="round" stroke-linejoin="round" fill="none" stroke="currentColor" stroke-width="2"/><path d="M7 10l5 5 5-5" stroke-linecap="round" stroke-linejoin="round" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 15V3" stroke-linecap="round" stroke="currentColor" stroke-width="2"/></svg>
+          <span class="backup-cartao-titulo">Exportar</span>
+          <span class="backup-cartao-desc">Salvar meu conteúdo num arquivo para guardar ou partilhar</span>
+        </button>
+
+        <button class="backup-cartao-acao" id="backup-abrir-importar">
+          <svg class="backup-cartao-icone" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke-linecap="round" stroke-linejoin="round" fill="none" stroke="currentColor" stroke-width="2"/><path d="M7 8l5-5 5 5" stroke-linecap="round" stroke-linejoin="round" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 3v12" stroke-linecap="round" stroke="currentColor" stroke-width="2"/></svg>
+          <span class="backup-cartao-titulo">Importar</span>
+          <span class="backup-cartao-desc">Trazer conteúdo de um arquivo para o meu app</span>
+        </button>
+      </div>
+    `;
+
+    document.getElementById('backup-abrir-exportar').onclick = () => this._abrirModalExportar();
+    document.getElementById('backup-abrir-importar').onclick = () => this._abrirModalImportar();
+  },
+
+  /* Fecha qualquer modal de backup aberto */
+  _fecharModalBackup() {
+    const m = document.getElementById('modal-backup');
+    if (m) m.remove();
+  },
+
+  /* Cria a casca de um modal flutuante centralizado e devolve o elemento
+   * do corpo, onde o conteúdo específico é inserido. */
+  _abrirModalBackup(titulo, iconeSvg) {
+    this._fecharModalBackup();
+    const modal = document.createElement('div');
+    modal.id = 'modal-backup';
+    modal.innerHTML = `
+      <div class="mb-overlay" id="mb-overlay">
+        <div class="mb-caixa">
+          <div class="mb-cabeca">
+            <span class="mb-icone">${iconeSvg}</span>
+            <span class="mb-titulo">${titulo}</span>
+            <button class="mb-fechar" id="mb-fechar" aria-label="Fechar">&times;</button>
+          </div>
+          <div class="mb-corpo" id="mb-corpo"></div>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+
+    document.getElementById('mb-overlay').addEventListener('click', (e) => {
+      if (e.target.id === 'mb-overlay') this._fecharModalBackup();
+    });
+    document.getElementById('mb-fechar').addEventListener('click', () => this._fecharModalBackup());
+
+    return document.getElementById('mb-corpo');
+  },
+
+  /* ============================================ MODAL EXPORTAR */
+  _abrirModalExportar() {
+    const iconeExport = `<svg viewBox="0 0 24 24" width="22" height="22"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke-linecap="round" stroke-linejoin="round" fill="none" stroke="currentColor" stroke-width="2"/><path d="M7 10l5 5 5-5" stroke-linecap="round" stroke-linejoin="round" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 15V3" stroke-linecap="round" stroke="currentColor" stroke-width="2"/></svg>`;
+    const corpo = this._abrirModalBackup('Exportar', iconeExport);
+
+    // Coleta todos os itens para montar a árvore de seleção
+    const dados = {
+      marcadores: Exportacao.coletarMarcadores(),
+      anotacoes: Exportacao.coletarAnotacoes(),
+      listas: Exportacao.coletarListas(),
+      estudos: Exportacao.coletarEstudos(),
+    };
+    const total = dados.marcadores.length + dados.anotacoes.length + dados.listas.length + dados.estudos.length;
+
+    corpo.innerHTML = `
+      <div class="backup-permissao">
+        <div class="backup-permissao-titulo">Permissão de uso do seu conteúdo</div>
+        <p class="backup-ajuda">Você decide como quem receber poderá usar este arquivo.
+        A pessoa será informada da permissão que você escolher.</p>
+        ${Importacao.MODOS.map((m, i) => `
+          <label class="backup-modo">
+            <input type="radio" name="backup-permissao" value="${m.id}" ${i === 0 ? 'checked' : ''}>
+            <span class="backup-modo-marca"></span>
+            <span class="backup-modo-texto">
+              <strong>${m.icon} ${m.nome}</strong>
+              <span>${m.descricao}</span>
+            </span>
+          </label>
+        `).join('')}
+      </div>
+
+      <button class="botao backup-botao-primario" id="backup-exportar-tudo">Exportar tudo</button>
+      <button class="botao secundario backup-botao-detalhe" id="backup-toggle-seletivo">Escolher o que exportar…</button>
+
+      <div class="backup-seletivo-arvore" id="backup-seletivo-arvore" style="display:none;">
+        <p class="backup-preview-resumo">Marque os itens que deseja exportar. Toque no
+        título de um tipo para marcar ou desmarcar todos daquele tipo.</p>
+        <div class="backup-arvore" id="backup-arvore-export">
+          ${total ? this._montarArvoreSelecao('exp', dados) : '<p class="backup-ajuda">Você ainda não tem conteúdo para exportar.</p>'}
+        </div>
+        <button class="botao backup-botao-primario" id="backup-exportar-seletivo" style="margin-top:14px;">Exportar selecionados</button>
+      </div>
+    `;
+
+    const lerModo = () => {
+      const el = corpo.querySelector('input[name="backup-permissao"]:checked');
+      return el ? el.value : 'somente-leitura';
+    };
+
+    // Exportar tudo
+    corpo.querySelector('#backup-exportar-tudo').onclick = () => {
+      try {
+        const bundle = Exportacao.exportarTudo('Meu Conteúdo', lerModo());
+        Exportacao.salvarArquivo(bundle);
+        this._fecharModalBackup();
+        this.avisoRapido('Backup exportado com sucesso');
+      } catch (e) {
+        this.avisoRapido('Erro ao exportar: ' + e.message);
+      }
+    };
+
+    // Mostrar/ocultar árvore seletiva
+    const btnToggle = corpo.querySelector('#backup-toggle-seletivo');
+    const arvore = corpo.querySelector('#backup-seletivo-arvore');
+    btnToggle.onclick = () => {
+      const aberto = arvore.style.display !== 'none';
+      arvore.style.display = aberto ? 'none' : 'block';
+      btnToggle.textContent = aberto ? 'Escolher o que exportar…' : 'Ocultar seleção';
+    };
+
+    // Ligar a árvore (expandir + cascata)
+    this._ligarArvoreSelecao(corpo);
+
+    // Exportar selecionados
+    const btnSel = corpo.querySelector('#backup-exportar-seletivo');
+    if (btnSel) {
+      btnSel.onclick = () => {
+        const sel = this._colherSelecaoArvore(corpo, 'exp');
+        const grupo = Exportacao.criarGrupo('Conteúdo selecionado');
+        let algum = false;
+        if (sel.anotacoes.length) { grupo.anotacoes = sel.anotacoes.map(i => dados.anotacoes[i]); algum = true; }
+        if (sel.listas.length) { grupo.listas = sel.listas.map(i => dados.listas[i]); algum = true; }
+        if (sel.estudos.length) { grupo.estudos = sel.estudos.map(i => dados.estudos[i]); algum = true; }
+        if (sel.marcadores.length) { grupo.marcadores = sel.marcadores.map(i => dados.marcadores[i]); algum = true; }
+
+        if (!algum) { this.avisoRapido('Selecione ao menos um item'); return; }
+
+        try {
+          const bundle = Exportacao.exportarSeletivo([grupo], lerModo());
+          Exportacao.salvarArquivo(bundle);
+          this._fecharModalBackup();
+          this.avisoRapido('Backup exportado com sucesso');
+        } catch (e) {
+          this.avisoRapido('Erro ao exportar: ' + e.message);
+        }
+      };
+    }
+  },
+
+  /* ============================================ MODAL IMPORTAR */
+  _abrirModalImportar() {
+    const iconeImport = `<svg viewBox="0 0 24 24" width="22" height="22"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke-linecap="round" stroke-linejoin="round" fill="none" stroke="currentColor" stroke-width="2"/><path d="M7 8l5-5 5 5" stroke-linecap="round" stroke-linejoin="round" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 3v12" stroke-linecap="round" stroke="currentColor" stroke-width="2"/></svg>`;
+    const corpo = this._abrirModalBackup('Importar', iconeImport);
+
+    corpo.innerHTML = `
+      <p class="backup-ajuda">Selecione um arquivo <strong>.json</strong> exportado
+      por você ou por outra pessoa.</p>
+      <button class="botao backup-botao-primario" id="backup-escolher-arquivo">Escolher arquivo…</button>
+      <input type="file" id="backup-input-arquivo" accept=".json,application/json" style="display:none;">
+      <div class="backup-preview" id="backup-preview" style="display:none;"></div>
+    `;
+
+    const btnEscolher = corpo.querySelector('#backup-escolher-arquivo');
+    const inputArquivo = corpo.querySelector('#backup-input-arquivo');
+    btnEscolher.onclick = () => inputArquivo.click();
+
+    inputArquivo.onchange = async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      try {
+        const bundle = await Importacao.carregarArquivo(file);
+        const validacao = Importacao.validarBundle(bundle);
+        if (!validacao.ok) {
+          this.avisoRapido('Arquivo inválido: ' + validacao.erro);
+          return;
+        }
+        this._bundleImportado = bundle;
+        this._mostrarPreviewImportacao(validacao, bundle);
+      } catch (err) {
+        this.avisoRapido('Erro ao ler arquivo: ' + err.message);
+      }
+      inputArquivo.value = '';
+    };
+  },
+
+  /* ===== Árvore de seleção reutilizável (exportar E importar) =====
+   * prefixo distingue instâncias ('exp' na exportação, 'imp' na importação).
+   * dados = { marcadores:[], anotacoes:[], listas:[], estudos:[] } */
+  _montarArvoreSelecao(prefixo, dados) {
+    const TIPOS = [
+      { chave: 'marcadores', rotulo: 'Marcadores' },
+      { chave: 'anotacoes', rotulo: 'Anotações' },
+      { chave: 'listas', rotulo: 'Listas de leitura' },
+      { chave: 'estudos', rotulo: 'Estudos' },
+    ];
+
+    let html = '';
+    TIPOS.forEach(({ chave, rotulo }) => {
+      const itens = Array.isArray(dados[chave]) ? dados[chave] : [];
+      if (itens.length === 0) return;
+
+      const itensHtml = itens.map((item, ii) => `
+        <label class="backup-item">
+          <input type="checkbox" class="backup-item-chk" data-tipo="${chave}" data-idx="${ii}" checked>
+          <span class="backup-check-marca"></span>
+          <span class="backup-item-texto">${Leitura.escapar(this._rotuloItemBackup(chave, item))}</span>
+        </label>
+      `).join('');
+
+      html += `
+        <div class="backup-tipo" data-tipo="${chave}">
+          <div class="backup-tipo-cabeca">
+            <button class="backup-tipo-seta" type="button" aria-label="Expandir ou recolher">
+              <svg viewBox="0 0 24 24"><polyline points="9 6 15 12 9 18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+            <label class="backup-tipo-marca-wrap">
+              <input type="checkbox" class="backup-tipo-chk" data-tipo="${chave}" checked>
+              <span class="backup-check-marca"></span>
+            </label>
+            <span class="backup-tipo-rotulo">${rotulo}</span>
+            <span class="backup-contagem">${itens.length}</span>
+          </div>
+          <div class="backup-tipo-itens" style="display:none;">
+            ${itensHtml}
+          </div>
+        </div>
+      `;
+    });
+
+    return html || '<p class="backup-ajuda">Nenhum item.</p>';
+  },
+
+  /* Liga expandir (seta) e cascata (checkbox do tipo) numa árvore.
+   * Escopo = elemento que contém a árvore. */
+  _ligarArvoreSelecao(escopo) {
+    // SETA: expande/recolhe os itens
+    escopo.querySelectorAll('.backup-tipo-seta').forEach(seta => {
+      seta.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const tipoDiv = seta.closest('.backup-tipo');
+        const itens = tipoDiv.querySelector('.backup-tipo-itens');
+        const aberto = itens.style.display !== 'none';
+        itens.style.display = aberto ? 'none' : 'block';
+        seta.classList.toggle('aberta', !aberto);
+      });
+    });
+
+    // CHECKBOX DO TIPO: marca/desmarca TODOS os itens daquele tipo (cascata)
+    escopo.querySelectorAll('.backup-tipo-chk').forEach(chkTipo => {
+      chkTipo.addEventListener('change', () => {
+        const tipo = chkTipo.dataset.tipo;
+        const marcado = chkTipo.checked;
+        chkTipo.indeterminate = false;
+        escopo.querySelectorAll(`.backup-item-chk[data-tipo="${tipo}"]`)
+          .forEach(chk => { chk.checked = marcado; });
+      });
+    });
+
+    // CHECKBOX DE ITEM: reflete estado parcial no checkbox do tipo
+    escopo.querySelectorAll('.backup-item-chk').forEach(chkItem => {
+      chkItem.addEventListener('change', () => {
+        const tipo = chkItem.dataset.tipo;
+        const todos = [...escopo.querySelectorAll(`.backup-item-chk[data-tipo="${tipo}"]`)];
+        const marcados = todos.filter(c => c.checked).length;
+        const chkTipo = escopo.querySelector(`.backup-tipo-chk[data-tipo="${tipo}"]`);
+        if (chkTipo) {
+          chkTipo.checked = marcados === todos.length;
+          chkTipo.indeterminate = marcados > 0 && marcados < todos.length;
+        }
+      });
+    });
+  },
+
+  /* Colhe os índices marcados de uma árvore, por tipo. */
+  _colherSelecaoArvore(escopo, prefixo) {
+    const sel = { anotacoes: [], listas: [], estudos: [], marcadores: [] };
+    escopo.querySelectorAll('.backup-item-chk:checked').forEach(chk => {
+      const tipo = chk.dataset.tipo;
+      const idx = +chk.dataset.idx;
+      if (sel[tipo]) sel[tipo].push(idx);
+    });
+    return sel;
+  },
+  /* ========================================= Autoria de conteúdo importado */
+
+  /* Devolve o HTML de um "selo de autor" clicável para itens de terceiros.
+   * Retorna string vazia se o item for próprio (sem autor anexado). */
+  _seloAutor(item) {
+    if (!item || !item.autor) return '';
+    const nome = item.autor.nome || 'Autor';
+    const cadeado = item.somenteLeitura ? '<span class="autor-cadeado" title="Somente leitura">🔒</span>' : '';
+    return `<div class="autor-selo">
+      <span class="autor-por">por</span>
+      <button class="autor-nome" data-autor-id="${item.id}" type="button">${Leitura.escapar(nome)}</button>
+      ${cadeado}
+    </div>`;
+  },
+
+  /* Rodapé específico do cartão de estudo. Para estudos PRÓPRIOS mostra só a
+   * data de criação (como sempre). Para estudos IMPORTADOS de outra pessoa,
+   * mostra o autor (clicável) e AS DUAS datas rotuladas: criação e importação. */
+  _rodapeEstudo(e) {
+    const criacao = Estudos.quandoDe(e);
+    if (!e || !e.autor) {
+      return `<span class="credito-data">${criacao}</span>`;
+    }
+    const nome = e.autor.nome || 'Autor';
+    const importacao = e.importadoEm ? this._dataCurta(e.importadoEm) : null;
+    return `<span class="estudo-credito">
+      <span class="estudo-credito-autor">
+        <span class="autor-nome" data-autor-id="${e.id}" role="button" tabindex="0">${Leitura.escapar(nome)}</span>
+      </span>
+      <span class="estudo-datas">
+        <span class="estudo-data-linha"><span class="estudo-data-rot">Criação:</span> ${criacao}</span>
+        ${importacao ? `<span class="estudo-data-linha"><span class="estudo-data-rot">Importação:</span> ${importacao}</span>` : ''}
+      </span>
+    </span>`;
+  },
+
+  /* Formata uma data ISO como "dd/mm/aaaa às hh:mm" (pt-BR). */
+  _dataCurta(iso) {
+    try {
+      const d = new Date(iso);
+      return d.toLocaleDateString('pt-BR') + ' às '
+        + d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    } catch { return ''; }
+  },
+
+  /* Rodapé de crédito: nome do autor (clicável) + data, juntos.
+   * Para itens PRÓPRIOS (sem autor), devolve só a data que foi passada.
+   * Para itens de TERCEIROS, devolve "Nome · data".
+   * Usa <span> (não <button>) porque costuma ficar dentro de outro botão. */
+  _creditoRodape(item, dataTexto) {
+    if (!item || !item.autor) {
+      return dataTexto ? `<span class="credito-data">${dataTexto}</span>` : '';
+    }
+    const nome = item.autor.nome || 'Autor';
+    return `<span class="credito-autor-data">
+      <span class="autor-nome" data-autor-id="${item.id}" role="button" tabindex="0">${Leitura.escapar(nome)}</span>
+      ${dataTexto ? `<span class="credito-sep">·</span><span class="credito-data">${dataTexto}</span>` : ''}
+    </span>`;
+  },
+
+  /* Abre um popup com o perfil completo do autor de um item importado.
+   * `autor` é o objeto de perfil que veio anexado ao item. */
+  abrirPerfilAutor(autor) {
+    if (!autor) return;
+
+    // Remove popup anterior se houver
+    const antigo = document.getElementById('popup-autor');
+    if (antigo) antigo.remove();
+
+    const linhaInfo = (rotulo, valor) => valor
+      ? `<div class="pa-linha"><span class="pa-rotulo">${rotulo}</span><span class="pa-valor">${Leitura.escapar(valor)}</span></div>`
+      : '';
+
+    // Religião + denominação juntas quando fizer sentido
+    let religiaoTexto = autor.religiao || '';
+    if (autor.religiao === 'Cristianismo' && autor.denominacao) {
+      religiaoTexto = `${autor.religiao} / ${autor.denominacao}`;
+    }
+
+    // Contatos
+    const contatosHtml = (Array.isArray(autor.contatos) && autor.contatos.length)
+      ? autor.contatos.filter(c => c.tipo && c.valor).map(c =>
+          `<div class="pa-contato"><span class="pa-contato-tipo">${Leitura.escapar(c.tipo)}</span><span class="pa-contato-valor">${Leitura.escapar(c.valor)}</span></div>`
+        ).join('')
+      : '';
+
+    // Foto ou inicial
+    const fotoHtml = autor.foto
+      ? `<img class="pa-foto" src="${autor.foto}" alt="Foto de ${Leitura.escapar(autor.nome || 'autor')}">`
+      : `<div class="pa-foto pa-foto-vazia">${Leitura.escapar((autor.nome || '?').charAt(0).toUpperCase())}</div>`;
+
+    const modal = document.createElement('div');
+    modal.id = 'popup-autor';
+    modal.innerHTML = `
+      <div class="pa-overlay" id="pa-overlay">
+        <div class="pa-caixa">
+          <button class="pa-fechar" id="pa-fechar" aria-label="Fechar">&times;</button>
+          <div class="pa-cabeca">
+            ${fotoHtml}
+            <div class="pa-nome">${Leitura.escapar(autor.nome || 'Anônimo')}</div>
+            ${autor.local ? `<div class="pa-local">${Leitura.escapar(autor.local)}</div>` : ''}
+          </div>
+          <div class="pa-corpo">
+            ${linhaInfo('Religião', religiaoTexto)}
+            ${autor.proposito ? `<div class="pa-proposito">${Leitura.escapar(autor.proposito)}</div>` : ''}
+            ${contatosHtml ? `<div class="pa-contatos"><div class="pa-contatos-titulo">Contatos</div>${contatosHtml}</div>` : ''}
+          </div>
+          <div class="pa-rodape">
+            <span class="pa-aviso">Autor original deste conteúdo</span>
+          </div>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+
+    const fechar = () => modal.remove();
+    document.getElementById('pa-overlay').addEventListener('click', (e) => {
+      if (e.target.id === 'pa-overlay') fechar();
+    });
+    document.getElementById('pa-fechar').addEventListener('click', fechar);
+  },
+
+  /* Procura o autor de um item (anotação/estudo/lista) pelo id, em qualquer
+   * um dos armazenamentos, e abre o popup. */
+  abrirPerfilAutorPorId(itemId) {
+    let autor = null;
+    const acharEm = (lista) => {
+      const it = (lista || []).find(x => x && x.id === itemId);
+      return it && it.autor ? it.autor : null;
+    };
+    autor = acharEm(Anotacoes.todas()) || acharEm(Estudos.todos()) || acharEm(Listas.todos());
+    if (autor) this.abrirPerfilAutor(autor);
+  },
+
+  /* Gera um rótulo curto e legível para um item, conforme o tipo */
+  _rotuloItemBackup(tipo, item) {
+    try {
+      if (tipo === 'anotacoes') {
+        const ref = `${item.code || '?'} ${item.cap || '?'}:${Array.isArray(item.versiculos) ? item.versiculos.join(',') : (item.vers || '?')}`;
+        const texto = (item.corpo || '').replace(/<[^>]*>/g, '').trim();
+        const resumo = texto.length > 40 ? texto.slice(0, 40) + '…' : texto;
+        return resumo ? `${ref} — ${resumo}` : ref;
+      }
+      if (tipo === 'listas') {
+        const n = Array.isArray(item.trechos) ? item.trechos.length : 0;
+        return `${item.nome || 'Lista sem nome'} (${n} trecho${n === 1 ? '' : 's'})`;
+      }
+      if (tipo === 'estudos') {
+        return item.nome || item.titulo || 'Estudo sem nome';
+      }
+      if (tipo === 'marcadores') {
+        return `${item.code || '?'} ${item.cap || '?'}:${item.vers || '?'}`;
+      }
+    } catch {}
+    return 'Item';
+  },
+
+  _mostrarPreviewImportacao(validacao, bundle) {
+    const preview = document.getElementById('backup-preview');
+    if (!preview) return;
+
+    const selo = validacao.assinaturaValida
+      ? '<span class="backup-selo backup-selo-ok">✓ Assinatura válida</span>'
+      : '<span class="backup-selo backup-selo-aviso">⚠ Sem assinatura verificada</span>';
+
+    // MODO é INFORMATIVO — foi definido pelo dono na exportação
+    const modo = Importacao.modoDoBundle(bundle);
+    const infoModo = Importacao.descricaoModo(modo);
+
+    // Consolida itens de TODOS os grupos por tipo, guardando de qual grupo e
+    // índice cada item veio (para reconstruir a seleção que aplicarImportacao espera).
+    const TIPOS = ['marcadores', 'anotacoes', 'listas', 'estudos'];
+    const dados = { marcadores: [], anotacoes: [], listas: [], estudos: [] };
+    const mapa = { marcadores: [], anotacoes: [], listas: [], estudos: [] }; // {grupoId, idxNoGrupo}
+    bundle.grupos.forEach(grupo => {
+      TIPOS.forEach(tipo => {
+        const itens = Array.isArray(grupo[tipo]) ? grupo[tipo] : [];
+        itens.forEach((item, i) => {
+          dados[tipo].push(item);
+          mapa[tipo].push({ grupoId: grupo.id, idxNoGrupo: i });
+        });
+      });
+    });
+    this._mapaImport = mapa; // guardado para o confirmar
+
+    const total = dados.marcadores.length + dados.anotacoes.length + dados.listas.length + dados.estudos.length;
+
+    // Nome do autor clicável (abre popup do perfil do autor)
+    const nomeAutor = Leitura.escapar(validacao.criador.nome || 'Anônimo');
+
+    preview.innerHTML = `
+      <div class="backup-preview-cartao">
+        <div class="backup-preview-cabeca">
+          <div class="backup-preview-autor">De: <button class="autor-nome" id="backup-autor-link" type="button">${nomeAutor}</button></div>
+          ${selo}
+        </div>
+
+        <div class="backup-permissao-info">
+          <div class="backup-permissao-info-titulo">${infoModo.icon} Compartilhado como: ${infoModo.nome}</div>
+          <div class="backup-permissao-info-desc">${infoModo.descricao}</div>
+        </div>
+
+        <div class="backup-preview-resumo">
+          Marque os itens que deseja importar. Toque no título de um tipo para
+          marcar ou desmarcar todos daquele tipo.
+        </div>
+
+        <div class="backup-arvore" id="backup-arvore-import">
+          ${total ? this._montarArvoreSelecao('imp', dados) : '<p class="backup-ajuda">Nenhum item neste arquivo.</p>'}
+        </div>
+
+        <div class="backup-preview-acoes">
+          <button class="botao secundario" id="backup-cancelar-import">Cancelar</button>
+          <button class="botao" id="backup-confirmar-import">Importar selecionados</button>
+        </div>
+      </div>
+    `;
+
+    preview.style.display = 'block';
+
+    // Nome do autor abre o popup do perfil (dados vêm do bundle.criador)
+    const linkAutor = preview.querySelector('#backup-autor-link');
+    if (linkAutor) linkAutor.onclick = () => this.abrirPerfilAutor(bundle.criador);
+
+    // Liga a árvore (expandir + cascata) — mesma função da exportação
+    this._ligarArvoreSelecao(preview);
+
+    // Cancelar
+    const btnCancelar = preview.querySelector('#backup-cancelar-import');
+    if (btnCancelar) btnCancelar.onclick = () => this._fecharModalBackup();
+
+    // Confirmar
+    const btnConfirmar = preview.querySelector('#backup-confirmar-import');
+    if (btnConfirmar) {
+      btnConfirmar.onclick = () => {
+        // Colhe índices marcados (consolidados) e reconstrói a seleção por grupo
+        const consolidado = this._colherSelecaoArvore(preview, 'imp');
+        const selecao = {};
+        let total = 0;
+        Object.keys(consolidado).forEach(tipo => {
+          consolidado[tipo].forEach(idxConsolidado => {
+            const ref = this._mapaImport[tipo][idxConsolidado];
+            if (!ref) return;
+            if (!selecao[ref.grupoId]) selecao[ref.grupoId] = {};
+            if (!selecao[ref.grupoId][tipo]) selecao[ref.grupoId][tipo] = [];
+            selecao[ref.grupoId][tipo].push(ref.idxNoGrupo);
+            total++;
+          });
+        });
+
+        if (total === 0) { this.avisoRapido('Selecione ao menos um item'); return; }
+
+        try {
+          const grupos = bundle.grupos.map(g => g.id);
+          const resultado = Importacao.aplicarImportacao(bundle, grupos, selecao);
+          if (resultado.sucesso) {
+            this._fecharModalBackup();
+            this._bundleImportado = null;
+            this.avisoRapido(`${resultado.itemsImportados} item(ns) importado(s)`);
+          } else {
+            this.avisoRapido('Erro: ' + resultado.erro);
+          }
+        } catch (e) {
+          this.avisoRapido('Erro ao importar: ' + e.message);
+        }
+      };
     }
   },
 
@@ -3752,18 +4566,28 @@ const App = {
           ${p.versoesTirinha.includes(v.code) ? 'checked' : ''}></label>`).join('')}`;
 
     const listaMarc = Marcadores.lista();
-    const podeExcluirMarc = listaMarc.length > 1;   // sempre resta ao menos um
+    const podeExcluirMarc = true;   // pode excluir qualquer um, até ficar sem nenhum
     const marcadores = `
       <p class="contagem">Trocar a cor aqui recolore de uma vez todos os
       trechos ligados àquele marcador.</p>
+      ${listaMarc.length === 0
+        ? `<p class="contagem" style="margin:6px 0 2px">Nenhum marcador. Toque em
+           <strong>+ Novo marcador</strong> para criar.</p>`
+        : ''}
       ${listaMarc.map(m => `<div class="item-marcador" data-item="${m.id}">
         <button class="bolha-cor" data-abrir-cor="${m.id}"
           style="background:${m.cor}" title="Escolher a cor"></button>
         <input type="text" class="campo" value="${Leitura.escapar(m.nome)}" data-nome="${m.id}">
-        <span class="sub">${Marcadores.porMarcador(m.id).length}</span>
-        ${podeExcluirMarc ? `<button class="excluir-marcador" data-excluir="${m.id}"
+        <span class="sub" data-sub="${m.id}">${Marcadores.porMarcador(m.id).length}</span>
+        <button class="excluir-marcador" data-excluir="${m.id}"
           aria-label="Excluir marcador" title="Excluir marcador">
-          <svg class="icone"><use href="#i-lixeira"/></svg></button>` : ''}
+          <svg class="icone"><use href="#i-lixeira"/></svg></button>
+        <button class="confirmar-nome aplicar" data-aplicar-nome="${m.id}"
+          aria-label="Aplicar nome" title="Aplicar">
+          <svg class="icone"><use href="#i-check"/></svg></button>
+        <button class="confirmar-nome cancelar" data-cancelar-nome="${m.id}"
+          aria-label="Cancelar" title="Cancelar">
+          <svg class="icone"><use href="#i-fechar"/></svg></button>
       </div>
       <div class="caixa-cor fechada" data-caixa="${m.id}"></div>`).join('')}
       <button class="botao secundario add-marcador" id="add-marcador"
@@ -3816,6 +4640,7 @@ const App = {
 
     return {
       folha:      { titulo: 'Página',            html: folha },
+      menu:       { titulo: 'Menu',              html: this._blocoMenuAjuste(p) },
       livros:     { titulo: 'Painel de livros',  html: livros },
       comparar:   { titulo: 'Comparar',          html: comparar },
       tirinha:    { titulo: 'Versões empilhadas', html: tirinha },
@@ -3825,12 +4650,750 @@ const App = {
     };
   },
 
+  /* Bloco de Ajustes: fundo (esfera) atrás dos ícones do menu. */
+  _blocoMenuAjuste(p) {
+    const atual = p.menuFundo || 'vermelho';
+    const op = (val, titulo, desc) => `
+      <label class="opcao-radio">
+        <input type="radio" name="menu-fundo" value="${val}" ${atual === val ? 'checked' : ''}>
+        <span class="marca-radio"></span>
+        <span class="rotulo-radio"><strong>${titulo}</strong><span>${desc}</span></span>
+      </label>`;
+    return `
+      <div class="rotulo-controle"><span>Fundo dos ícones do menu</span></div>
+      <div class="escolha-radio">
+        ${op('vermelho', 'Vermelho', 'Esfera vermelha, ícone em tom creme (padrão)')}
+        ${op('marrom', 'Marrom', 'Esfera marrom escura, ícone claro')}
+        ${op('tema', 'Conforme o tema', 'Acompanha a cor do tema escolhido')}
+        ${op('nenhum', 'Sem fundo', 'Como é hoje, só o ícone')}
+      </div>`;
+  },
+
+  /* ============================================================ Perfil */
+
+  /* ============================================================ Perfil - Renderização Simples e Testada */
+
+  getIconePerfil() {
+    // Ícone minimalista de perfil: apenas contorno, sem preenchimento
+    return '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="#8B3E3E" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3-6 8-6s8 2 8 6"/></svg>';
+  },
+
+  getIconeSocial(tipo) {
+    const svgs = {
+      'Instagram': '<svg xmlns="http://w3.org" width="100" height="100" viewBox="0 0 100 100"><mask id="insta-mask"><circle cx="50" cy="50" r="50" fill="white"/><rect x="28" y="28" width="44" height="44" rx="11" ry="11" fill="none" stroke="black" stroke-width="4.5"/><circle cx="50" cy="50" r="9" fill="none" stroke="black" stroke-width="4.5"/><circle cx="63.5" cy="36.5" r="2.5" fill="black"/></mask><circle cx="50" cy="50" r="50" fill="#5D3E25" mask="url(#insta-mask)"/></svg>',
+      'Facebook': '<svg xmlns="http://w3.org" width="100" height="100" viewBox="0 0 100 100"><mask id="fb-mask"><circle cx="50" cy="50" r="50" fill="white"/><path d="M62 25h-7a11 11 0 0 0-11 11v7h-7v10h7v22h11V53h8l2-10h-10v-7a2.5 2.5 0 0 1 2.5-2.5H62z" fill="black"/></mask><circle cx="50" cy="50" r="50" fill="#5D3E25" mask="url(#fb-mask)"/></svg>',
+      'Twitter': '<svg xmlns="http://w3.org" width="100" height="100" viewBox="0 0 100 100"><mask id="x-mask"><circle cx="50" cy="50" r="50" fill="white"/><path d="M66.36 26h6.77l-14.8 16.9 17.41 23.1H62.13l-10.67-13.95L39.11 66h-6.79l15.82-18.08L31.5 26h14.01l9.64 12.75zm-2.38 35.9h3.75L43.83 29.83h-4.02z" fill="black"/></mask><circle cx="50" cy="50" r="50" fill="#5D3E25" mask="url(#x-mask)"/></svg>',
+      'WhatsApp': '<svg xmlns="http://w3.org" width="100" height="100" viewBox="0 0 100 100"><mask id="wa-perfect-mask"><circle cx="50" cy="50" r="50" fill="white"/><g transform="translate(22, 22) scale(2.333)"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L0 24l6.335-1.662c1.746.953 3.71 1.454 5.709 1.455h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" fill="black"/></g></mask><circle cx="50" cy="50" r="50" fill="#5D3E25" mask="url(#wa-perfect-mask)"/></svg>',
+      'Telegram': '<svg xmlns="http://w3.org" width="100" height="100" viewBox="0 0 100 100"><mask id="tg-fix"><circle cx="50" cy="50" r="50" fill="white"/><path d="M73.5 28.5L24 47.6c-1.2.5-1.2 1.9-.2 2.3l12.7 4 29.5-18.6c1.4-.9 2.7-.4 1.6.6L43.8 57.5l-.9 12.5c1.2 0 1.8-.6 2.4-1.2l5.9-5.7 12.2 9c2.3 1.3 3.9.6 4.5-2.1l8-37.7c.8-3.4-1.3-4.9-3.4-3.8z" fill="black"/></mask><circle cx="50" cy="50" r="50" fill="#5D3E25" mask="url(#tg-fix)"/></svg>',
+      'TikTok': '<svg xmlns="http://w3.org" width="100" height="100" viewBox="0 0 100 100"><path fill="#5D3E25" fill-rule="evenodd" d="M50 0C22.386 0 0 22.386 0 50s22.386 50 50 50 50-22.386 50-50S77.614 0 50 0zm25 36c-5.8 0-10.6-4.5-11-10.2V54.5c0 8.6-7 15.5-15.5 15.5S33 63.1 33 54.5s7-15.5 15.5-15.5c1.1 0 2.2.1 3.2.4v9c-1-.6-2.1-.9-3.2-.9-4.1 0-7.5 3.4-7.5 7.5s3.4 7.5 7.5 7.5 7.5-3.4 7.5-7.5V21h8c0 6.6 5.4 12 12 12v3z"/></svg>',
+      'Email': '<svg xmlns="http://w3.org" width="100" height="100" viewBox="0 0 100 100"><mask id="em-mask"><circle cx="50" cy="50" r="50" fill="white"/><rect x="25" y="32" width="50" height="36" rx="5" fill="none" stroke="black" stroke-width="4.5"/><path d="M26 35.5 l24 14.5 l24-14.5" fill="none" stroke="black" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/></mask><circle cx="50" cy="50" r="50" fill="#5D3E25" mask="url(#em-mask)"/></svg>',
+      'Telefone': '<svg xmlns="http://w3.org" width="100" height="100" viewBox="0 0 100 100"><mask id="tel-mask"><circle cx="50" cy="50" r="50" fill="white"/><path d="M69.6 57.6v6.9a4.6 4.6 0 0 1-5 4.6A45.5 45.5 0 0 1 24.8 29a4.6 4.6 0 0 1 4.6-5h6.9a4.6 4.6 0 0 1 4.6 4c.3 2.1.9 4.2 1.6 6.2a4.6 4.6 0 0 1-1 4.8l-2.9 2.9a36.8 36.8 0 0 0 13.8 13.8l2.9-2.9a4.6 4.6 0 0 1 4.8-1c2 .7 4.1 1.3 6.2 1.6a4.6 4.6 0 0 1 4 4.3z" fill="black"/></mask><circle cx="50" cy="50" r="50" fill="#5D3E25" mask="url(#tel-mask)"/></svg>',
+    };
+    return svgs[tipo] || '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="10"/></svg>';
+  },
+
+  desenharPerfil() {
+    const corpo = document.getElementById('corpo-perfil');
+    const modo = this._modoPerfil || 'view';
+    corpo.innerHTML = '';
+    
+    console.log(`🔍 desenharPerfil() - Modo: ${modo}`);
+
+    if (modo === 'view') {
+      console.log(`  ✓ Renderizando VIEW`);
+      this.desenharPerfilView(corpo);
+    } else {
+      console.log(`  ✓ Renderizando EDIT`);
+      this.desenharPerfilEdit(corpo);
+    }
+  },
+
+  desenharPerfilView(corpo) {
+    try {
+      const perfil = Perfil.todos();
+      
+      // Validação básica
+      if (!perfil || !perfil.nome) {
+        console.error('❌ PERFIL CORROMPIDO em VIEW! Resetando...');
+        Perfil.resetar();
+        return this.desenharPerfilView(corpo);
+      }
+      
+      let html = '<div class="perfil-view">';
+
+    // Avatar
+    html += '<div class="perfil-avatar-circulo">';
+    html += perfil.foto 
+      ? `<img src="${perfil.foto}" alt="Foto">` 
+      : `<span class="perfil-avatar-default">${this.getIconePerfil()}</span>`;
+    html += '</div>';
+
+    // Nome
+    html += '<div class="perfil-nome-apresentacao">';
+    html += Leitura.escapar(perfil.nome);
+    html += ' <span class="perfil-word-profile">Profile</span>';
+    html += '</div>';
+
+    // Info básica
+    if (perfil.local) {
+      html += `<div class="perfil-info-linha"><strong>Local:</strong> ${Leitura.escapar(perfil.local)}</div>`;
+    }
+    if (perfil.religiao) {
+      html += `<div class="perfil-info-linha"><strong>Religião:</strong> ${Leitura.escapar(perfil.religiao)}`;
+      // Se Denominação Cristã e religião = Cristianismo
+      if (perfil.religiao === 'Cristianismo' && perfil.denominacao) {
+        html += ` / ${Leitura.escapar(perfil.denominacao)}`;
+      }
+      html += '</div>';
+    }
+
+    // Vertentes
+    if (perfil.vertentes.length > 0) {
+      html += '<div class="perfil-secao">';
+      html += '<h3 class="perfil-secao-titulo">Vertentes Teológicas</h3>';
+      html += '<div class="perfil-badges-view">';
+      for (const v of perfil.vertentes) {
+        html += `<span class="perfil-badge-view">${Leitura.escapar(v)}</span>`;
+      }
+      html += '</div></div>';
+    }
+
+    // Social
+    if (perfil.contatos.length > 0) {
+      html += '<div class="perfil-secao">';
+      html += '<h3 class="perfil-secao-titulo">Redes Sociais</h3>';
+      html += '<div class="perfil-social-lista">';
+      for (const c of perfil.contatos) {
+        const regra = Perfil.regraContato(c.tipo);
+        const prefixo = regra.prefixo
+          ? `<span class="perfil-social-prefixo">${regra.prefixo}</span>` : '';
+        html += `<div class="perfil-social-capsula">
+          <div class="perfil-social-icone">${this.getIconeSocial(c.tipo)}</div>
+          <div class="perfil-social-usuario">
+            ${prefixo}
+            <span class="perfil-social-valor">${Leitura.escapar(c.valor)}</span>
+          </div>
+        </div>`;
+      }
+      html += '</div></div>';
+    }
+
+    // Bio
+    if (perfil.proposito) {
+      html += '<div class="perfil-secao">';
+      html += '<h3 class="perfil-secao-titulo">Bio</h3>';
+      html += `<p class="perfil-bio-text">${Leitura.escapar(perfil.proposito)}</p>`;
+      html += '</div>';
+    }
+
+    html += '<button class="perfil-botao-editar" id="btn-editar-perfil">Editar</button>';
+    html += '</div>';
+
+    corpo.innerHTML = html;
+    document.getElementById('btn-editar-perfil').onclick = () => {
+      this._modoPerfil = 'edit';
+      this.desenharPerfil();
+    };
+    } catch (erro) {
+      console.error('❌ ERRO ao renderizar VIEW:', erro);
+      corpo.innerHTML = `
+        <div style="padding: 20px; text-align: center;">
+          <p style="color: #8B3E3E; font-weight: bold;">⚠️ Erro ao carregar perfil</p>
+          <p style="font-size: 12px; color: #666;">Dados foram resetados.</p>
+          <button onclick="location.reload()" style="padding: 8px 16px; background: #8B3E3E; color: white; border: none; border-radius: 4px; cursor: pointer;">
+            Recarregar página
+          </button>
+        </div>
+      `;
+    }
+  },
+
+  /* Lê TODOS os campos do formulário de perfil direto do DOM e devolve um
+   * objeto de perfil completo. Usado tanto pelo botão Salvar quanto antes de
+   * qualquer re-render no meio da edição — assim nada que o usuário digitou
+   * (nome, local, religião, vertentes, bio) se perde quando o formulário é
+   * redesenhado ao adicionar/remover uma rede social. Se um campo não estiver
+   * na tela (raro), cai para o valor já salvo, nunca para vazio. */
+  _coletarPerfilFormulario(corpo) {
+    const salvo = Perfil.todos();
+    const escopo = corpo || document;
+
+    const nomeEl = document.getElementById('perf-nome');
+    const localEl = document.getElementById('perf-local');
+    const religiaoDropdown = document.getElementById('perf-religiao-dropdown');
+    const denominacaoDropdown = document.getElementById('perf-denominacao-dropdown');
+    const propositoEl = document.getElementById('campo-proposito');
+
+    const nome = nomeEl ? ((nomeEl.value || '').trim() || 'Anônimo') : (salvo.nome || 'Anônimo');
+    const local = localEl ? (localEl.value || '').trim() : (salvo.local || '');
+    const religiao = religiaoDropdown ? (religiaoDropdown.dataset.value || '').trim() : (salvo.religiao || '');
+    const denominacao = denominacaoDropdown ? (denominacaoDropdown.dataset.value || '').trim() : (salvo.denominacao || '');
+    const proposito = propositoEl ? (propositoEl.value || '').trim() : (salvo.proposito || '');
+
+    // Vertentes: se a área existir na tela, lê dela; senão mantém as salvas
+    let vertentes;
+    const capsulas = escopo.querySelectorAll('.perfil-vertente-capsula');
+    if (capsulas.length || document.getElementById('vertentes-selecionadas')) {
+      vertentes = [...capsulas].map(c => c.textContent.trim()).filter(Boolean);
+    } else {
+      vertentes = Array.isArray(salvo.vertentes) ? salvo.vertentes : [];
+    }
+
+    // Contatos: parte da lista salva (tipos) e atualiza os valores digitados,
+    // normalizando conforme o tipo (username sem @, telefone formatado, etc.)
+    const contatos = Array.isArray(salvo.contatos) ? salvo.contatos.map(c => ({ ...c })) : [];
+    escopo.querySelectorAll('.perfil-social-edit-item input').forEach(input => {
+      const idx = +input.dataset.idx;
+      if (idx >= 0 && idx < contatos.length) {
+        const tipo = input.dataset.tipoContato || contatos[idx].tipo;
+        contatos[idx].valor = Perfil.normalizarContato(tipo, input.value);
+      }
+    });
+
+    return { nome, local, religiao, denominacao, vertentes, proposito, contatos, foto: salvo.foto };
+  },
+
+  desenharPerfilEdit(corpo) {
+    try {
+      const perfil = Perfil.todos();
+      
+      // Validação: se perfil está corrompido, resetar
+      if (!perfil || !perfil.nome) {
+        console.error('❌ PERFIL CORROMPIDO! Resetando...');
+        Perfil.resetar();
+        return this.desenharPerfilEdit(corpo); // Tenta novamente
+      }
+      
+      let html = '<div class="perfil-edit">';
+
+    html += '<div class="perfil-edit-titulo">Editar Perfil</div>';
+
+    // FOTO
+    html += '<div class="perfil-foto-area">';
+    html += '<div class="perfil-foto-container">';
+    html += '<div class="perfil-avatar-edit" id="foto-preview">';
+    html += perfil.foto 
+      ? `<img src="${perfil.foto}" alt="Foto">` 
+      : `<span class="perfil-avatar-edit-default">${this.getIconePerfil()}</span>`;
+    html += '</div>';
+    html += '<div class="perfil-foto-badge" id="foto-badge">📸</div>';
+    html += '</div>';
+    html += '<span class="perfil-foto-texto">Alterar foto</span>';
+    html += '<input type="file" id="input-foto-perfil" accept="image/*">';
+    html += '</div>';
+
+    // CAMPOS - EM COLUNA (um embaixo do outro)
+    // SEM container intermediário - campos direto no HTML
+    html += `<div class="perfil-campo-item">
+      <label class="perfil-campo-label">Nome</label>
+      <input type="text" id="perf-nome" data-field="nome" value="${Leitura.escapar(perfil.nome)}">
+    </div>`;
+    html += `<div class="perfil-campo-item">
+      <label class="perfil-campo-label">Local</label>
+      <input type="text" id="perf-local" data-field="local" value="${Leitura.escapar(perfil.local)}" placeholder="Ex: São Paulo, Brasil">
+    </div>`;
+    html += `<div class="perfil-campo-item">
+      <label class="perfil-campo-label">Religião</label>
+      <div class="perfil-dropdown" id="perf-religiao-dropdown" data-field="religiao" data-value="${perfil.religiao}">
+        <div class="perfil-dropdown-trigger">
+          <span class="perfil-dropdown-text">${perfil.religiao || '— Nenhuma —'}</span>
+          <svg class="perfil-dropdown-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="6 9 12 15 18 9"></polyline>
+          </svg>
+        </div>
+        <div class="perfil-dropdown-menu" style="display: none;">
+          <div class="perfil-dropdown-option" data-value="">— Nenhuma —</div>
+          ${Perfil.RELIGIOES.map(r => `<div class="perfil-dropdown-option ${perfil.religiao === r ? 'selected' : ''}" data-value="${r}">${r}</div>`).join('')}
+        </div>
+      </div>
+    </div>`;
+    
+    // Denominação Cristã - SEMPRE no HTML, mas oculta inicialmente
+    html += `<div class="perfil-campo-item" data-religiao-dependente style="display: ${perfil.religiao === 'Cristianismo' ? 'block' : 'none'};">`;
+    html += '<label class="perfil-campo-label">Denominação Cristã</label>';
+    html += '<div class="perfil-denominacao-container">';
+    html += `<div class="perfil-dropdown" id="perf-denominacao-dropdown" data-field="denominacao" data-value="${perfil.denominacao}" style="flex: 1;">
+      <div class="perfil-dropdown-trigger">
+        <span class="perfil-dropdown-text">${perfil.denominacao || '— Nenhuma —'}</span>
+        <svg class="perfil-dropdown-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="6 9 12 15 18 9"></polyline>
+        </svg>
+      </div>
+      <div class="perfil-dropdown-menu" style="display: none;">
+        <div class="perfil-dropdown-option" data-value="">— Nenhuma —</div>
+        ${Perfil.DENOMINACOES_CRISTIANISMO.map(d => `<div class="perfil-dropdown-option ${perfil.denominacao === d ? 'selected' : ''}" data-value="${d}">${d}</div>`).join('')}
+      </div>
+    </div>`;
+    html += '<button class="perfil-btn-add-denominacao" id="btn-add-denom" type="button">+</button>';
+    html += '</div>';
+    html += '</div>';
+
+    // VERTENTES TEOLÓGICAS - Sistema de Tags Dinâmico
+    html += '<div class="perfil-vertentes-box">';
+    html += '<h3 class="perfil-secao-titulo">Vertentes Teológicas</h3>';
+    
+    // Campo de input + botão adicionar em cima
+    html += '<div class="perfil-vertentes-input-area">';
+    html += '<input type="text" id="vertente-input" class="perfil-vertente-input" placeholder="Digita a vertente..." autocomplete="off">';
+    html += '<button class="perfil-btn-add-vertente" id="btn-add-vertente" type="button">+</button>';
+    html += '</div>';
+    
+    // Cápsulas selecionadas (aparecem acima, clicando remove)
+    html += '<div class="perfil-vertentes-selecionadas" id="vertentes-selecionadas">';
+    for (const v of perfil.vertentes) {
+      html += `<div class="perfil-vertente-capsula" title="Clica para remover">${v}</div>`;
+    }
+    html += '</div>';
+    
+    // Lista dinâmica de opções (só mostra não selecionadas)
+    html += '<div class="perfil-vertentes-lista" id="vertentes-lista">';
+    for (const v of Perfil.VERTENTES_TEOLOGICAS) {
+      if (!perfil.vertentes.includes(v)) {
+        html += `<button class="perfil-vertente-opcao" data-vertente="${v}" type="button">${v}</button>`;
+      }
+    }
+    html += '</div>';
+    html += '</div>';
+
+    // BIO
+    html += '<div class="perfil-bio-box">';
+    html += '<label class="perfil-bio-label">Bio</label>';
+    html += `<textarea class="perfil-textarea-bio" id="campo-proposito" placeholder="Conte sobre você...">${Leitura.escapar(perfil.proposito)}</textarea>`;
+    html += '</div>';
+
+    // SOCIAL
+    html += '<div class="perfil-social-box">';
+    html += '<h3 class="perfil-secao-titulo">Redes Sociais</h3>';
+    html += '<div class="perfil-social-edit-lista" id="social-edit-lista">';
+    for (let i = 0; i < perfil.contatos.length; i++) {
+      const c = perfil.contatos[i];
+      const regra = Perfil.regraContato(c.tipo);
+      const inputmode = (regra.modo === 'telefone' || regra.modo === 'telOuLink') ? 'tel'
+        : (regra.modo === 'email' ? 'email' : 'text');
+      html += `<div class="perfil-social-edit-item" data-tipo="${Leitura.escapar(c.tipo)}">
+        <div class="perfil-social-edit-linha">
+          <div class="perfil-social-edit-icone">${this.getIconeSocial(c.tipo)}</div>
+          <div class="perfil-social-edit-input">
+            ${regra.prefixo ? `<span class="perfil-social-edit-prefixo">${regra.prefixo}</span>` : ''}
+            <input type="text" data-idx="${i}" data-tipo-contato="${Leitura.escapar(c.tipo)}"
+              value="${Leitura.escapar(c.valor)}" placeholder="${regra.placeholder}"
+              inputmode="${inputmode}" autocomplete="off" autocapitalize="none" spellcheck="false">
+          </div>
+          <button class="perfil-social-edit-remover" data-idx="${i}" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+        <span class="perfil-social-erro" data-erro-idx="${i}" hidden></span>
+      </div>`;
+    }
+    html += '</div>';
+
+    if (perfil.contatos.length < 3) {
+      html += '<div class="perfil-adicionar-social">';
+      html += '<button class="perfil-btn-adicionar" id="btn-add-social" type="button">+</button>';
+      html += '<div class="perfil-menu-adicionar" id="menu-social">';
+      for (const t of Perfil.TIPOS_CONTATO) {
+        html += `<button class="perfil-menu-item" data-tipo="${t}" type="button">${this.getIconeSocial(t)} ${t}</button>`;
+      }
+      html += '</div>';
+      html += '</div>';
+    }
+    html += '</div>';
+
+    // BOTÕES
+    html += '<div class="perfil-botoes-edit-area">';
+    html += '<button class="perfil-botao-salvar" id="btn-salvar-perfil" type="button">Salvar</button>';
+    html += '<button class="perfil-botao-voltar" id="btn-voltar-perfil" type="button">Cancelar</button>';
+    html += '</div>';
+
+    html += '</div>';
+    corpo.innerHTML = html;
+
+    // EVENTOS - FOTO
+    const inputFoto = document.getElementById('input-foto-perfil');
+    const fotoPreview = document.getElementById('foto-preview');
+    const fotoBadge = document.getElementById('foto-badge');
+
+    if (fotoPreview) fotoPreview.addEventListener('click', () => inputFoto?.click());
+    if (fotoBadge) fotoBadge.addEventListener('click', () => inputFoto?.click());
+
+    if (inputFoto) {
+      inputFoto.onchange = async (e) => {
+        const file = e.target.files?.[0];
+        if (file) {
+          try {
+            const base64 = await PerfilFoto.procesarArquivo(file);
+            // Preserva o que já foi digitado no formulário e anexa a foto,
+            // em vez de sobrescrever o perfil salvo (que pode estar desatualizado).
+            const atual = this._coletarPerfilFormulario(corpo);
+            atual.foto = base64;
+            Perfil.salvar(atual);
+            fotoPreview.innerHTML = `<img src="${base64}" alt="Preview">`;
+          } catch (err) {
+            this.avisar({ titulo: 'Erro', html: err.message });
+          }
+        }
+      };
+    }
+
+    // EVENTOS - DROPDOWN CUSTOMIZADO RELIGIÃO
+    // Setup dropdown customizado para Religião
+    this._setupDropdown('perf-religiao-dropdown', () => {
+      const denominacaoContainer = document.querySelector('.perfil-campo-item[data-religiao-dependente]');
+      if (denominacaoContainer) {
+        const religiaoDrop = document.getElementById('perf-religiao-dropdown');
+        if (religiaoDrop.dataset.value === 'Cristianismo') {
+          denominacaoContainer.style.display = 'block';
+        } else {
+          denominacaoContainer.style.display = 'none';
+        }
+      }
+    });
+
+    // Setup dropdown customizado para Denominação
+    this._setupDropdown('perf-denominacao-dropdown');
+
+    // EVENTOS - BOTÃO "+" DENOMINAÇÃO (Adicionar customizada)
+    // Criar Modal Customizado em vez de usar prompt() nativo
+    const btnAddDenom = document.getElementById('btn-add-denom');
+    if (btnAddDenom) {
+      btnAddDenom.addEventListener('click', (e) => {
+        e.preventDefault();
+        
+        // Criar modal customizado
+        const modal = document.createElement('div');
+        modal.id = 'modal-denom-custom';
+        modal.innerHTML = `
+          <div class="modal-overlay" id="modal-overlay-denom">
+            <div class="modal-box">
+              <div class="modal-titulo">Adicionar Denominação Customizada</div>
+              <div class="modal-corpo">
+                <input type="text" id="modal-denom-input" class="modal-input" placeholder="Digite a denominação..." autofocus>
+              </div>
+              <div class="modal-botoes">
+                <button class="modal-botao modal-botao-cancelar" id="modal-denom-cancelar">Cancelar</button>
+                <button class="modal-botao modal-botao-confirmar" id="modal-denom-confirmar">Confirmar</button>
+              </div>
+            </div>
+          </div>
+        `;
+        
+        document.body.appendChild(modal);
+        
+        const overlay = document.getElementById('modal-overlay-denom');
+        const inputDenom = document.getElementById('modal-denom-input');
+        const btnConfirmar = document.getElementById('modal-denom-confirmar');
+        const btnCancelar = document.getElementById('modal-denom-cancelar');
+        
+        // Focar no input
+        inputDenom.focus();
+        
+        // Fechar ao clicar em overlay
+        overlay.addEventListener('click', (e) => {
+          if (e.target === overlay) {
+            modal.remove();
+          }
+        });
+        
+        // Cancelar
+        btnCancelar.addEventListener('click', () => {
+          modal.remove();
+        });
+        
+        // Confirmar
+        btnConfirmar.addEventListener('click', () => {
+          const valor = inputDenom.value.trim();
+          if (valor) {
+            const denomDropdown = document.getElementById('perf-denominacao-dropdown');
+            if (denomDropdown) {
+              const text = denomDropdown.querySelector('.perfil-dropdown-text');
+              if (text) text.textContent = valor;
+              denomDropdown.dataset.value = valor;
+            }
+          }
+          modal.remove();
+        });
+        
+        // Confirmar ao pressionar Enter
+        inputDenom.addEventListener('keypress', (e) => {
+          if (e.key === 'Enter') {
+            btnConfirmar.click();
+          }
+        });
+      });
+    }
+
+    // EVENTOS - VERTENTES TEOLÓGICAS (Sistema de Tags Dinâmico)
+    const inputVertente = document.getElementById('vertente-input');
+    const btnAddVertente = document.getElementById('btn-add-vertente');
+    const containerSelecionadas = document.getElementById('vertentes-selecionadas');
+    const containerLista = document.getElementById('vertentes-lista');
+    
+    // ✅ CRÍTICO: Adicionar eventos de click nas cápsulas renderizadas
+    containerSelecionadas.querySelectorAll('.perfil-vertente-capsula').forEach(capsula => {
+      capsula.addEventListener('click', (e) => {
+        e.preventDefault();
+        capsula.remove();
+        inputVertente.value = '';
+        atualizarVertentes();
+      });
+    });
+    
+    // Normaliza para comparar sem acento e sem caixa (ex.: "calvin" acha "Calvinismo")
+    const _norm = s => (s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
+    const atualizarVertentes = () => {
+      const selecionadas = [...containerSelecionadas.querySelectorAll('.perfil-vertente-capsula')];
+      const verticosSel = selecionadas.map(c => c.textContent.trim()); // ✅ Usar textContent em vez de data-vertente
+      const filtro = _norm((inputVertente && inputVertente.value) || '');
+
+      // Atualizar lista (só mostra não selecionadas E que casam com o filtro digitado)
+      containerLista.innerHTML = '';
+      for (const v of Perfil.VERTENTES_TEOLOGICAS) {
+        if (verticosSel.includes(v)) continue;
+        if (filtro && !_norm(v).includes(filtro)) continue; // filtro dinâmico
+        const btn = document.createElement('button');
+        btn.className = 'perfil-vertente-opcao';
+        btn.type = 'button';
+        btn.dataset.vertente = v;
+        btn.textContent = v;
+        btn.addEventListener('click', (e) => {
+          e.preventDefault();
+          adicionarVertente(v); // ao clicar, adiciona e limpa a caixa (some o filtro)
+        });
+        containerLista.appendChild(btn);
+      }
+    };
+    
+    const adicionarVertente = (vertente) => {
+      if (!vertente || vertente.trim() === '') return;
+      
+      // Evitar duplicatas
+      const selecionadas = containerSelecionadas.querySelectorAll('.perfil-vertente-capsula');
+      if ([...selecionadas].some(c => c.dataset.vertente === vertente)) return;
+      
+      // Criar cápsula
+      const capsula = document.createElement('div');
+      capsula.className = 'perfil-vertente-capsula';
+      capsula.dataset.vertente = vertente;
+      capsula.textContent = vertente;
+      capsula.title = 'Clica para remover';
+      capsula.addEventListener('click', () => {
+        capsula.remove();
+        inputVertente.value = '';
+        atualizarVertentes();
+      });
+      
+      containerSelecionadas.appendChild(capsula);
+      inputVertente.value = '';
+      atualizarVertentes();
+    };
+    
+    // Botão "+"
+    if (btnAddVertente) {
+      btnAddVertente.addEventListener('click', (e) => {
+        e.preventDefault();
+        const valor = (inputVertente.value || '').trim();
+        if (valor) {
+          adicionarVertente(valor);
+        } else {
+          inputVertente.focus();
+        }
+      });
+    }
+    
+    // Enter no input
+    if (inputVertente) {
+      // Filtro dinâmico: a cada tecla, filtra as cápsulas não selecionadas
+      inputVertente.addEventListener('input', () => atualizarVertentes());
+      inputVertente.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          const valor = (inputVertente.value || '').trim();
+          if (valor) {
+            adicionarVertente(valor);
+          }
+        }
+      });
+    }
+    
+    atualizarVertentes();
+
+    // EVENTOS - MENU DROPDOWN
+    const btnAdd = document.getElementById('btn-add-social');
+    const menu = document.getElementById('menu-social');
+
+    if (btnAdd && menu) {
+      btnAdd.addEventListener('click', (e) => {
+        e.preventDefault();
+        menu.classList.toggle('aberto');
+      });
+    }
+
+    corpo.querySelectorAll('.perfil-menu-item').forEach(item => {
+      item.addEventListener('click', (e) => {
+        e.preventDefault();
+        const tipo = item.dataset.tipo;
+
+        // ✅ CRÍTICO: antes de re-renderizar, salvar o formulário INTEIRO
+        // (nome, local, religião, vertentes, bio E contatos) — não só contatos —
+        // senão o re-render abaixo apaga tudo que ainda não foi salvo.
+        Perfil.salvar(this._coletarPerfilFormulario(corpo));
+
+        // Agora adiciona novo contato
+        Perfil.adicionarContato(tipo, '');
+        if (menu) menu.classList.remove('aberto');
+
+        // Re-renderiza (agora com tudo preservado)
+        this.desenharPerfilEdit(corpo);
+      });
+    });
+
+    // EVENTOS - REMOVER
+    corpo.querySelectorAll('.perfil-social-edit-remover').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.preventDefault();
+        const idx = +btn.dataset.idx;
+        // Também preserva o formulário inteiro antes de re-renderizar
+        Perfil.salvar(this._coletarPerfilFormulario(corpo));
+        Perfil.removerContato(idx);
+        this.desenharPerfilEdit(corpo);
+      });
+    });
+
+    // EVENTOS - VALIDAÇÃO E MÁSCARA DAS REDES SOCIAIS
+    // Cada input valida conforme o tipo; telefone (e telOuLink numérico) ganha
+    // máscara (DD) XXXXX-XXXX enquanto digita. O erro aparece embaixo do campo.
+    const mostrarErroContato = (input) => {
+      const item = input.closest('.perfil-social-edit-item');
+      if (!item) return true;
+      const tipo = input.dataset.tipoContato;
+      const alvoErro = item.querySelector('.perfil-social-erro');
+      const { ok, msg } = Perfil.validarContato(tipo, input.value);
+      input.classList.toggle('invalido', !ok);
+      if (alvoErro) {
+        alvoErro.textContent = ok ? '' : msg;
+        alvoErro.hidden = ok;
+      }
+      return ok;
+    };
+
+    corpo.querySelectorAll('.perfil-social-edit-input input').forEach(input => {
+      const tipo = input.dataset.tipoContato;
+      const regra = Perfil.regraContato(tipo);
+
+      input.addEventListener('input', () => {
+        // Máscara de telefone: aplica quando o tipo é telefone, ou é telOuLink
+        // e o que foi digitado ainda não parece um link (só números).
+        if (regra.modo === 'telefone' ||
+            (regra.modo === 'telOuLink' && !/[a-zA-Z/:]/.test(input.value))) {
+          const pos = input.selectionStart === input.value.length; // cursor no fim?
+          const fmt = Perfil.formatarTelefone(input.value);
+          if (fmt !== input.value) {
+            input.value = fmt;
+            if (pos) input.setSelectionRange(fmt.length, fmt.length);
+          }
+        }
+        // Username: remove @ do início e espaços conforme digita
+        if (regra.modo === 'username') {
+          const limpo = input.value.replace(/^@+/, '').replace(/\s+/g, '');
+          if (limpo !== input.value) {
+            const atras = input.value.length - input.selectionStart;
+            input.value = limpo;
+            const nova = Math.max(0, limpo.length - atras);
+            input.setSelectionRange(nova, nova);
+          }
+        }
+        mostrarErroContato(input);
+      });
+      input.addEventListener('blur', () => mostrarErroContato(input));
+    });
+
+    // EVENTOS - SALVAR
+    document.getElementById('btn-salvar-perfil').addEventListener('click', () => {
+      // Antes de salvar, valida as redes sociais preenchidas. Se alguma estiver
+      // fora do padrão, não salva: mostra o erro e leva o foco pro primeiro campo.
+      let primeiroInvalido = null;
+      corpo.querySelectorAll('.perfil-social-edit-input input').forEach(input => {
+        const { ok, msg } = Perfil.validarContato(input.dataset.tipoContato, input.value);
+        const item = input.closest('.perfil-social-edit-item');
+        const alvoErro = item && item.querySelector('.perfil-social-erro');
+        input.classList.toggle('invalido', !ok);
+        if (alvoErro) { alvoErro.textContent = ok ? '' : msg; alvoErro.hidden = ok; }
+        if (!ok && !primeiroInvalido) primeiroInvalido = input;
+      });
+      if (primeiroInvalido) {
+        this.avisar({ titulo: 'Rede social inválida',
+          html: 'Confira os campos destacados em vermelho antes de salvar.' });
+        primeiroInvalido.focus();
+        return;
+      }
+
+      // Usa o mesmo coletor do resto do fluxo — lê tudo do formulário de uma vez.
+      Perfil.salvar(this._coletarPerfilFormulario(corpo));
+
+      this._modoPerfil = 'view';
+      this.desenharPerfil();
+    });
+
+    // EVENTOS - VOLTAR
+    document.getElementById('btn-voltar-perfil').addEventListener('click', () => {
+      this._modoPerfil = 'view';
+      this.desenharPerfil();
+    });
+    } catch (erro) {
+      console.error('❌ ERRO ao renderizar EDIT:', erro);
+      console.log('🔄 Tentando recuperar perfil...');
+      Perfil.resetar();
+      corpo.innerHTML = `
+        <div style="padding: 20px; text-align: center;">
+          <p style="color: #8B3E3E; font-weight: bold;">⚠️ Erro ao carregar perfil</p>
+          <p style="font-size: 12px; color: #666;">Dados foram resetados. Tente novamente.</p>
+          <button onclick="location.reload()" style="padding: 8px 16px; background: #8B3E3E; color: white; border: none; border-radius: 4px; cursor: pointer;">
+            Recarregar página
+          </button>
+        </div>
+      `;
+    }
+  },
+
+  /* ============================================================ Ajustes */
+
+  resetarTudo() {
+    console.log('🔄 RESETANDO TUDO...');
+    
+    // 1. Resetar perfil
+    Perfil.resetar();
+    
+    // 2. Limpar localStorage
+    localStorage.clear();
+    
+    // 3. Limpar Service Worker cache
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then(registrations => {
+        registrations.forEach(registration => {
+          registration.unregister();
+          console.log('✅ Service Worker removido');
+        });
+      });
+    }
+    
+    // 4. Recarregar página
+    console.log('🔄 Recarregando página...');
+    setTimeout(() => {
+      location.reload();
+    }, 500);
+  },
+
+  /* ============================================================ Ajustes */
+
   desenharAjustes() {
     const corpo = document.getElementById('corpo-ajustes');
     const blocos = this._blocosAjustes();
 
     corpo.innerHTML =
       this.secao('folha', blocos.folha.titulo, blocos.folha.html) +
+      this.secao('menu', blocos.menu.titulo, blocos.menu.html) +
       this.secao('livros', blocos.livros.titulo, blocos.livros.html) +
       this.secao('comparar', blocos.comparar.titulo, blocos.comparar.html) +
       this.secao('tirinha', blocos.tirinha.titulo, blocos.tirinha.html) +
@@ -3873,6 +5436,13 @@ const App = {
       };
       temp.onchange = () => Prefs.set('temperatura', +temp.value);
     }
+
+    corpo.querySelectorAll('input[name="menu-fundo"]').forEach(el => {
+      el.onchange = () => {
+        Prefs.set('menuFundo', el.value);
+        this.aplicarMenuFundo(el.value);
+      };
+    });
 
     corpo.querySelectorAll('input[name="estilo-folha"]').forEach(el => {
       el.onchange = () => {
@@ -4128,17 +5698,63 @@ const App = {
         Prefs.set('versoesTirinha', el.checked
           ? [...new Set([...atuais, code])]
           : atuais.filter(c => c !== code));
+        // Se a tirinha estiver aberta na aba Versões (caso do atalho — Pedido 1),
+        // redesenha o empilhado ao vivo, para a mudança aparecer atrás do popup.
+        const t = document.getElementById('tirinha');
+        if (t && t.getAttribute('aria-hidden') === 'false' && this.abaTirinha === 'versoes'
+            && this.code != null && this.destaque != null) {
+          Leitura.tirinha(this.code, this.cap, this.destaque, this.versao);
+        }
       };
     });
 
     corpo.querySelectorAll('[data-nome]').forEach(el => {
-      el.onchange = () => Marcadores.atualizar(+el.dataset.nome, { nome: el.value });
+      const id = +el.dataset.nome;
+      const item = el.closest('.item-marcador');
+      const lixeira = item.querySelector('[data-excluir]');
+      const btnAplicar = item.querySelector('[data-aplicar-nome]');
+      const btnCancelar = item.querySelector('[data-cancelar-nome]');
+      let original = el.value;
+
+      const modoEdicao = (lig) => {
+        // a classe controla tudo no CSS: no modo edição, o número e a lixeira
+        // somem e aparecem os botões aplicar/cancelar (sem mudar o layout)
+        item.classList.toggle('editando-nome', lig);
+      };
+      const aplicar = () => {
+        const novo = el.value.trim();
+        if (novo && novo !== original) {
+          Marcadores.atualizar(id, { nome: novo });
+          original = novo;
+          // reflete na hora em todo lugar (inclusive a lista de trás)
+          this._sincronizarMarcadores();
+        } else {
+          el.value = original;   // vazio ou igual: não muda
+        }
+        el.blur();
+        modoEdicao(false);
+      };
+      const cancelar = () => {
+        el.value = original;     // volta ao que era
+        el.blur();
+        modoEdicao(false);
+      };
+
+      el.onfocus = () => { original = el.value; modoEdicao(true); };
+      // não salva no blur automaticamente: exige o ✓ (ou Enter). O clique nos
+      // botões acontece antes do blur porque usamos mousedown.
+      el.onkeydown = (ev) => {
+        if (ev.key === 'Enter') { ev.preventDefault(); aplicar(); }
+        else if (ev.key === 'Escape') { ev.preventDefault(); cancelar(); }
+      };
+      if (btnAplicar) btnAplicar.onmousedown = (ev) => { ev.preventDefault(); aplicar(); };
+      if (btnCancelar) btnCancelar.onmousedown = (ev) => { ev.preventDefault(); cancelar(); };
     });
 
     const addMarc = achar('add-marcador');
     if (addMarc) addMarc.onclick = () => {
       if (!Marcadores.adicionar()) return;   // no teto de 66, não faz nada
-      this.desenharAjustes();   // redesenha; a seção Marcadores segue aberta
+      this._sincronizarMarcadores();          // popup, painel e caixa de trás
     };
 
     corpo.querySelectorAll('[data-excluir]').forEach(el => {
@@ -4156,9 +5772,7 @@ const App = {
         });
         if (!ok) return;
         Marcadores.remover(id);
-        // se um versículo aberto usava a cor, repinta a folha para tirá-la
-        this.desenharAjustes();
-        if (typeof this.repintarMarcasVisiveis === 'function') this.repintarMarcasVisiveis();
+        this._sincronizarMarcadores();   // popup, painel, caixa de trás e folha
       };
     });
 
@@ -4236,6 +5850,10 @@ const App = {
       document.removeEventListener('keydown', this._escAjustePopup);
       this._escAjustePopup = null;
     }
+    // callback opcional de quem abriu (ex.: voltar à lista de marcadores da tirinha)
+    const cb = this._aoFecharPopup;
+    this._aoFecharPopup = null;
+    if (cb) cb();
   },
 
   // Redesenha só o conteúdo do popup (sem fechar/reabrir), atualizando o HTML do
@@ -4259,6 +5877,34 @@ const App = {
   _redesenharAjustesContextual() {
     if (this._popupAjusteId) this._redesenharPopupAjuste();
     else this.desenharAjustes();
+  },
+
+  /* Reflete uma mudança de marcadores (novo, excluído, renomeado, recolorido) em
+   * TODOS os lugares abertos ao mesmo tempo: o painel de Ajustes, o popup de
+   * ajustes, e a caixa "Marcar" da seleção (sel-cores) que fica atrás do popup.
+   * Antes, a lista de trás só atualizava ao reabrir. */
+  _sincronizarMarcadores() {
+    // painel de Ajustes completo, se estiver aberto
+    const painel = document.getElementById('painel-ajustes');
+    if (painel && painel.classList.contains('aberto')) this.desenharAjustes();
+    // popup de ajustes, se aberto
+    if (this._popupAjusteId) this._redesenharPopupAjuste();
+    // caixa "Marcar" da seleção, se estiver aberta atrás
+    const sel = document.getElementById('sel-cores');
+    if (sel && !sel.classList.contains('fechada') && this.selecao) {
+      this._reabrirCoresSelecao();
+    }
+    // repinta as marcas visíveis na folha (cores podem ter mudado)
+    if (typeof this.repintarMarcasVisiveis === 'function') this.repintarMarcasVisiveis();
+  },
+
+  /* Redesenha só o conteúdo da caixa sel-cores sem alternar o aberto/fechado
+   * (o abrirCoresDaSelecao tem um toggle que fecharia se chamado com ela aberta). */
+  _reabrirCoresSelecao() {
+    const sel = document.getElementById('sel-cores');
+    if (!sel) return;
+    sel.classList.add('fechada');   // garante que o toggle reabra
+    this.abrirCoresDaSelecao();
   },
 
 
@@ -4320,6 +5966,28 @@ const App = {
       } else if (!comNota.has(vers) && tem) {
         tem.remove();
       }
+    });
+    this._destacarInicioNotas();
+  },
+
+  /* Destaca o PRIMEIRO versículo de cada nota (a âncora), para se saber onde a
+   * nota começa quando o sinal aparece em vários versículos — inclusive quando
+   * a nota pula versículos. Só o início ganha a esfera invertida (classe
+   * .marca-nota-inicio); os demais seguem com o sinal comum. */
+  _destacarInicioNotas() {
+    const versificacao = Dados.versificacaoDe(this.versao);
+    // primeiro versículo de cada nota do capítulo atual
+    const inicios = new Set();
+    for (const a of Anotacoes.todas()) {
+      if (a.versificacao === versificacao && a.code === this.code && a.cap === this.cap) {
+        const vs = Array.isArray(a.versiculos) && a.versiculos.length ? a.versiculos : [a.vers];
+        const ini = Math.min(...vs.filter(Number.isFinite));
+        if (Number.isFinite(ini)) inicios.add(ini);
+      }
+    }
+    this._escopoVersos().querySelectorAll('.marca-nota').forEach(el => {
+      const vers = +el.dataset.notaVers;
+      el.classList.toggle('marca-nota-inicio', inicios.has(vers));
     });
   },
 
@@ -4438,9 +6106,9 @@ const App = {
 
     const cartoes = notas.map(a => `<div class="cartao-anot">
         <button class="anot-corpo" data-editar="${a.id}">
-          <div class="anot-ref">${Anotacoes.refDe(a)}</div>
+          <div class="anot-ref">${Anotacoes.refDe(a)}${a.somenteLeitura ? ' <span class="autor-cadeado" title="Somente leitura">🔒</span>' : ''}</div>
           <div class="anot-previa">${Leitura.escapar(Anotacoes.resumo(a)) || '<em>(nota vazia)</em>'}</div>
-          <div class="quando">${Anotacoes.quandoDe(a)}</div>
+          <div class="quando">${this._creditoRodape(a, Anotacoes.quandoDe(a))}</div>
         </button>
         <button class="xis" data-excluir-anot="${a.id}" aria-label="Excluir anotação"
           title="Excluir anotação"><svg class="icone"><use href="#i-lixeira"/></svg></button>
@@ -4456,6 +6124,14 @@ const App = {
 
     corpo.querySelectorAll('[data-editar]').forEach(el => {
       el.onclick = () => this.editarAnotacao(vers, el.dataset.editar);
+    });
+
+    // Clicar no nome do autor abre o popup do perfil (sem abrir a nota)
+    corpo.querySelectorAll('.autor-nome').forEach(el => {
+      el.onclick = (e) => {
+        e.stopPropagation();
+        this.abrirPerfilAutorPorId(el.dataset.autorId);
+      };
     });
 
     corpo.querySelectorAll('[data-excluir-anot]').forEach(el => {
@@ -4483,6 +6159,13 @@ const App = {
     // nota que já existe, o conjunto vem dela e não muda aqui.
     this.anotVersiculos = (versiculos && versiculos.length) ? versiculos.slice() : [vers];
     const a = id ? Anotacoes.achar(id) : null;
+
+    // Conteúdo de terceiro em modo somente-leitura: não abre o editor.
+    // Mostra a nota em modo leitura, com o selo do autor.
+    if (a && a.somenteLeitura) {
+      return this._verAnotacaoBloqueada(vers, a);
+    }
+
     document.getElementById('titulo-anot').textContent =
       refLabel || (a ? Anotacoes.refDe(a) : this.refDaPassagem(vers));
     const corpo = document.getElementById('corpo-anot');
@@ -4524,6 +6207,35 @@ const App = {
       </div>`;
 
     this.ligarEditorAnotacao(vers, id);
+    this.abrir('painel-anot');
+  },
+
+  /* Exibe uma anotação de terceiro em modo somente-leitura: conteúdo visível,
+   * selo do autor clicável, sem editor. */
+  _verAnotacaoBloqueada(vers, a) {
+    document.getElementById('titulo-anot').textContent = Anotacoes.refDe(a);
+    const corpo = document.getElementById('corpo-anot');
+    corpo.classList.remove('corpo-editor');
+
+    corpo.innerHTML = `
+      <div class="leitura-anot">
+        <article class="folha-anot folha-bloqueada">
+          ${this._seloAutor(a)}
+          <div class="corpo-nota">${Anotacoes.limpar(a.corpo)}</div>
+          <div class="aviso-bloqueado">🔒 Este conteúdo foi compartilhado apenas para leitura.</div>
+        </article>
+      </div>
+      <div class="acoes-anot">
+        <button class="botao secundario" id="fechar-anot-bloq">Fechar</button>
+      </div>`;
+
+    const btn = document.getElementById('fechar-anot-bloq');
+    if (btn) btn.onclick = () => this.abrirAnotacoes(vers);
+
+    // Nome do autor abre o popup do perfil
+    const nomeBtn = corpo.querySelector('.autor-nome');
+    if (nomeBtn) nomeBtn.onclick = () => this.abrirPerfilAutor(a.autor);
+
     this.abrir('painel-anot');
   },
 
@@ -5399,10 +7111,13 @@ const App = {
         class="opcao-marcador ${m.id === atual ? 'ativa' : ''}">
         <span class="bolha ${m.id === atual ? 'com-x' : ''}"
           style="background:${m.cor}"></span>
-        <span>${Leitura.escapar(m.nome)}</span>
+        <span class="opcao-marcador-nome">${Leitura.escapar(m.nome)}</span>
       </button>`).join('')
       + (postos.size ? `<button data-sm="0" class="opcao-marcador tirar">
-          <span class="bolha vazia com-x"></span><span>Tirar a marca</span></button>` : '');
+          <span class="bolha vazia com-x"></span><span class="opcao-marcador-nome">Tirar a marca</span></button>` : '')
+      + `<button id="sel-novo-marcador" class="opcao-marcador novo-marcador-item"
+          ${Marcadores.podeAdicionar() ? '' : 'disabled'}>
+          <span class="bolha bolha-mais">+</span><span class="opcao-marcador-nome">Novo marcador</span></button>`;
 
     caixa.classList.remove('fechada');
 
@@ -5412,6 +7127,16 @@ const App = {
         this.marcarSelecao(id === atual ? 0 : id);
       };
     });
+
+    // "Novo marcador": abre o MESMO menu de Ajustes › Marcadores como popup
+    // flutuante — é ali (e só ali) que se adiciona e se REMOVE marcador (lixeira),
+    // para não excluir por acidente nesta lista. Ao fechar, reabre esta caixa.
+    { const nv = document.getElementById('sel-novo-marcador');
+      if (nv) nv.onclick = () => {
+        caixa.classList.add('fechada');
+        this._aoFecharPopup = () => this.abrirCoresDaSelecao();
+        this.abrirAjustePopup('marcadores');
+      }; }
   },
 
   marcarSelecao(marcadorId) {
@@ -5766,7 +7491,11 @@ const App = {
       caderno: () => { this.desenharCaderno(); this.abrir('painel-caderno'); },
       referencias: () => this.abrirReferenciasCruzadas(),
       ouvir: () => this.iniciarOuvir(),
+      dicionario: () => { this.abrirDicionario(); },
+      subtitulos: () => { this.abrirSubtitulos(); },
+      perfil: () => { this._modoPerfil = 'view'; this.desenharPerfil(); this.abrir('painel-perfil'); },
       ajustes: () => { this.dobraA = null; this.desenharAjustes(); this.abrir('painel-ajustes'); },
+      backup: () => { this.desenharBackup(); this.abrir('painel-backup'); },
       compartilhar: () => { this.desenharCompartilhar(); this.abrir('painel-compartilhar'); },
       'fechar-app': () => this.fecharAplicativo(),
     };
@@ -5980,14 +7709,29 @@ const App = {
 
     let atraso;
     q('campo-busca').oninput = () => {
+      const bl = document.getElementById('busca-limpar');
+      if (bl) bl.hidden = !q('campo-busca').value;
       clearTimeout(atraso);
       Busca.cancelar();
       atraso = setTimeout(() => this.rodarBusca(), 320);
     };
+    { const bl = document.getElementById('busca-limpar'); const cb = q('campo-busca');
+      if (bl) bl.onclick = () => {
+        cb.value = ''; bl.hidden = true;
+        Busca.cancelar();
+        if (typeof this.rodarBusca === 'function') this.rodarBusca();
+        cb.focus();
+      }; }
 
     q('veu').onclick = () => this.fecharPaineis();
     document.querySelectorAll('[data-fechar]').forEach(el => {
-      el.onclick = () => { this._volta = null; this.fecharPaineis(); };
+      el.onclick = () => {
+        // Se a tela atual tem um passo anterior definido (ex.: a troca de versão
+        // aberta de dentro do painel de Livros), o X volta para lá em vez de
+        // fechar tudo. Sem passo anterior (o padrão), fecha e volta à leitura.
+        if (this._volta) { this.voltar(); return; }
+        this.fecharPaineis();
+      };
     });
     // engrenagem nos cabeçalhos: abre o popup contextual com só aquele módulo
     document.querySelectorAll('[data-ajuste-popup]').forEach(el => {
@@ -6117,6 +7861,29 @@ const App = {
     q('tirinha-acoes').onclick = () => this.abrirAcoesTirinha();
     q('tirinha-fixar').onclick = () => this.alternarFixarPelaTirinha();
     q('desfixar-refs').onclick = () => this.desligarRefsFixas();
+    // Pedido 1: atalho de configuração das versões empilhadas, direto da tirinha.
+    // Reusa o MESMO popup flutuante dos Ajustes (bloco 'tirinha' = "Versões
+    // empilhadas"): abre por cima, a tirinha fica atrás visível, e como divide o
+    // mesmo estado (Prefs 'versoesTirinha') fica sincronizado com os Ajustes.
+    { const b = document.getElementById('tirinha-config-versoes');
+      if (b) b.onclick = () => this.abrirAjustePopup('tirinha'); }
+    // Atalho de referências cruzadas, na aba Referências da tirinha. Abre o mesmo
+    // menu de sempre; ao fechar, volta direto para onde a pessoa estava (a leitura),
+    // como se tivesse sido só uma consulta rápida — sem passar por telas no meio.
+    { const b = document.getElementById('tirinha-refs-cruzadas');
+      if (b) b.onclick = () => { this.fecharTirinha(); this.abrirReferenciasCruzadas(); this._volta = null; }; }
+    // Pedido 2: botão de trocar versão dentro do painel de Livros (entre o
+    // relógio de recentes e o de ajustes). Mesma ação do botão de versão da
+    // página principal; sincronizado porque compartilha o mesmo estado.
+    { const b = document.getElementById('btn-versao-arvore');
+      if (b) b.onclick = ev => {
+        ev.stopPropagation();
+        this.alvoVersao = 'arvore';   // veio do painel de Livros
+        this.desenharVersoes();
+        this.abrir('painel-versao');
+        // fechar no X volta para os Livros (não para a leitura)
+        this._volta = () => { this.desenharArvore(); this.abrir('painel-arvore'); };
+      }; }
     document.querySelectorAll('.aba-tirinha').forEach(el => {
       el.onclick = () => this.mostrarAbaTirinha(el.dataset.aba);
     });
@@ -8239,11 +10006,33 @@ const App = {
     this.abaTirinha = aba;
     document.querySelectorAll('.aba-tirinha').forEach(el =>
       el.classList.toggle('ativa', el.dataset.aba === aba));
-    // "Ações" só vale para o versículo em si (aba Versões);
-    // o fixar só faz sentido na aba Referências, que é o que se fixa na tela
-    document.getElementById('tirinha-acoes').style.display =
-      aba === 'versoes' ? '' : 'none';
-    document.getElementById('tirinha-fixar').hidden = aba !== 'refs';
+
+    // Cabeçalho por aba. Cada aba tem seu grupo de botões à DIREITA, sempre
+    // colados na extrema direita (o "empurrão" margin-left:auto fica no primeiro
+    // visível do grupo). O fechar (X) é comum às duas.
+    //   Versões:     [config-versoes] [Ações]              … [X]
+    //   Referências: [refs-cruzadas]  [fixar]              … [X]
+    const naVersoes = aba === 'versoes';
+    const cfg   = document.getElementById('tirinha-config-versoes');
+    const acoes = document.getElementById('tirinha-acoes');
+    const refsC = document.getElementById('tirinha-refs-cruzadas');
+    const fixar = document.getElementById('tirinha-fixar');
+
+    // visibilidade — remove/põe o atributo hidden (que o CSS respeita) E força
+    // display, para vencer o display:flex da classe .botao-cab-tirinha
+    if (cfg)   { cfg.hidden   = !naVersoes; cfg.style.display   = naVersoes ? '' : 'none'; }
+    if (acoes) {                            acoes.style.display = naVersoes ? '' : 'none'; }
+    if (refsC) { refsC.hidden = naVersoes;  refsC.style.display = naVersoes ? 'none' : ''; }
+    if (fixar) { fixar.hidden = naVersoes;  fixar.style.display = naVersoes ? 'none' : ''; }
+
+    // o empurrão para a direita fica só no PRIMEIRO botão visível do grupo,
+    // para o grupo colar na extrema direita sem duplo empurrão. Usa '0' explícito
+    // (não '') nos demais, para vencer regras de margin-left:auto do CSS antigo.
+    if (cfg)   cfg.style.marginLeft   = naVersoes ? 'auto' : '0';
+    if (refsC) refsC.style.marginLeft = naVersoes ? '0' : 'auto';
+    if (acoes) acoes.style.marginLeft = '0';
+    if (fixar) fixar.style.marginLeft = '0';
+
     if (aba === 'refs') this.sincronizarBotaoFixarTirinha();
     if (aba === 'versoes') {
       const t = document.getElementById('tirinha');
@@ -8432,6 +10221,370 @@ const App = {
     this.refsHist.push(limpo);
     this.refsRaiz = limpo;
     this._salvarHistRefs();
+  },
+
+  /* ============================ DICIONÁRIO ============================
+   * Pesquisa no léxico Strong (hebraico + grego) que o app já carrega. A pessoa
+   * digita em português e a lista filtra ao vivo; chips no topo ligam/desligam
+   * cada idioma. Usa os mesmos dados de Dados.lexico / Dados.carregarLexico. */
+  /* ============================ SUBTÍTULOS ============================
+   * Pesquisa de subtítulos: lista todos os subtítulos de uma VERSÃO DE SUBTÍTULO
+   * (independente da versão aberta na Bíblia), filtrável por escopo e por texto.
+   * Layout copiado da Busca. Clicar navega pela REFERÊNCIA (1º versículo), sem
+   * mexer no subtítulo ativo da leitura. */
+  async abrirSubtitulos() {
+    this.abrir('painel-subtitulos');
+    if (!this.versaoSubt) this.versaoSubt = Prefs.get('subtituloFavorito') || 'ACF';
+    if (!this.escopoSubt) this.escopoSubt = { tipo: 'tudo', id: null, nome: 'Toda a Bíblia' };
+
+    this.atualizarSubtVersao();
+    this.desenharFiltrosSubt();
+
+    const campo = document.getElementById('campo-subtitulos');
+    if (!this._subtLigado) {
+      this._subtLigado = true;
+      const limpar = document.getElementById('subt-limpar');
+      campo.oninput = () => { if (limpar) limpar.hidden = !campo.value; this._filtrarSubtitulos(); };
+      if (limpar) limpar.onclick = () => { campo.value = ''; limpar.hidden = true; this._filtrarSubtitulos(); campo.focus(); };
+      document.getElementById('subt-versao').onclick = () => {
+        this.alvoVersao = 'subtitulo';
+        this.desenharVersoes();
+        this.abrir('painel-versao');
+        this._volta = () => this.abrirSubtitulos();
+      };
+    }
+    await this._montarIndiceSubt();
+    this._filtrarSubtitulos();
+    setTimeout(() => campo.focus(), 60);
+  },
+
+  atualizarSubtVersao() {
+    const s = document.getElementById('subt-versao-sigla');
+    if (s) s.textContent = this.versaoSubt;
+  },
+
+  /* Aplica o estilo de fundo (esfera) dos ícones do menu, via atributo no
+   * container do menu. O CSS cuida das cores por opção e por tema. */
+  aplicarMenuFundo(modo) {
+    const m = modo || Prefs.get('menuFundo') || 'vermelho';
+    const menu = document.getElementById('menu-flutuante');
+    if (menu) menu.setAttribute('data-fundo', m);
+  },
+
+  desenharFiltrosSubt() {
+    const alvo = document.getElementById('filtros-subtitulos');
+    const arv = Dados.arvore(this.versaoSubt);
+    const e = this.escopoSubt;
+    const nivel = e.tipo;
+    const niveis = [
+      ['tudo', 'Toda a Bíblia'], ['testamento', 'Por Testamento'],
+      ['categoria', 'Por Categoria'], ['livro', 'Por Livro'],
+    ];
+    const detalhes = this._opcoesDetalheSubt(nivel, arv);
+    const temDetalhe = nivel !== 'tudo';
+    alvo.innerHTML = `
+      <label class="campo-rotulo">
+        <span>Filtrar em</span>
+        <select class="campo-sel" id="subt-nivel">
+          ${niveis.map(([v, t]) => `<option value="${v}" ${v === nivel ? 'selected' : ''}>${t}</option>`).join('')}
+        </select>
+      </label>
+      <label class="campo-rotulo ${temDetalhe ? '' : 'oculto'}">
+        <span>Onde</span>
+        <select class="campo-sel" id="subt-detalhe">
+          ${detalhes.map(o => `<option value="${o.id}" ${o.id === e.id ? 'selected' : ''}>${Leitura.escapar(o.nome)}</option>`).join('')}
+        </select>
+      </label>`;
+    document.getElementById('subt-nivel').onchange = ev => {
+      const nv = ev.target.value;
+      if (nv === 'tudo') this.escopoSubt = { tipo: 'tudo', id: null, nome: 'Toda a Bíblia' };
+      else {
+        const ops = this._opcoesDetalheSubt(nv, arv);
+        const primeiro = ops[0] || { id: null, nome: '' };
+        this.escopoSubt = { tipo: nv, id: primeiro.id, nome: primeiro.nome };
+      }
+      this.desenharFiltrosSubt();
+      this._filtrarSubtitulos();
+    };
+    const det = document.getElementById('subt-detalhe');
+    if (det) det.onchange = ev => {
+      this.escopoSubt = { tipo: nivel, id: ev.target.value, nome: ev.target.selectedOptions[0].textContent.trim() };
+      this._filtrarSubtitulos();
+    };
+  },
+
+  _opcoesDetalheSubt(nivel, arv) {
+    arv = arv || Dados.arvore(this.versaoSubt);
+    if (nivel === 'testamento') return arv.testaments.map(t => ({ id: t.id, nome: t.name }));
+    if (nivel === 'categoria') return arv.testaments.flatMap(t => t.categories).map(c => ({ id: c.id, nome: c.name }));
+    if (nivel === 'livro') return Dados.livros(this.versaoSubt).map(b => ({ id: b.code, nome: b.name }));
+    return [];
+  },
+
+  async _montarIndiceSubt() {
+    if (this._subtIndiceVersao === this.versaoSubt && this._subtIndice) return;
+    const cont = document.getElementById('resultados-subtitulos');
+    cont.innerHTML = `<div class="estado">Carregando subtítulos…</div>`;
+    const dados = await Dados.carregarSecoes(this.versaoSubt);
+    const idx = [];
+    if (dados) {
+      for (const code of Object.keys(dados)) {
+        const info = Dados.infoLivro(this.versaoSubt, code) || {};
+        const livroNome = info.name || code;
+        const caps = dados[code] || {};
+        for (const cap of Object.keys(caps)) {
+          for (const s of (caps[cap] || [])) {
+            idx.push({
+              code, livroNome, cap: +cap, vers: s.i, titulo: s.t,
+              busca: (s.t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase(),
+              testamento: info.testament, categoria: info.category,
+            });
+          }
+        }
+      }
+    }
+    const ordem = Dados.livros(this.versaoSubt).map(b => b.code);
+    const peso = c => { const i = ordem.indexOf(c); return i < 0 ? 9999 : i; };
+    idx.sort((a, b) => peso(a.code) - peso(b.code) || a.cap - b.cap || a.vers - b.vers);
+    this._subtIndice = idx;
+    this._subtIndiceVersao = this.versaoSubt;
+  },
+
+  _filtrarSubtitulos() {
+    const cont = document.getElementById('resultados-subtitulos');
+    if (!this._subtIndice) return;
+    const campo = document.getElementById('campo-subtitulos');
+    const termo = (campo.value || '')
+      .trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    const esc = this.escopoSubt;
+
+    let itens = this._subtIndice;
+    if (esc.tipo === 'livro') itens = itens.filter(s => s.code === esc.id);
+    else if (esc.tipo === 'testamento') itens = itens.filter(s => s.testamento === esc.id);
+    else if (esc.tipo === 'categoria') itens = itens.filter(s => s.categoria === esc.id);
+    if (termo) itens = itens.filter(s => s.busca.includes(termo));
+
+    if (!this._subtIndice.length) {
+      cont.innerHTML = `<div class="estado">Esta versão não tem subtítulos.</div>`;
+      return;
+    }
+    if (!itens.length) {
+      cont.innerHTML = `<div class="estado">Nenhum subtítulo encontrado${termo ? ` para “${Leitura.escapar(campo.value.trim())}”` : ''}.</div>`;
+      return;
+    }
+    const MAX = 500;
+    const lista = itens.slice(0, MAX).map(s => `
+      <button class="subt-item" data-code="${s.code}" data-cap="${s.cap}" data-vers="${s.vers}">
+        <span class="subt-ref">${Leitura.escapar(s.livroNome)} ${s.cap}:${s.vers}</span>
+        <span class="subt-titulo">${Leitura.escapar(s.titulo)}</span>
+      </button>`).join('');
+    const nota = itens.length > MAX
+      ? `<div class="estado">Mostrando ${MAX} de ${itens.length.toLocaleString('pt-BR')}. Filtre para reduzir.</div>` : '';
+    cont.innerHTML = `<div class="subt-lista">${lista}</div>${nota}`;
+
+    cont.querySelectorAll('.subt-item').forEach(el => {
+      el.onclick = () => {
+        this.fecharPaineis();
+        this.ir(el.dataset.code, +el.dataset.cap, +el.dataset.vers);
+      };
+    });
+  },
+
+  async abrirDicionario() {
+    this.abrir('painel-dicionario');
+    if (!this._dicLangs) this._dicLangs = { he: true, gr: true };
+
+    const campo = document.getElementById('dic-campo');
+    const limpar = document.getElementById('dic-limpar');
+    const corpo = document.getElementById('dic-corpo');
+
+    // carrega os dois léxicos uma vez e monta um índice de busca leve
+    if (!this._dicIndice) {
+      corpo.innerHTML = `<p class="dic-vazio">Carregando dicionário…</p>`;
+      await this._montarIndiceDic();
+    }
+
+    // liga os controles só uma vez
+    if (!this._dicLigado) {
+      this._dicLigado = true;
+      const redesenha = () => this._filtrarDicionario();
+      campo.oninput = () => {
+        limpar.hidden = !campo.value;
+        redesenha();
+      };
+      limpar.onclick = () => { campo.value = ''; limpar.hidden = true; redesenha(); campo.focus(); };
+      document.querySelectorAll('#painel-dicionario .dic-chip').forEach(chip => {
+        chip.onclick = () => {
+          const lang = chip.dataset.lang;
+          // não deixa desligar os dois ao mesmo tempo
+          const outro = lang === 'he' ? 'gr' : 'he';
+          if (this._dicLangs[lang] && !this._dicLangs[outro]) return;
+          this._dicLangs[lang] = !this._dicLangs[lang];
+          chip.classList.toggle('ativo', this._dicLangs[lang]);
+          chip.setAttribute('aria-pressed', this._dicLangs[lang] ? 'true' : 'false');
+          redesenha();
+        };
+      });
+    }
+    this._filtrarDicionario();
+    setTimeout(() => campo.focus(), 60);
+  },
+
+  async _montarIndiceDic() {
+    const [he, gr] = await Promise.all([
+      Dados.carregarLexico('he'),
+      Dados.carregarLexico('gr'),
+    ]);
+    const norm = s => (s || '').toString().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    // Estrutura real do léxico: l = palavra original, x = transliteração (costuma
+    // vir vazia), en = inglês, pt = português, src = metadado (NÃO exibir).
+    const idx = [];
+    for (const [lang, dic] of [['he', he], ['gr', gr]]) {
+      for (const strong of Object.keys(dic || {})) {
+        const e = dic[strong] || {};
+        const pt = (e.pt || e.en || '').trim();
+        const orig = (e.l || '').trim();
+        if (!pt && !orig) continue;
+        // transliteração: usa o campo x se vier preenchido; senão, gera a partir
+        // da palavra original (o campo x está vazio em ~100% do léxico atual).
+        let translit = (e.x || '').trim();
+        if (!translit && orig) translit = this._transliterar(orig, lang);
+        idx.push({
+          lang, strong, orig, translit, pt,
+          busca: norm(pt) + ' ' + norm(translit) + ' ' + strong.toLowerCase(),
+        });
+      }
+    }
+    const numDe = s => parseInt(String(s).replace(/\D/g, ''), 10) || 0;
+    idx.sort((a, b) => a.lang.localeCompare(b.lang) || numDe(a.strong) - numDe(b.strong));
+    this._dicIndice = idx;
+  },
+
+  /* Transliteração fonética simples de grego/hebraico para o alfabeto latino,
+   * gerada a partir da palavra original — porque o campo de transliteração do
+   * léxico vem vazio. Não é academicamente perfeita, mas dá a pronúncia. */
+  _transliterar(palavra, lang) {
+    const semAcento = palavra.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    if (lang === 'gr') {
+      const mapa = {
+        'α':'a','β':'b','γ':'g','δ':'d','ε':'e','ζ':'z','η':'e','θ':'th','ι':'i',
+        'κ':'k','λ':'l','μ':'m','ν':'n','ξ':'x','ο':'o','π':'p','ρ':'r','σ':'s',
+        'ς':'s','τ':'t','υ':'y','φ':'ph','χ':'ch','ψ':'ps','ω':'o'
+      };
+      let s = semAcento.toLowerCase();
+      // dígrafos e regras: γγ→ng, γκ→nk, ου→ou, αυ→au, ευ→eu
+      s = s.replace(/γγ/g,'ng').replace(/γκ/g,'nk').replace(/γξ/g,'nx').replace(/γχ/g,'nch');
+      let out = '';
+      for (const ch of s) out += (mapa[ch] ?? ch);
+      return out;
+    }
+    if (lang === 'he') {
+      const mapa = {
+        'א':'','ב':'v','ג':'g','ד':'d','ה':'h','ו':'v','ז':'z','ח':'ch','ט':'t',
+        'י':'y','כ':'k','ך':'k','ל':'l','מ':'m','ם':'m','נ':'n','ן':'n','ס':'s',
+        'ע':'','פ':'f','ף':'f','צ':'ts','ץ':'ts','ק':'q','ר':'r','שׁ':'sh','שׂ':'s','ש':'sh','ת':'t'
+      };
+      // vogais (niqqud) principais
+      const vogais = {
+        '\u05B0':'e','\u05B1':'e','\u05B2':'a','\u05B3':'o','\u05B4':'i','\u05B5':'e',
+        '\u05B6':'e','\u05B7':'a','\u05B8':'a','\u05B9':'o','\u05BA':'o','\u05BB':'u','\u05BC':''
+      };
+      let out = '';
+      for (const ch of palavra) {
+        if (mapa[ch] != null) out += mapa[ch];
+        else if (vogais[ch] != null) out += vogais[ch];
+      }
+      return out;
+    }
+    return '';
+  },
+
+  _filtrarDicionario() {
+    const corpo = document.getElementById('dic-corpo');
+    const termoBruto = (document.getElementById('dic-campo').value || '').trim();
+    const norm = s => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    const termo = norm(termoBruto);
+    const langs = this._dicLangs;
+
+    if (!this._dicIndice || !this._dicIndice.length) {
+      corpo.innerHTML = `<p class="dic-vazio">O dicionário (léxico) não está disponível.</p>`;
+      return;
+    }
+
+    let itens = this._dicIndice.filter(e => langs[e.lang]);
+    if (termo) itens = itens.filter(e => e.busca.includes(termo));
+
+    // Sem termo: mostra TODAS as palavras (a pessoa rola e filtra ao digitar) —
+    // dá cara de dicionário de verdade, não de tela de busca vazia.
+    if (termo && !itens.length) {
+      corpo.innerHTML = `<p class="dic-vazio">Nada encontrado para “${Leitura.escapar(termoBruto)}”.</p>`;
+      return;
+    }
+
+    const MAX = 300;
+    const total = itens.length;
+    const lista = itens.slice(0, MAX).map((e) => {
+      const cabeca = e.orig || e.translit || e.strong;
+      const temOrig = !!e.orig;
+      return `
+      <button class="dic-item" data-dic="${e.lang}:${Leitura.escaparAttr(e.strong)}">
+        <div class="dic-item-orig-linha">
+          <span class="dic-cabeca">
+            <span class="dic-orig dic-orig-${e.lang} ${temOrig ? '' : 'dic-orig-fallback'}">${Leitura.escapar(cabeca)}</span>${
+            temOrig && e.translit ? ` <span class="dic-translit">(${Leitura.escapar(e.translit)})</span>` : ''}
+          </span>
+          <span class="dic-tag dic-tag-${e.lang}">${e.lang === 'he' ? 'Hebr.' : 'Grego'}</span>
+        </div>
+        <div class="dic-pt">${Leitura.escapar(e.pt)}</div>
+        <div class="dic-strong-linha"><span class="dic-strong">${Leitura.escapar(e.strong)}</span></div>
+      </button>`;
+    }).join('');
+    const nota = total > MAX
+      ? `<p class="dic-vazio">Mostrando ${MAX} de ${total.toLocaleString('pt-BR')} palavras. ${
+          termo ? 'Refine a busca.' : 'Comece a digitar para filtrar.'}</p>`
+      : (!termo ? `<p class="dic-rodape">${total.toLocaleString('pt-BR')} palavras no dicionário.</p>` : '');
+    corpo.innerHTML = lista + nota;
+
+    // clicar num item abre o MESMO layout de estudo da palavra da leitura
+    corpo.querySelectorAll('[data-dic]').forEach(el => {
+      el.onclick = () => {
+        const [lang, strong] = el.dataset.dic.split(':');
+        this._abrirPalavraDoDicionario(lang, strong);
+      };
+    });
+  },
+
+  /* Reaproveita o overlay 'palavra-veu' da leitura (original grande no topo,
+   * transliteração, português, Strong, lema) para mostrar a palavra escolhida
+   * no dicionário — sem inventar outro layout. */
+  _abrirPalavraDoDicionario(lang, strong) {
+    const e = (this._dicIndice || []).find(x => x.lang === lang && x.strong === strong);
+    if (!e) return;
+    const q = id => document.getElementById(id);
+    const rtl = lang === 'he';
+
+    const alvoO = q('pe-o');
+    alvoO.textContent = e.orig || e.translit || e.strong;
+    alvoO.dir = rtl && e.orig ? 'rtl' : '';
+    alvoO.classList.toggle('pe-o-fallback', !e.orig);
+
+    const linha = (idLinha, idVal, valor, comDir) => {
+      const box = q(idLinha); if (!box) return;
+      const val = q(idVal);
+      if (!valor) { box.hidden = true; if (val) val.textContent = ''; return; }
+      box.hidden = false;
+      val.textContent = valor;
+      val.dir = comDir && rtl ? 'rtl' : '';
+    };
+    linha('pe-linha-t', 'pe-t', e.translit, false);
+    linha('pe-linha-g', 'pe-g', e.pt, false);
+    linha('pe-linha-m', 'pe-m', lang === 'he' ? 'Hebraico' : 'Grego', false);
+    linha('pe-linha-s', 'pe-s', e.strong, false);
+    linha('pe-linha-l', 'pe-l', e.orig, true);
+
+    const veu = q('palavra-veu');
+    veu.classList.add('aberto');
+    veu.setAttribute('aria-hidden', 'false');
   },
 
   abrirReferenciasCruzadas() {
@@ -9085,6 +11238,58 @@ const App = {
         }
         this.desenharGrupo(id);
       };
+    });
+  },
+
+  /* Dropdown Customizado - Sem fechar ao scroll */
+  _setupDropdown(dropdownId, onChangeCallback = null) {
+    const dropdown = document.getElementById(dropdownId);
+    if (!dropdown) return;
+
+    const trigger = dropdown.querySelector('.perfil-dropdown-trigger');
+    const menu = dropdown.querySelector('.perfil-dropdown-menu');
+    const options = dropdown.querySelectorAll('.perfil-dropdown-option');
+    const text = dropdown.querySelector('.perfil-dropdown-text');
+
+    if (!trigger || !menu) return;
+
+    // Abrir/fechar dropdown
+    trigger.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const isOpen = menu.style.display !== 'none';
+      menu.style.display = isOpen ? 'none' : 'block';
+    });
+
+    // Selecionar opção
+    options.forEach(option => {
+      option.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const value = option.dataset.value;
+        
+        // Atualizar texto e valor
+        text.textContent = value || '— Nenhuma —';
+        dropdown.dataset.value = value;
+        
+        // Remover classe selected de todas
+        options.forEach(o => o.classList.remove('selected'));
+        // Adicionar selected à clicada
+        option.classList.add('selected');
+        
+        // Fechar menu
+        menu.style.display = 'none';
+        
+        // Callback se houver
+        if (onChangeCallback) {
+          onChangeCallback(value);
+        }
+      });
+    });
+
+    // Fechar dropdown ao clicar fora
+    document.addEventListener('click', (e) => {
+      if (!dropdown.contains(e.target)) {
+        menu.style.display = 'none';
+      }
     });
   },
 
