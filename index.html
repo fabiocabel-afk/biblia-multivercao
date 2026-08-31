@@ -170,27 +170,34 @@
     padding: 8px;
     width: 20px; height: 20px;
   }
+  /* detalhes preenchidos dentro dos ícones (o play do "Listas", as bolinhas do
+     "Ajustes") usam fill="currentColor". Faz o fill acompanhar a cor do traço. */
+  #menu-flutuante[data-fundo]:not([data-fundo="nenhum"]) button .icone [fill] {
+    fill: currentColor;
+  }
   /* Vermelho (padrão): esfera vermelha, ícone creme */
   #menu-flutuante[data-fundo="vermelho"] button .icone {
     background: var(--rubrica);
     stroke: var(--papel);
+    color: var(--papel);
   }
   /* Marrom: esfera marrom escura, ícone claro */
   #menu-flutuante[data-fundo="marrom"] button .icone {
     background: #2a1c11;
     stroke: #f2e6c9;
+    color: #f2e6c9;
   }
-  /* Conforme o tema: usa a cor de "cromo" do tema (marrom por padrão) com ícone claro.
-     No tema vermelho fica vermelho; no creme (clássico) fica marrom bem escuro. */
+  /* Conforme o tema */
   #menu-flutuante[data-fundo="tema"] button .icone {
     background: var(--cromo);
     stroke: #f2e6c9;
+    color: #f2e6c9;
   }
   [data-tema="vermelho"] #menu-flutuante[data-fundo="tema"] button .icone {
-    background: #6e1a17; stroke: #f2e6c9;
+    background: #6e1a17; stroke: #f2e6c9; color: #f2e6c9;
   }
   [data-tema="classico"] #menu-flutuante[data-fundo="tema"] button .icone {
-    background: #2a1c11; stroke: #f2e6c9;   /* creme → marrom bem escuro p/ contraste */
+    background: #2a1c11; stroke: #f2e6c9; color: #f2e6c9;
   }
   /* 'nenhum' não adiciona nada — herda o estilo atual (stroke --tinta-fraca) */
   #menu-flutuante[data-fundo="nenhum"] button .icone { padding: 0; background: transparent; }
