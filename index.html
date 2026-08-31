@@ -149,6 +149,68 @@
     font-family: var(--fonte-texto); letter-spacing: .2px;
   }
   .subt-titulo { font-size: 15px; color: var(--tinta); line-height: 1.35; }
+
+  /* X de limpar dentro das caixas de Busca e Subtítulos (igual ao do Léxico) */
+  .campo-limpavel { position: relative; flex: 1 1 auto; min-width: 0; display: flex; }
+  .campo-limpavel .campo { width: 100%; padding-right: 34px; }
+  .campo-x {
+    position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 24px; height: 24px; border-radius: 50%; cursor: pointer; background: transparent;
+  }
+  .campo-x .icone { width: 13px; height: 13px; stroke: var(--tinta-fraca); }
+  .campo-x:hover { background: color-mix(in srgb, var(--tinta) 9%, transparent); }
+
+  /* ===================== FUNDO (ESFERA) DOS ÍCONES DO MENU ===================== */
+  /* Estrutura: a .icone vira uma esfera com fundo; o SVG dentro fica claro.
+     Aplicado por data-fundo no #menu-flutuante. 'nenhum' = como hoje. */
+  #menu-flutuante[data-fundo] button .icone {
+    box-sizing: content-box;
+    border-radius: 50%;
+    padding: 8px;
+    width: 20px; height: 20px;
+  }
+  /* Vermelho (padrão): esfera vermelha, ícone creme */
+  #menu-flutuante[data-fundo="vermelho"] button .icone {
+    background: var(--rubrica);
+    stroke: var(--papel);
+  }
+  /* Marrom: esfera marrom escura, ícone claro */
+  #menu-flutuante[data-fundo="marrom"] button .icone {
+    background: #2a1c11;
+    stroke: #f2e6c9;
+  }
+  /* Conforme o tema: usa a cor de "cromo" do tema (marrom por padrão) com ícone claro.
+     No tema vermelho fica vermelho; no creme (clássico) fica marrom bem escuro. */
+  #menu-flutuante[data-fundo="tema"] button .icone {
+    background: var(--cromo);
+    stroke: #f2e6c9;
+  }
+  [data-tema="vermelho"] #menu-flutuante[data-fundo="tema"] button .icone {
+    background: #6e1a17; stroke: #f2e6c9;
+  }
+  [data-tema="classico"] #menu-flutuante[data-fundo="tema"] button .icone {
+    background: #2a1c11; stroke: #f2e6c9;   /* creme → marrom bem escuro p/ contraste */
+  }
+  /* 'nenhum' não adiciona nada — herda o estilo atual (stroke --tinta-fraca) */
+  #menu-flutuante[data-fundo="nenhum"] button .icone { padding: 0; background: transparent; }
+
+  /* Com esfera, os itens ficam mais altos; reduz o espaçamento vertical para
+     compensar e manter tudo compacto. (não afeta o modo 'nenhum') */
+  #menu-flutuante[data-fundo]:not([data-fundo="nenhum"]) button {
+    padding-top: 5px; padding-bottom: 5px;
+  }
+  #menu-flutuante[data-fundo]:not([data-fundo="nenhum"]) { gap: 1px; }
+
+  /* Rolagem DENTRO do menu: quando ele passa da tela, rola os próprios itens em
+     vez de rolar a página de trás. overscroll-behavior: contain trava o "vazamento"
+     do scroll. Já deixa pronto para quando houver mais ícones. */
+  #menu-flutuante {
+    max-height: calc(100dvh - var(--barra) - 16px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
   /* no overlay reaproveitado: quando o topo é transliteração/Strong (sem original),
      não usar o tamanho 2em de palavra original — fica menor e discreto. */
   #pe-o.pe-o-fallback { font-size: 1.15em; font-style: italic; color: var(--tinta-fraca); }
@@ -571,7 +633,10 @@
   </header>
   <div class="corpo">
     <div class="busca-barra">
-      <input class="campo campo-busca" id="campo-busca" type="search" placeholder="Palavra ou expressão" autocomplete="off">
+      <div class="campo-limpavel">
+        <input class="campo campo-busca" id="campo-busca" type="text" placeholder="Palavra ou expressão" autocomplete="off">
+        <button id="busca-limpar" class="campo-x" aria-label="Limpar" hidden><svg class="icone"><use href="#i-fechar"/></svg></button>
+      </div>
       <button class="busca-versao" id="busca-versao" title="Versão da busca" aria-label="Versão da busca">
         <span class="sigla" id="busca-versao-sigla">—</span>
       </button>
@@ -718,7 +783,10 @@
   </header>
   <div class="corpo">
     <div class="busca-barra">
-      <input class="campo campo-busca" id="campo-subtitulos" type="search" placeholder="Filtrar subtítulos" autocomplete="off">
+      <div class="campo-limpavel">
+        <input class="campo campo-busca" id="campo-subtitulos" type="text" placeholder="Filtrar subtítulos" autocomplete="off">
+        <button id="subt-limpar" class="campo-x" aria-label="Limpar" hidden><svg class="icone"><use href="#i-fechar"/></svg></button>
+      </div>
       <button class="busca-versao" id="subt-versao" title="Versão dos subtítulos" aria-label="Versão dos subtítulos">
         <span class="sigla" id="subt-versao-sigla">—</span>
       </button>
