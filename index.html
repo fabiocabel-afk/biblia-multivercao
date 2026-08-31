@@ -20,6 +20,266 @@
 <link rel="icon" href="assets/icons/icone-192.png">
 <link rel="apple-touch-icon" href="assets/icons/icone-192.png">
 <link rel="stylesheet" href="assets/css/estilo.css">
+<style>
+  /* Destaque do PRIMEIRO versículo de cada nota: esfera avermelhada preenchida,
+     com o ícone claro dentro (cores invertidas em relação ao sinal comum). Serve
+     de âncora para se saber onde a nota começa quando o sinal se repete. */
+  .marca-nota.marca-nota-inicio {
+    background: var(--rubrica);
+    color: var(--papel);
+    opacity: 1;
+    border-radius: 50%;
+    width: .92em; height: .92em;
+    padding: .12em;
+    box-sizing: border-box;
+    vertical-align: .30em;
+    box-shadow: 0 1px 2px rgba(0,0,0,.28);
+  }
+  .marca-nota.marca-nota-inicio svg { stroke: var(--papel); }
+  .marca-nota.marca-nota-inicio:hover { color: var(--papel); opacity: 1; }
+
+  /* Marcador (fita vermelha) no Testamento e no Livro atualmente selecionados,
+     no painel de Livros (modo estante). Fica na lateral direita, encostada na
+     borda, estreita — não cobre o nome (que é centralizado). Para trocar de lado,
+     troque 'right' por 'left' nas duas regras ::after. */
+  #corpo-arvore .estante-capa.sel,
+  #corpo-arvore .livro-cartao.ativa { position: relative; overflow: hidden; }
+  #corpo-arvore .estante-capa.sel::after,
+  #corpo-arvore .livro-cartao.ativa::after {
+    content: "";
+    position: absolute;
+    top: 0; bottom: 0; right: 10px;
+    width: 12px;
+    background: var(--rubrica);
+    box-shadow: 0 1px 2px rgba(0,0,0,.28);
+    /* recorte em "rabo de andorinha" na base, como uma fita/marcador de livro */
+    clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 86%, 0 100%);
+    pointer-events: none;
+  }
+
+  /* ===================== DICIONÁRIO ===================== */
+  .dic-topo {
+    padding: 12px 16px 10px;
+    border-bottom: 1px solid color-mix(in srgb, var(--tinta) 16%, transparent);
+    display: flex; flex-direction: column; gap: 10px; flex: 0 0 auto;
+  }
+  .dic-busca { position: relative; display: flex; align-items: center; }
+  .dic-busca .dic-lupa {
+    position: absolute; left: 12px; width: 18px; height: 18px;
+    stroke: var(--tinta-fraca); pointer-events: none;
+  }
+  .dic-busca .campo {
+    width: 100%; padding: 11px 38px; border-radius: 10px;
+    border: 1px solid color-mix(in srgb, var(--tinta) 22%, transparent);
+    background: color-mix(in srgb, var(--papel) 88%, #fff 12%);
+    color: var(--tinta); font-size: 15px; font-family: var(--fonte-texto);
+  }
+  .dic-busca .campo:focus {
+    outline: 2px solid color-mix(in srgb, var(--rubrica) 40%, transparent);
+    outline-offset: 1px;
+  }
+  .dic-limpar {
+    position: absolute; right: 8px; display: inline-flex; align-items: center;
+    justify-content: center; width: 26px; height: 26px; border-radius: 50%;
+    cursor: pointer; background: transparent;
+  }
+  .dic-limpar .icone { width: 14px; height: 14px; stroke: var(--tinta-fraca); }
+  .dic-limpar:hover { background: color-mix(in srgb, var(--tinta) 8%, transparent); }
+  .dic-filtros { display: flex; gap: 8px; }
+  .dic-chip {
+    flex: 1 1 0;                 /* mesma largura para os dois */
+    text-align: center;
+    text-transform: uppercase;   /* HEBRAICO / GREGO */
+    letter-spacing: .5px;
+    padding: 7px 0; border-radius: 999px; cursor: pointer; font-size: 12.5px;
+    font-weight: 600; font-family: var(--fonte-texto);
+    border: 1px solid color-mix(in srgb, var(--tinta) 30%, transparent);
+    background: transparent; color: var(--tinta-fraca);
+    transition: background .14s ease, color .14s ease, border-color .14s ease;
+  }
+  .dic-chip.ativo { background: var(--rubrica); color: var(--papel); border-color: var(--rubrica); }
+  .dic-corpo { padding: 6px 12px 20px; overflow-y: auto; }
+  .dic-vazio {
+    text-align: center; color: var(--tinta-fraca); font-size: 14px;
+    padding: 28px 20px; line-height: 1.5;
+  }
+  .dic-rodape { text-align: center; color: var(--tinta-fraca); font-size: 12.5px; padding: 14px; }
+  .dic-item {
+    display: block; width: 100%; text-align: left; cursor: pointer;
+    padding: 11px 12px; border-radius: 10px; background: transparent;
+    border-bottom: 1px solid color-mix(in srgb, var(--tinta) 10%, transparent);
+  }
+  .dic-item:hover { background: color-mix(in srgb, var(--tinta) 6%, transparent); }
+  .dic-item-orig-linha { display: flex; align-items: baseline; gap: 10px; }
+  .dic-cabeca { display: inline; }
+  .dic-orig {
+    font-size: 17px; color: var(--tinta); font-weight: 600; line-height: 1.3;
+    font-family: Georgia, 'Times New Roman', serif;
+  }
+  .dic-orig-he { font-size: 18px; }
+  .dic-orig-fallback { font-size: 14px; font-style: italic; color: var(--tinta-fraca); font-family: var(--fonte-texto); }
+  /* transliteração: ao lado da palavra, entre parênteses, negrito, num marrom claro */
+  .dic-translit {
+    color: var(--tinta-numero); font-weight: 700; font-style: normal; font-size: 14px;
+  }
+  /* a caixinha do idioma vai para a EXTREMA DIREITA e alinha entre as linhas */
+  .dic-tag {
+    margin-left: auto; align-self: flex-start;
+    font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .3px;
+    padding: 2px 8px; border-radius: 6px; color: var(--papel); white-space: nowrap;
+  }
+  .dic-tag-he { background: #5a6e3a; }
+  .dic-tag-gr { background: #4a5a78; }
+  /* significado em português, na cor vermelha (rubrica) */
+  .dic-pt { color: var(--rubrica); font-size: 14px; line-height: 1.45; margin-top: 2px; }
+  .dic-strong-linha { margin-top: 2px; }
+  .dic-strong { font-size: 11.5px; color: var(--tinta-numero); font-family: monospace; }
+
+  /* ===================== SUBTÍTULOS ===================== */
+  .subt-lista { display: flex; flex-direction: column; }
+  .subt-item {
+    display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+    width: 100%; text-align: left; cursor: pointer; background: transparent;
+    padding: 11px 14px;
+    border-bottom: 1px solid color-mix(in srgb, var(--tinta) 10%, transparent);
+  }
+  .subt-item:hover { background: color-mix(in srgb, var(--tinta) 6%, transparent); }
+  .subt-ref {
+    font-size: 12.5px; font-weight: 700; color: var(--rubrica);
+    font-family: var(--fonte-texto); letter-spacing: .2px;
+  }
+  .subt-titulo { font-size: 15px; color: var(--tinta); line-height: 1.35; }
+
+  /* X de limpar dentro das caixas de Busca e Subtítulos (igual ao do Léxico) */
+  .campo-limpavel { position: relative; flex: 1 1 auto; min-width: 0; display: flex; }
+  .campo-limpavel .campo { width: 100%; padding-right: 34px; }
+  .campo-x {
+    position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 24px; height: 24px; border-radius: 50%; cursor: pointer; background: transparent;
+  }
+  .campo-x .icone { width: 13px; height: 13px; stroke: var(--tinta-fraca); }
+  .campo-x:hover { background: color-mix(in srgb, var(--tinta) 9%, transparent); }
+
+  /* ===================== FUNDO (ESFERA) DOS ÍCONES DO MENU ===================== */
+  /* Estrutura: a .icone vira uma esfera com fundo; o SVG dentro fica claro.
+     Aplicado por data-fundo no #menu-flutuante. 'nenhum' = como hoje. */
+  #menu-flutuante[data-fundo] button .icone {
+    box-sizing: content-box;
+    border-radius: 50%;
+    padding: 8px;
+    width: 20px; height: 20px;
+  }
+  /* detalhes preenchidos dentro dos ícones (o play do "Listas", as bolinhas do
+     "Ajustes") usam fill="currentColor". Faz o fill acompanhar a cor do traço. */
+  #menu-flutuante[data-fundo]:not([data-fundo="nenhum"]) button .icone [fill] {
+    fill: currentColor;
+  }
+  /* Vermelho (padrão): esfera vermelha, ícone creme */
+  #menu-flutuante[data-fundo="vermelho"] button .icone {
+    background: var(--rubrica);
+    stroke: var(--papel);
+    color: var(--papel);
+  }
+  /* Marrom: esfera marrom escura, ícone claro */
+  #menu-flutuante[data-fundo="marrom"] button .icone {
+    background: #2a1c11;
+    stroke: #f2e6c9;
+    color: #f2e6c9;
+  }
+  /* Conforme o tema */
+  #menu-flutuante[data-fundo="tema"] button .icone {
+    background: var(--cromo);
+    stroke: #f2e6c9;
+    color: #f2e6c9;
+  }
+  [data-tema="vermelho"] #menu-flutuante[data-fundo="tema"] button .icone {
+    background: #6e1a17; stroke: #f2e6c9; color: #f2e6c9;
+  }
+  [data-tema="classico"] #menu-flutuante[data-fundo="tema"] button .icone {
+    background: #2a1c11; stroke: #f2e6c9; color: #f2e6c9;
+  }
+  /* 'nenhum' não adiciona nada — herda o estilo atual (stroke --tinta-fraca) */
+  #menu-flutuante[data-fundo="nenhum"] button .icone { padding: 0; background: transparent; }
+
+  /* Com esfera, os itens ficam mais altos; reduz o espaçamento vertical para
+     compensar e manter tudo compacto. (não afeta o modo 'nenhum') */
+  #menu-flutuante[data-fundo]:not([data-fundo="nenhum"]) button {
+    padding-top: 5px; padding-bottom: 5px;
+  }
+  #menu-flutuante[data-fundo]:not([data-fundo="nenhum"]) { gap: 1px; }
+
+  /* Rolagem DENTRO do menu: quando ele passa da tela, rola os próprios itens em
+     vez de rolar a página de trás. overscroll-behavior: contain trava o "vazamento"
+     do scroll. Já deixa pronto para quando houver mais ícones. */
+  #menu-flutuante {
+    max-height: calc(100dvh - var(--barra) - 16px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+  /* no overlay reaproveitado: quando o topo é transliteração/Strong (sem original),
+     não usar o tamanho 2em de palavra original — fica menor e discreto. */
+  #pe-o.pe-o-fallback { font-size: 1.15em; font-style: italic; color: var(--tinta-fraca); }
+
+  /* Menu "Marcar" da barra de seleção (caixa #sel-cores): um marcador por linha,
+     sem quebra de linha no nome. Vence o grid de 2 colunas do CSS principal. */
+  #sel-cores {
+    display: flex !important;
+    flex-direction: column !important;
+    flex-wrap: nowrap !important;
+    grid-template-columns: none !important;
+    gap: 2px !important;
+    align-items: stretch !important;
+  }
+  #sel-cores .opcao-marcador {
+    width: 100%;
+    justify-content: flex-start;
+    text-align: left;
+  }
+  #sel-cores .opcao-marcador .opcao-marcador-nome {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  #sel-cores .bolha-mais {
+    display: inline-flex; align-items: center; justify-content: center;
+    color: var(--rubrica); font-weight: 700; font-size: 1.1em;
+    background: transparent;
+  }
+  /* BUG 1: a regra .sel-cores button:hover { transform: scale(1.1) } era para as
+     bolinhas antigas; nos itens-lista ela empurra/distorce. Anula o transform. */
+  #sel-cores .opcao-marcador:hover { transform: none !important; }
+  /* BUG 3: o diálogo de confirmação (excluir) precisa ficar ACIMA do popup de
+     ajustes (z-index 92), senão aparece por trás. */
+  .dialogo-veu { z-index: 120 !important; }
+
+  /* Botões aplicar/cancelar que substituem o número + lixeira ao editar o nome
+     do marcador. Por padrão ESCONDIDOS; só aparecem no modo .editando-nome. */
+  .confirmar-nome {
+    display: none;
+    align-items: center; justify-content: center;
+    width: 30px; height: 30px; border-radius: 8px; flex: 0 0 auto;
+    background: transparent; cursor: pointer;
+  }
+  .confirmar-nome .icone { width: 18px; height: 18px; }
+  .confirmar-nome.aplicar .icone { stroke: #2e7d32; }
+  .confirmar-nome.aplicar:hover { background: color-mix(in srgb, #2e7d32 14%, transparent); }
+  .confirmar-nome.cancelar .icone { stroke: var(--tinta-fraca); }
+  .confirmar-nome.cancelar:hover { background: color-mix(in srgb, var(--rubrica) 12%, transparent); }
+  .confirmar-nome.cancelar:hover .icone { stroke: var(--rubrica); }
+
+  /* No modo edição: some o número e a lixeira, aparecem aplicar/cancelar. */
+  .item-marcador.editando-nome .sub,
+  .item-marcador.editando-nome .excluir-marcador { display: none !important; }
+  .item-marcador.editando-nome .confirmar-nome { display: inline-flex; }
+  .item-marcador.editando-nome .campo {
+    outline: 2px solid color-mix(in srgb, var(--rubrica) 45%, transparent);
+    outline-offset: 1px; border-radius: 6px;
+  }
+</style>
 </head>
 <body>
 <div id="perg-fundo" aria-hidden="true"></div>
@@ -38,9 +298,13 @@
   <symbol id="i-sair" viewBox="0 0 24 24"><path d="M12 3v9" stroke-linecap="round"/><path d="M6.4 7a8 8 0 1 0 11.2 0" stroke-linecap="round"/></symbol>
   <symbol id="i-referencias" viewBox="0 0 24 24"><circle cx="6" cy="5" r="2.2"/><circle cx="6" cy="19" r="2.2"/><circle cx="18" cy="12" r="2.2"/><path d="M6 7.2v9.6M8.1 5H12a4 4 0 0 1 4 4v.8M8.1 19H12a4 4 0 0 0 4-4v-.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="i-compartilhar" viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4" stroke-linecap="round"/></symbol>
+  <symbol id="i-backup" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke-linecap="round" stroke-linejoin="round"/><path d="M7 10l5 5 5-5" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 15V3" stroke-linecap="round"/></symbol>
   <symbol id="i-fixar" viewBox="0 0 24 24"><path d="M9 3h6l-1 7 3 3v2H7v-2l3-3z" stroke-linejoin="round"/><path d="M12 15v6" stroke-linecap="round"/></symbol>
   <symbol id="i-lixeira" viewBox="0 0 24 24"><path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13M10 11v6M14 11v6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="i-fechar" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" stroke-linecap="round"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-dicionario" viewBox="0 0 24 24"><path d="M5 4h9a3 3 0 0 1 3 3v13a2 2 0 0 0-2-2H5z" stroke-linejoin="round"/><path d="M8 8.5h5M8 11.5h5" stroke-linecap="round"/></symbol>
+  <symbol id="i-subtitulos" viewBox="0 0 24 24"><path d="M4 6h11M4 18h11" stroke-linecap="round"/><path d="M4 12h16" stroke-linecap="round" stroke-width="2.4"/></symbol>
   <symbol id="i-antes" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="i-depois" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="i-nota" viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z" stroke-linejoin="round"/><path d="M14 3v4h4" stroke-linejoin="round"/><path d="M9 12h6M9 16h4" stroke-linecap="round"/></symbol>
@@ -67,6 +331,7 @@
   <symbol id="i-vers-antes" viewBox="0 0 24 24"><rect x="5" y="5" width="2.4" height="14" rx="1" fill="currentColor" stroke="none"/><path d="M20 5l-10 7 10 7z" fill="currentColor" stroke="none"/></symbol>
   <symbol id="i-vers-depois" viewBox="0 0 24 24"><path d="M4 5l10 7-10 7z" fill="currentColor" stroke="none"/><rect x="16.6" y="5" width="2.4" height="14" rx="1" fill="currentColor" stroke="none"/></symbol>
   <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5" stroke-linecap="round"/><circle cx="12" cy="7.6" r="1" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="i-usuario" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-3.3 3.6-6 8-6s8 2.7 8 6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
 </svg>
 
 <header class="topo">
@@ -104,8 +369,12 @@
   <button data-menu="listas"><svg class="icone"><use href="#i-lista"/></svg><span>Listas de leitura</span></button>
   <button data-menu="caderno"><svg class="icone"><use href="#i-caderno"/></svg><span>Anotação</span></button>
   <button data-menu="referencias"><svg class="icone"><use href="#i-referencias"/></svg><span>Referências cruzadas</span></button>
+  <button data-menu="dicionario"><svg class="icone"><use href="#i-dicionario"/></svg><span>Léxico</span></button>
+  <button data-menu="subtitulos"><svg class="icone"><use href="#i-subtitulos"/></svg><span>Subtítulos</span></button>
   <button data-menu="ouvir"><svg class="icone"><use href="#i-ouvir"/></svg><span>Ouvir</span></button>
+  <button data-menu="perfil"><svg class="icone"><use href="#i-usuario"/></svg><span>Perfil</span></button>
   <button data-menu="ajustes"><svg class="icone"><use href="#i-ajustes"/></svg><span>Ajustes</span></button>
+  <button data-menu="backup"><svg class="icone"><use href="#i-backup"/></svg><span>Backup e Partilha</span></button>
   <button data-menu="compartilhar"><svg class="icone"><use href="#i-compartilhar"/></svg><span>Compartilhar</span></button>
   <button data-menu="fechar-app" class="menu-sair"><svg class="icone"><use href="#i-sair"/></svg><span>Fechar aplicativo</span></button>
 </div>
@@ -337,6 +606,9 @@
   <header>
     <h2 id="titulo-arvore">Livros</h2>
     <button id="btn-recentes" hidden aria-label="Navegações recentes"><svg class="icone"><use href="#i-historico"/></svg></button>
+    <div class="versao-box" id="versao-box-arvore" title="Trocar versão">
+      <button id="btn-versao-arvore" class="versao-nome" aria-label="Trocar versão"><span class="sigla-txt" id="sigla-versao-arvore">—</span></button>
+    </div>
     <button data-ajuste-popup="livros" aria-label="Ajustes do painel de livros"><svg class="icone"><use href="#i-ajustes"/></svg></button>
     <button data-fechar aria-label="Fechar"><svg class="icone"><use href="#i-fechar"/></svg></button>
   </header>
@@ -368,7 +640,10 @@
   </header>
   <div class="corpo">
     <div class="busca-barra">
-      <input class="campo campo-busca" id="campo-busca" type="search" placeholder="Palavra ou expressão" autocomplete="off">
+      <div class="campo-limpavel">
+        <input class="campo campo-busca" id="campo-busca" type="text" placeholder="Palavra ou expressão" autocomplete="off">
+        <button id="busca-limpar" class="campo-x" aria-label="Limpar" hidden><svg class="icone"><use href="#i-fechar"/></svg></button>
+      </div>
       <button class="busca-versao" id="busca-versao" title="Versão da busca" aria-label="Versão da busca">
         <span class="sigla" id="busca-versao-sigla">—</span>
       </button>
@@ -471,6 +746,15 @@
   <div class="corpo" id="corpo-anot"></div>
 </aside>
 
+<aside class="painel" id="painel-perfil" aria-hidden="true">
+  <header>
+    <button class="voltar-painel" data-voltar aria-label="Voltar"><svg class="icone"><use href="#i-antes"/></svg></button>
+    <h2>Perfil</h2>
+    <button data-fechar aria-label="Fechar"><svg class="icone"><use href="#i-fechar"/></svg></button>
+  </header>
+  <div class="corpo" id="corpo-perfil"></div>
+</aside>
+
 <aside class="painel" id="painel-ajustes" aria-hidden="true">
   <header>
     <button class="voltar-painel" data-voltar aria-label="Voltar"><svg class="icone"><use href="#i-antes"/></svg></button>
@@ -487,6 +771,57 @@
     <button data-fechar aria-label="Fechar"><svg class="icone"><use href="#i-fechar"/></svg></button>
   </header>
   <div class="corpo" id="corpo-compartilhar"></div>
+</aside>
+
+<aside class="painel" id="painel-backup" aria-hidden="true">
+  <header>
+    <button class="voltar-painel" data-voltar aria-label="Voltar"><svg class="icone"><use href="#i-antes"/></svg></button>
+    <h2>Backup e Partilha</h2>
+    <button data-fechar aria-label="Fechar"><svg class="icone"><use href="#i-fechar"/></svg></button>
+  </header>
+  <div class="corpo" id="corpo-backup"></div>
+</aside>
+
+<aside class="painel" id="painel-subtitulos" aria-hidden="true">
+  <header>
+    <button class="voltar-painel" data-voltar aria-label="Voltar"><svg class="icone"><use href="#i-antes"/></svg></button>
+    <h2>Subtítulos</h2>
+    <button data-fechar aria-label="Fechar"><svg class="icone"><use href="#i-fechar"/></svg></button>
+  </header>
+  <div class="corpo">
+    <div class="busca-barra">
+      <div class="campo-limpavel">
+        <input class="campo campo-busca" id="campo-subtitulos" type="text" placeholder="Filtrar subtítulos" autocomplete="off">
+        <button id="subt-limpar" class="campo-x" aria-label="Limpar" hidden><svg class="icone"><use href="#i-fechar"/></svg></button>
+      </div>
+      <button class="busca-versao" id="subt-versao" title="Versão dos subtítulos" aria-label="Versão dos subtítulos">
+        <span class="sigla" id="subt-versao-sigla">—</span>
+      </button>
+    </div>
+    <div class="busca-filtros" id="filtros-subtitulos"></div>
+    <div id="resultados-subtitulos"></div>
+  </div>
+</aside>
+
+<aside class="painel" id="painel-dicionario" aria-hidden="true">
+  <header>
+    <h2>Léxico</h2>
+    <button data-fechar aria-label="Fechar"><svg class="icone"><use href="#i-fechar"/></svg></button>
+  </header>
+  <div class="dic-topo">
+    <div class="dic-busca">
+      <svg class="icone dic-lupa"><use href="#i-busca"/></svg>
+      <input type="text" id="dic-campo" class="campo" placeholder="Pesquisar palavra em português…"
+        autocomplete="off" autocapitalize="off" spellcheck="false">
+      <button id="dic-limpar" class="dic-limpar" aria-label="Limpar" hidden>
+        <svg class="icone"><use href="#i-fechar"/></svg></button>
+    </div>
+    <div class="dic-filtros" role="group" aria-label="Idiomas">
+      <button class="dic-chip ativo" data-lang="he" aria-pressed="true">Hebraico</button>
+      <button class="dic-chip ativo" data-lang="gr" aria-pressed="true">Grego</button>
+    </div>
+  </div>
+  <div class="corpo dic-corpo" id="dic-corpo"></div>
 </aside>
 
 <aside class="painel painel-refs" id="painel-refs-cruzadas" aria-hidden="true">
@@ -532,7 +867,9 @@
 <section class="tirinha" id="tirinha" aria-hidden="true">
   <header>
     <strong id="tirinha-ref">—</strong>
-    <button class="botao secundario" id="tirinha-acoes" style="margin-left:auto;padding:7px 12px;font-size:13px">Ações</button>
+    <button id="tirinha-config-versoes" class="botao-cab-tirinha" aria-label="Escolher versões empilhadas" title="Escolher versões empilhadas"><svg class="icone"><use href="#i-ajustes"/></svg></button>
+    <button class="botao secundario" id="tirinha-acoes" style="padding:7px 12px;font-size:13px">Ações</button>
+    <button id="tirinha-refs-cruzadas" class="botao-cab-tirinha" aria-label="Abrir referências cruzadas" title="Abrir referências cruzadas" hidden><svg class="icone"><use href="#i-referencias"/></svg></button>
     <button id="tirinha-fixar" class="botao-cab-tirinha" aria-label="Fixar referências na tela" title="Fixar referências na tela" hidden><svg class="icone"><use href="#i-fixar"/></svg></button>
     <button data-fechar-tirinha class="botao-cab-tirinha" aria-label="Fechar"><svg class="icone" style="stroke:var(--tinta)"><use href="#i-fechar"/></svg></button>
   </header>
@@ -548,6 +885,7 @@
 <div id="pdf-raiz" data-estilo="historico" aria-hidden="true"></div>
 
 <script src="assets/js/dados.js"></script>
+<script src="assets/js/armazenamento-idb.js"></script>
 <script src="assets/js/armazenamento.js"></script>
 <script src="assets/js/cores.js"></script>
   <script src="assets/js/morfologia.js"></script>
@@ -556,6 +894,10 @@
 <script src="assets/js/busca.js"></script>
 <script src="assets/js/voz.js"></script>
 <script src="assets/js/seletor.js"></script>
+<script src="assets/js/perfil.js"></script>
+<script src="assets/js/perfil-foto.js"></script>
+<script src="assets/js/exportacao.js"></script>
+<script src="assets/js/importacao.js"></script>
 <script src="assets/js/app.js"></script>
 </body>
 </html>
