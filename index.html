@@ -150,6 +150,47 @@
   }
   .subt-titulo { font-size: 15px; color: var(--tinta); line-height: 1.35; }
 
+  /* ===== Referências bíblicas clicáveis nas anotações + popup de leitura ===== */
+  .ref-biblica {
+    color: var(--rubrica); font-weight: 600; cursor: pointer;
+    text-decoration: underline; text-decoration-thickness: 1px;
+    text-underline-offset: 2px;
+  }
+  .ref-biblica:hover { text-decoration-thickness: 2px; }
+  .ref-popup-fundo {
+    position: fixed; inset: 0; z-index: 130;
+    background: rgba(20,12,8,.5);
+    display: flex; align-items: center; justify-content: center; padding: 20px;
+  }
+  .ref-popup {
+    position: relative; width: min(440px, 94vw); max-height: 80vh;
+    display: flex; flex-direction: column;
+    background: var(--papel); color: var(--tinta);
+    border-radius: 14px; box-shadow: 0 12px 40px rgba(0,0,0,.4);
+    padding: 16px 16px 12px;
+  }
+  .ref-popup-x {
+    position: absolute; top: 8px; right: 8px; width: 32px; height: 32px;
+    display: inline-flex; align-items: center; justify-content: center;
+    border-radius: 50%; cursor: pointer; background: transparent;
+  }
+  .ref-popup-x .icone { width: 16px; height: 16px; stroke: var(--tinta-fraca); }
+  .ref-popup-x:hover { background: color-mix(in srgb, var(--tinta) 9%, transparent); }
+  .ref-popup-texto {
+    overflow-y: auto; margin: 14px 4px 10px; padding-right: 6px;
+    font-size: 16px; line-height: 1.55;
+  }
+  .ref-popup-texto .ref-v { margin: 0 0 8px; }
+  .ref-popup-texto .ref-n {
+    font-size: .72em; font-weight: 700; color: var(--tinta-numero);
+    vertical-align: .35em; margin-right: 3px;
+  }
+  .ref-popup-end {
+    border-top: 1px solid color-mix(in srgb, var(--tinta) 16%, transparent);
+    padding-top: 10px; text-align: center;
+    font-weight: 700; color: var(--rubrica); font-size: 14px;
+  }
+
   /* X de limpar dentro das caixas de Busca e Subtítulos (igual ao do Léxico) */
   .campo-limpavel { position: relative; flex: 1 1 auto; min-width: 0; display: flex; }
   .campo-limpavel .campo { width: 100%; padding-right: 34px; }
