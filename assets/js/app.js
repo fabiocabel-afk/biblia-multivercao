@@ -6092,7 +6092,11 @@ const App = {
 
   _linkarReferencias(html) {
     const mapa = this._mapaLivrosRef();
-    const RE = /((?:[1-3]\s*)?[A-Za-zÀ-ú]{2,}(?:\s+[A-Za-zÀ-ú]{2,})?)\.?\s+(\d{1,3}):(\d{1,3}(?:\s*[-–]\s*\d{1,3})?(?:\s*,\s*\d{1,3}(?:\s*[-–]\s*\d{1,3})?)*)/g;
+    // trecho de capítulo: cap:vers[-vers][,vers...], podendo repetir com "; cap:vers"
+    const TRECHO = '\\d{1,3}:\\d{1,3}(?:\\s*[-–]\\s*\\d{1,3})?(?:\\s*,\\s*\\d{1,3}(?:\\s*[-–]\\s*\\d{1,3})?)*';
+    const RE = new RegExp(
+      '((?:[1-3]\\s*)?[A-Za-zÀ-ú]{2,}(?:\\s+[A-Za-zÀ-ú]{2,})?)\\.?\\s+' +
+      '(' + TRECHO + '(?:\\s*;\\s*' + TRECHO + ')*)', 'g');
     const norm = s => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, '');
     const doc = new DOMParser().parseFromString(html || '', 'text/html');
     const andar = (no) => {
@@ -6112,35 +6116,28 @@ const App = {
         while ((m = RE.exec(texto))) {
           let nomeLivro = m[1];
           let code = mapa.get(norm(nomeLivro));
-          let prefixoExtra = '';
-          // a regex pode ter capturado a palavra anterior junto ("Veja Mateus").
-          // Se o nome completo não casa, tenta só a última palavra (ou as duas
-          // últimas, para "Cântico dos Cânticos" / "1 Coríntios").
           if (!code) {
             const parts = nomeLivro.trim().split(/\s+/);
-            // tenta as 2 últimas palavras (ex.: número + nome: "1 Coríntios")
-            if (parts.length >= 2) {
-              const duasUlt = parts.slice(-2).join(' ');
-              if (mapa.get(norm(duasUlt))) { code = mapa.get(norm(duasUlt)); prefixoExtra = parts.slice(0, -2).join(' '); nomeLivro = duasUlt; }
-            }
-            // tenta só a última palavra ("Mateus", "Sl")
-            if (!code) {
-              const ult = parts[parts.length - 1];
-              if (mapa.get(norm(ult))) { code = mapa.get(norm(ult)); prefixoExtra = parts.slice(0, -1).join(' '); nomeLivro = ult; }
+            if (parts.length >= 2 && mapa.get(norm(parts.slice(-2).join(' ')))) {
+              code = mapa.get(norm(parts.slice(-2).join(' '))); nomeLivro = parts.slice(-2).join(' ');
+            } else if (mapa.get(norm(parts[parts.length - 1]))) {
+              code = mapa.get(norm(parts[parts.length - 1])); nomeLivro = parts[parts.length - 1];
             }
           }
           if (!code) continue;
           achou = true;
-          // separa a palavra anterior (se a regex a capturou junto) do link real
+          // nome CANÔNICO do livro (normaliza "sl"/"SALMO" → "Salmos")
+          const nomeCanonico = (Dados.infoLivro(this.versao, code) || {}).name || nomeLivro;
           const idxNome = m[0].indexOf(nomeLivro);
           const antes = idxNome > 0 ? m[0].slice(0, idxNome) : '';
-          const textoLink = idxNome > 0 ? m[0].slice(idxNome) : m[0];
+          const capsVers = m[2].replace(/\s+/g, '');   // "1:2-31;2:1-10"
           if (m.index > ultimo) frag.appendChild(document.createTextNode(texto.slice(ultimo, m.index)));
           if (antes) frag.appendChild(document.createTextNode(antes));
           const span = document.createElement('span');
           span.className = 'ref-biblica';
-          span.setAttribute('data-ref', `${code}|${m[2]}|${m[3].replace(/\s+/g, '')}`);
-          span.textContent = textoLink;
+          span.setAttribute('data-ref', `${code}|${capsVers}`);
+          // texto exibido do link: nome canônico + os trechos
+          span.textContent = `${nomeCanonico} ${capsVers.replace(/;/g, '; ')}`;
           frag.appendChild(span);
           ultimo = m.index + m[0].length;
         }
@@ -6161,16 +6158,22 @@ const App = {
   },
 
   async _abrirPopupReferencia(ref) {
-    const [code, capStr, versSpec] = ref.split('|');
-    const cap = +capStr;
-    const alvos = [];
-    for (const parte of versSpec.split(',')) {
-      const mm = parte.match(/(\d+)\s*[-–]\s*(\d+)/);
-      if (mm) { for (let v = +mm[1]; v <= +mm[2]; v++) alvos.push(v); }
-      else if (/^\d+$/.test(parte)) alvos.push(+parte);
+    const [code, spec] = ref.split('|');
+    // spec: "1:2-31;2:1-10" → lista de {cap, versos:[...]}
+    const blocos = [];
+    for (const trecho of spec.split(';')) {
+      const mm = trecho.match(/^(\d+):(.+)$/);
+      if (!mm) continue;
+      const cap = +mm[1]; const versos = [];
+      for (const parte of mm[2].split(',')) {
+        const iv = parte.match(/(\d+)\s*[-–]\s*(\d+)/);
+        if (iv) { for (let v = +iv[1]; v <= +iv[2]; v++) versos.push(v); }
+        else if (/^\d+$/.test(parte)) versos.push(+parte);
+      }
+      blocos.push({ cap, versos });
     }
     const nome = (Dados.infoLivro(this.versao, code) || {}).name || code;
-    const endereco = `${nome} ${cap}:${versSpec}`;
+    const endereco = `${nome} ${spec.replace(/;/g, '; ')}`;
 
     document.getElementById('ref-popup-fundo')?.remove();
     const fundo = document.createElement('div');
@@ -6178,9 +6181,11 @@ const App = {
     fundo.className = 'ref-popup-fundo';
     fundo.innerHTML = `
       <div class="ref-popup" role="dialog" aria-modal="true">
-        <button class="ref-popup-x" aria-label="Fechar"><svg class="icone"><use href="#i-fechar"/></svg></button>
+        <div class="ref-popup-cab">
+          <div class="ref-popup-end">${Leitura.escapar(endereco)}</div>
+          <button class="ref-popup-x" aria-label="Fechar"><svg class="icone"><use href="#i-fechar"/></svg></button>
+        </div>
         <div class="ref-popup-texto" id="ref-popup-texto"><div class="estado">Carregando…</div></div>
-        <div class="ref-popup-end">${Leitura.escapar(endereco)}</div>
       </div>`;
     document.body.appendChild(fundo);
     const fechar = () => fundo.remove();
@@ -6191,17 +6196,196 @@ const App = {
 
     try {
       const livro = await Dados.livro(this.versao, code);
-      const capObj = livro && livro.chapters.find(c => c.number === cap);
       const alvo = document.getElementById('ref-popup-texto');
-      if (!capObj) { alvo.innerHTML = `<div class="estado">Passagem não encontrada nesta versão.</div>`; return; }
-      const linhas = alvos.map(n => {
-        const v = capObj.verses.find(x => x.number === n);
-        return v ? `<p class="ref-v"><span class="ref-n">${n}</span> ${Leitura.escapar(v.text)}</p>` : '';
-      }).filter(Boolean).join('');
-      alvo.innerHTML = linhas || `<div class="estado">Versículos não encontrados.</div>`;
+      if (!livro) { alvo.innerHTML = `<div class="estado">Passagem não encontrada nesta versão.</div>`; return; }
+      let html = '';
+      for (const b of blocos) {
+        const capObj = livro.chapters.find(c => c.number === b.cap);
+        if (!capObj) continue;
+        if (blocos.length > 1) html += `<div class="ref-cap-rot">${nome} ${b.cap}</div>`;
+        for (const n of b.versos) {
+          const v = capObj.verses.find(x => x.number === n);
+          if (v) html += `<p class="ref-v"><span class="ref-n">${n}</span> ${Leitura.escapar(v.text)}</p>`;
+        }
+      }
+      alvo.innerHTML = html || `<div class="estado">Versículos não encontrados.</div>`;
     } catch (e) {
       document.getElementById('ref-popup-texto').innerHTML = `<div class="estado">Não foi possível carregar.</div>`;
     }
+  },
+
+  /* ---- Seletor de referência (Parte 2): livro → capítulo → versículo, com +/−
+   * para estender a seleção (1-2, 1-3… e vira o capítulo quando estoura). Insere
+   * o endereço formatado no editor da nota. ---- */
+  _abrirSeletorRef(editor) {
+    const fundo = document.getElementById('sref-fundo');
+    const cx = document.getElementById('seletor-ref');
+    if (!fundo || !cx) return;
+    if (!fundo.hidden) { this._fecharSeletorRef(); return; }   // toggle
+    this._refSel = { editor, etapa: 'livro', code: null, cap: null, vIni: null, vFim: null };
+    fundo.hidden = false;
+    // fechar ao clicar fora ou no Esc
+    fundo.onclick = (e) => { if (e.target === fundo) this._fecharSeletorRef(); };
+    this._escSref = (e) => { if (e.key === 'Escape') this._fecharSeletorRef(); };
+    document.addEventListener('keydown', this._escSref);
+    this._desenharSeletorRef();
+  },
+
+  _fecharSeletorRef() {
+    const fundo = document.getElementById('sref-fundo');
+    if (fundo) fundo.hidden = true;
+    if (this._escSref) { document.removeEventListener('keydown', this._escSref); this._escSref = null; }
+    this._refSel = null;
+  },
+
+  _desenharSeletorRef() {
+    const cx = document.getElementById('seletor-ref');
+    const st = this._refSel;
+    const esc = s => Leitura.escapar(s);
+
+    if (st.etapa === 'livro') {
+      const livros = Dados.livros(this.versao);
+      cx.innerHTML = `
+        <div class="sref-titulo">Escolha o livro</div>
+        <div class="sref-grade">
+          ${livros.map(b => `<button class="sref-item" data-code="${b.code}">${esc(b.abbrev || b.name)}</button>`).join('')}
+        </div>`;
+      cx.querySelectorAll('[data-code]').forEach(el => el.onclick = () => {
+        st.code = el.dataset.code; st.etapa = 'cap'; this._desenharSeletorRef();
+      });
+
+    } else if (st.etapa === 'cap') {
+      const info = Dados.infoLivro(this.versao, st.code) || {};
+      const n = info.chapters || 0;
+      const nome = info.name || st.code;
+      cx.innerHTML = `
+        <div class="sref-titulo"><button class="sref-voltar" data-voltar>‹</button> ${esc(nome)} — capítulo</div>
+        <div class="sref-grade sref-nums">
+          ${Array.from({ length: n }, (_, i) => `<button class="sref-item" data-cap="${i + 1}">${i + 1}</button>`).join('')}
+        </div>`;
+      cx.querySelector('[data-voltar]').onclick = () => { st.etapa = 'livro'; this._desenharSeletorRef(); };
+      cx.querySelectorAll('[data-cap]').forEach(el => el.onclick = async () => {
+        st.cap = +el.dataset.cap; st.etapa = 'vers';
+        st._maxVers = await this._versiculosDoCap(st.code, st.cap);
+        this._desenharSeletorRef();
+      });
+
+    } else if (st.etapa === 'vers') {
+      const info = Dados.infoLivro(this.versao, st.code) || {};
+      const nome = info.name || st.code;
+      // escolha do 1º versículo (grade); depois vira modo intervalo com +/−
+      const max = st._maxVers || 50;
+      const escolhido = st.vIni != null;
+      if (!escolhido) {
+        cx.innerHTML = `
+          <div class="sref-titulo"><button class="sref-voltar" data-voltar>‹</button> ${esc(nome)} ${st.cap} — versículo</div>
+          <div class="sref-grade sref-nums">
+            ${Array.from({ length: max }, (_, i) => `<button class="sref-item" data-v="${i + 1}">${i + 1}</button>`).join('')}
+          </div>`;
+        cx.querySelector('[data-voltar]').onclick = () => { st.etapa = 'cap'; this._desenharSeletorRef(); };
+        cx.querySelectorAll('[data-v]').forEach(el => el.onclick = () => {
+          st.vIni = +el.dataset.v; st.vFim = +el.dataset.v;
+          st._blocos = [{ cap: st.cap, ini: st.vIni, fim: st.vFim }];
+          st._maxPorCap = { [st.cap]: st._maxVers || max };
+          this._desenharSeletorRef();
+        });
+      } else {
+        // modo intervalo: mostra a referência montada + botões − e +
+        cx.innerHTML = `
+          <div class="sref-titulo"><button class="sref-voltar" data-voltar>‹</button> Ajuste o intervalo</div>
+          <div class="sref-intervalo">
+            <button class="sref-pm" id="sref-menos" aria-label="Menos um versículo">−</button>
+            <span class="sref-ref" id="sref-ref">${esc(this._refTexto())}</span>
+            <button class="sref-pm" id="sref-mais" aria-label="Mais um versículo">+</button>
+          </div>
+          <button class="botao sref-inserir" id="sref-inserir">Inserir referência</button>`;
+        cx.querySelector('[data-voltar]').onclick = () => { st.vIni = null; this._desenharSeletorRef(); };
+        document.getElementById('sref-mais').onclick = () => this._refMais();
+        document.getElementById('sref-menos').onclick = () => this._refMenos();
+        document.getElementById('sref-inserir').onclick = () => this._inserirRef();
+      }
+    }
+  },
+
+  async _versiculosDoCap(code, cap) {
+    try {
+      const livro = await Dados.livro(this.versao, code);
+      const c = livro && livro.chapters.find(x => x.number === cap);
+      return c ? Math.max(...c.verses.map(v => v.number)) : 50;
+    } catch (e) { return 50; }
+  },
+
+  // representa a seleção como blocos contíguos (um por enquanto; + estende)
+  _refBlocos() {
+    const st = this._refSel;
+    if (!st._blocos) st._blocos = [{ cap: st.cap, ini: st.vIni, fim: st.vFim }];
+    return st._blocos;
+  },
+
+  _refTexto() {
+    const st = this._refSel;
+    const info = Dados.infoLivro(this.versao, st.code) || {};
+    const nome = info.name || st.code;
+    const blocos = this._refBlocos();
+    const porCap = {};
+    for (const b of blocos) {
+      (porCap[b.cap] = porCap[b.cap] || []).push(b.ini === b.fim ? `${b.ini}` : `${b.ini}-${b.fim}`);
+    }
+    const partes = Object.keys(porCap).map(c => `${c}:${porCap[c].join(',')}`);
+    return `${nome} ${partes.join('; ')}`;
+  },
+
+  _refMais() {
+    const st = this._refSel;
+    const blocos = this._refBlocos();
+    const ult = blocos[blocos.length - 1];
+    const maxCap = st._maxPorCap[ult.cap] || 50;
+    if (ult.fim < maxCap) {
+      ult.fim++;                              // estende no mesmo capítulo
+    } else {
+      const info = Dados.infoLivro(this.versao, st.code) || {};
+      if (ult.cap < (info.chapters || ult.cap)) {
+        const prox = ult.cap + 1;
+        blocos.push({ cap: prox, ini: 1, fim: 1 });
+        // pré-carrega o máximo do próximo capítulo, para o próximo "+" saber virar
+        this._versiculosDoCap(st.code, prox).then(n => { st._maxPorCap[prox] = n; });
+      }
+    }
+    const el = document.getElementById('sref-ref');
+    if (el) el.textContent = this._refTexto();
+  },
+
+  _refMenos() {
+    const st = this._refSel;
+    const blocos = this._refBlocos();
+    const ult = blocos[blocos.length - 1];
+    if (ult.fim > ult.ini) {
+      ult.fim--;
+    } else if (blocos.length > 1) {
+      blocos.pop();                            // remove o bloco do capítulo virado
+    }
+    document.getElementById('sref-ref').textContent = this._refTexto();
+  },
+
+  _inserirRef() {
+    const st = this._refSel;
+    const texto = this._refTexto();
+    const editor = st.editor;
+    editor.focus();
+    // insere no cursor (ou no fim)
+    const sel = window.getSelection();
+    const inserir = (texto + ' ');
+    if (sel && sel.rangeCount && editor.contains(sel.anchorNode)) {
+      const range = sel.getRangeAt(0);
+      range.deleteContents();
+      range.insertNode(document.createTextNode(inserir));
+      range.collapse(false);
+    } else {
+      editor.appendChild(document.createTextNode(inserir));
+    }
+    this._registrarHistNota?.();
+    document.getElementById('seletor-ref').classList.add('fechada');
+    this._fecharSeletorRef();
   },
 
   verAnotacaoPainel(vers) {
@@ -6337,13 +6521,21 @@ const App = {
           title="Cor de fundo" aria-label="Cor de fundo">
           <span class="bloco-fundo" id="amostra-fundo">A</span>
         </button>
+        ${botao('removeFormat', 'limpar-formato', 'Limpar formatação')}
+        <button type="button" class="fmt fmt-versiculo" id="btn-add-versiculo"
+          title="Inserir referência bíblica" aria-label="Inserir referência bíblica">
+          <svg class="icone"><use href="#i-referencias"/></svg>
+        </button>
+        <button type="button" class="fmt" id="btn-desfazer"
+          title="Desfazer" aria-label="Desfazer">
+          <svg class="icone"><use href="#i-antes"/></svg>
+        </button>
         <select class="fmt-fonte" id="fmt-fonte" title="Tipo de letra">
           <option value="">Fonte</option>
           <option value="var(--fonte-texto)">Serifada</option>
           <option value="var(--fonte-ui)">Sem serifa</option>
           <option value="var(--fonte-sigla)">Monoespaçada</option>
         </select>
-        ${botao('removeFormat', 'limpar-formato', 'Limpar formatação')}
       </div>
       <div class="caixa-cor fechada" id="caixa-cor-nota"></div>
       <div class="editor-nota" id="editor-nota" contenteditable="true"
@@ -6522,6 +6714,34 @@ const App = {
     };
 
     document.getElementById('cancelar-anot').onclick = () => { this._limparSelNota?.(); this.abrirAnotacoes(vers); };
+
+    // botão "inserir referência bíblica": abre o seletor livro→cap→versículo
+    { const b = document.getElementById('btn-add-versiculo');
+      if (b) b.onclick = () => this._abrirSeletorRef(editor); }
+
+    // Desfazer: guarda até 12 estados do editor e volta um a um.
+    this._histNota = [editor.innerHTML];
+    const registrarHist = () => {
+      const atual = editor.innerHTML;
+      if (this._histNota[this._histNota.length - 1] === atual) return;
+      this._histNota.push(atual);
+      if (this._histNota.length > 13) this._histNota.shift();   // 12 desfazeres + estado atual
+    };
+    // registra em cada mudança (com pequeno atraso p/ agrupar digitação)
+    let tHist;
+    editor.addEventListener('input', () => { clearTimeout(tHist); tHist = setTimeout(registrarHist, 400); });
+    this._registrarHistNota = registrarHist;   // usado após inserir referência
+    { const b = document.getElementById('btn-desfazer');
+      if (b) b.onclick = () => {
+        clearTimeout(tHist);
+        // garante que o estado atual está no topo antes de voltar
+        if (this._histNota[this._histNota.length - 1] !== editor.innerHTML) registrarHist();
+        if (this._histNota.length > 1) {
+          this._histNota.pop();                 // descarta o estado atual
+          editor.innerHTML = this._histNota[this._histNota.length - 1];
+          editor.focus();
+        }
+      }; }
 
     document.getElementById('salvar-anot').onclick = () => {
       this._limparSelNota?.();
