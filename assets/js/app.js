@@ -6221,11 +6221,14 @@ const App = {
     const fundo = document.getElementById('sref-fundo');
     const cx = document.getElementById('seletor-ref');
     if (!fundo || !cx) return;
-    if (!fundo.hidden) { this._fecharSeletorRef(); return; }   // toggle
+    // toggle: se já está aberto de verdade (visível), fecha
+    if (!fundo.hidden) { this._fecharSeletorRef(); return; }
+    // garante estado limpo ao abrir (a classe .fechada podia ter sobrado)
+    cx.classList.remove('fechada');
     this._refSel = { editor, etapa: 'livro', code: null, cap: null, vIni: null, vFim: null };
     fundo.hidden = false;
-    // fechar ao clicar fora ou no Esc
     fundo.onclick = (e) => { if (e.target === fundo) this._fecharSeletorRef(); };
+    if (this._escSref) document.removeEventListener('keydown', this._escSref);
     this._escSref = (e) => { if (e.key === 'Escape') this._fecharSeletorRef(); };
     document.addEventListener('keydown', this._escSref);
     this._desenharSeletorRef();
@@ -6234,6 +6237,8 @@ const App = {
   _fecharSeletorRef() {
     const fundo = document.getElementById('sref-fundo');
     if (fundo) fundo.hidden = true;
+    const cx = document.getElementById('seletor-ref');
+    if (cx) cx.classList.remove('fechada');   // nunca deixa o conteúdo "escondido"
     if (this._escSref) { document.removeEventListener('keydown', this._escSref); this._escSref = null; }
     this._refSel = null;
   },
@@ -6384,7 +6389,6 @@ const App = {
       editor.appendChild(document.createTextNode(inserir));
     }
     this._registrarHistNota?.();
-    document.getElementById('seletor-ref').classList.add('fechada');
     this._fecharSeletorRef();
   },
 
@@ -6528,7 +6532,7 @@ const App = {
         </button>
         <button type="button" class="fmt" id="btn-desfazer"
           title="Desfazer" aria-label="Desfazer">
-          <svg class="icone"><use href="#i-antes"/></svg>
+          <svg class="icone"><use href="#i-desfazer"/></svg>
         </button>
         <select class="fmt-fonte" id="fmt-fonte" title="Tipo de letra">
           <option value="">Fonte</option>
@@ -8257,8 +8261,21 @@ const App = {
     });
 
     document.onkeydown = e => {
-      if (e.target.matches('input, select, textarea')) {
-        if (e.key === 'Escape') e.target.blur();
+      // Se o foco está num campo de texto — incluindo o editor de nota, que é um
+      // contenteditable — as teclas são da edição: não navegam a Bíblia de trás.
+      const alvo = e.target;
+      const editando = alvo.matches('input, select, textarea')
+        || alvo.isContentEditable
+        || alvo.closest('[contenteditable="true"]');
+      if (editando) {
+        if (e.key === 'Escape') alvo.blur();
+        return;
+      }
+      // Também bloqueia se algum painel/popup de edição de nota estiver aberto,
+      // por segurança (foco pode não estar exatamente no campo).
+      const painelAnot = document.getElementById('painel-anot');
+      if (painelAnot && painelAnot.classList.contains('aberto')) {
+        if (e.key === 'Escape') this.fecharPaineis();
         return;
       }
       if (e.key === 'Escape') this.fecharPaineis();
