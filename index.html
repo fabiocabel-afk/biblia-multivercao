@@ -19,6 +19,19 @@
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="assets/icons/icone-192.png">
 <link rel="apple-touch-icon" href="assets/icons/icone-192.png">
+
+<!-- Preview ao compartilhar (WhatsApp, Facebook, Telegram, etc.) -->
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Bíblia">
+<meta property="og:title" content="Bíblia">
+<meta property="og:description" content="Um espaço para promover a fé e o estudo da Palavra — leitura, versões, referências e estudos.">
+<meta property="og:image" content="assets/icons/icone-512.png">
+<meta property="og:image:width" content="512">
+<meta property="og:image:height" content="512">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Bíblia">
+<meta name="twitter:description" content="Um espaço para promover a fé e o estudo da Palavra.">
+<meta name="twitter:image" content="assets/icons/icone-512.png">
 <link rel="stylesheet" href="assets/css/estilo.css">
 <style>
   /* Destaque do PRIMEIRO versículo de cada nota: esfera avermelhada preenchida,
@@ -333,6 +346,19 @@
   /* 'nenhum' não adiciona nada — herda o estilo atual (stroke --tinta-fraca) */
   #menu-flutuante[data-fundo="nenhum"] button .icone { padding: 0; background: transparent; }
 
+  /* Botão "Instalar aplicativo" — último item do menu, largura total, vermelho
+     com letras brancas. Só aparece quando o app é instalável (JS controla).
+     ID+classe para vencer a regra ".menu-flutuante button" do CSS principal. */
+  #menu-flutuante .menu-instalar {
+    display: block; width: 100%; margin-top: 6px;
+    padding: 12px 14px; border: 0; border-radius: 10px; cursor: pointer;
+    background: var(--rubrica); color: #fff;
+    font-size: 15px; font-weight: 700; font-family: inherit; text-align: center;
+    justify-content: center;
+  }
+  #menu-flutuante .menu-instalar:hover { background: color-mix(in srgb, var(--rubrica) 88%, #000 12%); }
+  #menu-flutuante .menu-instalar[hidden] { display: none !important; }
+
   /* Com esfera, os itens ficam mais altos; reduz o espaçamento vertical para
      compensar e manter tudo compacto. (não afeta o modo 'nenhum') */
   #menu-flutuante[data-fundo]:not([data-fundo="nenhum"]) button {
@@ -509,6 +535,7 @@
   <button data-menu="backup"><svg class="icone"><use href="#i-backup"/></svg><span>Backup e Partilha</span></button>
   <button data-menu="compartilhar"><svg class="icone"><use href="#i-compartilhar"/></svg><span>Compartilhar</span></button>
   <button data-menu="fechar-app" class="menu-sair"><svg class="icone"><use href="#i-sair"/></svg><span>Fechar aplicativo</span></button>
+  <button id="btn-instalar-app" class="menu-instalar" hidden>Instalar aplicativo</button>
 </div>
 
 <main class="folha" id="folha">
