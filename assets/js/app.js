@@ -11116,6 +11116,22 @@ const App = {
     return (refs || []).map(r => ({ code: r.code, cap: r.cap, vIni: r.vIni, vFim: r.vFim, votos: r.votos }));
   },
 
+  /* Quantas referências cruzadas um versículo (nó) possui. Usado para o selo
+   * ao lado do endereço dentro do próprio módulo de referências. */
+  async _contarRefsDe(no) {
+    const refs = await Dados.referenciasDe(this._versaoProtRefs(), no.code, no.cap, no.vIni);
+    return (refs || []).length;
+  },
+
+  /* Selo (ícone + contagem) ao lado do endereço, dentro do módulo. `raiz` deixa
+   * o selo maior, para destacar o versículo-raiz. */
+  _seloRefHTML(qtd, raiz) {
+    if (!qtd) return '';
+    return `<span class="selo-ref${raiz ? ' selo-ref-raiz' : ''}" aria-hidden="true">`
+      + `<svg class="selo-ref-i"><use href="#i-referencias"/></svg>`
+      + `<span class="selo-ref-n">${qtd}</span></span>`;
+  },
+
   _testamentoDe(code) {
     const info = Dados.infoLivro(this.versao, code);
     return info ? info.testament : null;
@@ -11192,6 +11208,26 @@ const App = {
     corpo.innerHTML = `<div class="arv">${html}</div>`;
     this._ligarNosRef(corpo);
     this._preencherAmostrasRef(corpo);
+    this._preencherSelosRef(corpo);
+  },
+
+  /* Preenche os selos (ícone+contagem) de cada nó e o do raiz, buscando a
+   * contagem de referências de cada versículo de forma assíncrona. */
+  async _preencherSelosRef(cont) {
+    // raiz (destacado, maior)
+    const slotRaiz = document.getElementById('refs-raiz-conta');
+    if (slotRaiz) {
+      const qtd = await this._contarRefsDe(this.refsRaiz);
+      slotRaiz.innerHTML = this._seloRefHTML(qtd, true);
+    }
+    // cada nó visível
+    const slots = [...cont.querySelectorAll('[data-conta]')];
+    for (const slot of slots) {
+      const reg = this._refsNos[slot.dataset.conta];
+      if (!reg) continue;
+      const qtd = await this._contarRefsDe(reg.no);
+      slot.innerHTML = this._seloRefHTML(qtd, false);
+    }
   },
 
   /* Monta o HTML de um nó. A hierarquia (recuo e linhas-guia) é desenhada por
@@ -11205,6 +11241,7 @@ const App = {
     return `<div class="arv-no" data-no="${id}">
         <div class="arv-linha">
           <button class="arv-end${sel}${podeExpandir ? ' expansivel' : ''}" data-end="${id}">${Leitura.escapar(this._rotuloRef(no))}</button>
+          <span class="selo-ref-slot" data-conta="${id}"></span>
         </div>
         <div class="arv-amostra-linha">
           <button class="arv-amostra" data-texto="${id}"
