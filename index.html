@@ -251,6 +251,32 @@
   .marca-ref-n { font-size: .62em; font-weight: 700; line-height: 1; color: currentColor; }
   [data-refs="nao"] .marca-ref { display: none; }
 
+  /* ===== Selo (ícone+contagem) ao lado do endereço DENTRO do módulo de refs ===== */
+  .selo-ref-slot { display: inline-flex; align-items: center; }
+  .selo-ref {
+    display: inline-flex; align-items: center; gap: 1px; margin-left: 5px;
+    color: var(--tinta-numero); opacity: .85; vertical-align: .04em;
+  }
+  .selo-ref-i { width: .74em; height: .74em; stroke: currentColor; fill: none; stroke-width: 1.8; }
+  .selo-ref-n { font-size: .64em; font-weight: 700; line-height: 1; }
+  /* selo do RAIZ: maior, proporcional ao endereço destacado */
+  .selo-ref.selo-ref-raiz { margin-left: 7px; opacity: .95; }
+  .selo-ref.selo-ref-raiz .selo-ref-i { width: .82em; height: .82em; }
+  .selo-ref.selo-ref-raiz .selo-ref-n { font-size: .66em; }
+
+  /* DESTAQUE do versículo-raiz: estava MENOR (12px) que os filhos (13.5px);
+     agora fica maior, para o usuário reconhecer o versículo que clicou. */
+  .painel-refs .refs-raiz-end {
+    font-size: 16px !important;
+    color: var(--rubrica) !important;
+  }
+  .painel-refs .refs-raiz-end::after { font-size: 15px; }
+  /* o container do raiz empilha em coluna (endereço, selo, amostra); faz o
+     endereço + selo ficarem NA MESMA LINHA, com a amostra abaixo. */
+  .painel-refs .refs-raiz { flex-direction: row; flex-wrap: wrap; align-items: baseline; }
+  .painel-refs .refs-raiz #refs-raiz-conta { order: 1; }
+  .painel-refs .refs-raiz .refs-raiz-amostra { order: 2; flex-basis: 100%; }
+
   /* Texto da nota um pouco maior (área de escrita e leitura), mantendo a data
      do rodapé (.quando-nota) no tamanho atual. */
   .editor-nota, .corpo-nota { font-size: 15px !important; line-height: 1.6; }
@@ -942,6 +968,7 @@
   <div class="refs-filtro" id="refs-filtro" role="tablist"></div>
   <div class="refs-raiz" id="refs-raiz">
     <button class="refs-raiz-end" id="refs-raiz-end" title="Trocar referência">Mateus 5:1</button>
+    <span class="selo-ref-slot" id="refs-raiz-conta"></span>
     <button class="refs-raiz-amostra" id="refs-raiz-amostra" data-trecho="MAT|5|1">…</button>
   </div>
   <div class="corpo refs-corpo" id="corpo-refs"></div>
