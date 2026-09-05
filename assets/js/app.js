@@ -229,6 +229,7 @@ const App = {
     window.scrollTo(0, 0);
     this._marcarCortados();   // no modo abreviar, marca as palavras que cortaram
     this._destacarInicioNotas();   // destaca o 1º versículo de cada nota
+    this._marcarRefsVisiveis();    // ícone de referências cruzadas por versículo
 
     if (vers) {
       // no modo Subtitulos, a mira e o proprio cabecalho da secao (topo);
@@ -332,6 +333,7 @@ const App = {
     }
     this._marcarCortados();
     this._destacarInicioNotas();
+    this._marcarRefsVisiveis();
     this._prefetchVizinhos();
   },
 
@@ -4431,6 +4433,11 @@ const App = {
       <p class="contagem">Mostra um sinalzinho ao lado do número quando o
       versículo tem anotação no caderno. Toque nele para abrir as anotações.</p>
 
+      <label class="interruptor"><span>Contador de referências no versículo</span>
+        <input type="checkbox" id="ctrl-refs" ${p.mostrarRefs !== false ? 'checked' : ''}></label>
+      <p class="contagem">Mostra um ícone e a quantidade de referências cruzadas no
+      fim de cada versículo que tiver. Toque nele para abrir as referências.</p>
+
       <label class="interruptor"><span>Subtítulos</span>
         <input type="checkbox" id="ctrl-subtitulos" ${p.subtitulosLigado ? 'checked' : ''}></label>
       <p class="contagem">Os subtítulos temáticos (como “O Verbo se faz carne”)
@@ -5516,6 +5523,11 @@ const App = {
       Prefs.set('mostrarNotas', e.target.checked);
       Leitura.aplicarModoNotas(e.target.checked);
     };
+    const refsCtrl = achar('ctrl-refs');
+    if (refsCtrl) refsCtrl.onchange = e => {
+      Prefs.set('mostrarRefs', e.target.checked);
+      this._marcarRefsVisiveis();   // aplica na hora, sem redesenhar
+    };
 
     // interruptor-chave dos subtítulos: liga/desliga o grupo inteiro. Desligado,
     // esconde todas as opções e a leitura fica sem subtítulos.
@@ -5969,6 +5981,65 @@ const App = {
       }
     });
     this._destacarInicioNotas();
+  },
+
+  /* Marca, no FIM de cada versículo que tem referências cruzadas, um ícone
+   * pequeno + a contagem. Ao tocar, abre o módulo de referências já naquele
+   * versículo. Respeita o ajuste "mostrar contador de referências". */
+  async _marcarRefsVisiveis() {
+    const escopo = this._escopoVersos();
+    if (!escopo) return;
+    // ajuste desligado: remove tudo e sai
+    if (Prefs.get('mostrarRefs') === false) {
+      escopo.querySelectorAll('.marca-ref').forEach(e => e.remove());
+      return;
+    }
+    // carrega o arquivo de referências do livro (cacheado)
+    const dados = await Dados.carregarRefs(this.code);
+    // guarda qual capítulo/versão foi pintado, para não repintar à toa
+    const versificacao = Dados.versificacaoDe(this.versao);
+    let capProt = this.cap;
+    if (versificacao === 'vulgata') {
+      try { capProt = Dados.converter(this.code, this.cap, 'vulgata', 'hebraica').capitulo; } catch {}
+    }
+    const doCap = dados ? dados[String(capProt)] : null;
+
+    escopo.querySelectorAll('.v').forEach(el => {
+      const vers = +el.dataset.vers;
+      const lista = doCap ? doCap[String(vers)] : null;
+      const qtd = Array.isArray(lista) ? lista.length : 0;
+      const jaTem = el.querySelector('.marca-ref');
+      if (qtd > 0 && !jaTem) {
+        el.insertAdjacentHTML('beforeend', this._marcaRefHTML(vers, qtd));
+      } else if (qtd > 0 && jaTem) {
+        // atualiza a contagem se mudou
+        const c = jaTem.querySelector('.marca-ref-n');
+        if (c && c.textContent !== String(qtd)) c.textContent = qtd;
+      } else if (qtd === 0 && jaTem) {
+        jaTem.remove();
+      }
+    });
+
+    // liga o clique (uma vez por render)
+    escopo.querySelectorAll('.marca-ref').forEach(el => {
+      el.onclick = (e) => {
+        e.stopPropagation();
+        const vers = +el.dataset.refVers;
+        this.pontoAtual = vers;      // o módulo usa isto como versículo-raiz
+        this.destaque = vers;
+        this.abrirReferenciasCruzadas();
+      };
+    });
+  },
+
+  /* HTML do sinalzinho de referências: ícone pequeno (o mesmo das refs cruzadas)
+   * seguido da contagem, ainda menor. Vai no fim do versículo. */
+  _marcaRefHTML(vers, qtd) {
+    return `<span class="marca-ref" role="button" tabindex="0" data-ref-vers="${vers}"
+      aria-label="${qtd} referência${qtd > 1 ? 's' : ''} cruzada${qtd > 1 ? 's' : ''}"
+      title="${qtd} referência${qtd > 1 ? 's' : ''} cruzada${qtd > 1 ? 's' : ''}">`
+      + `<svg class="marca-ref-i"><use href="#i-referencias"/></svg>`
+      + `<span class="marca-ref-n">${qtd}</span></span>`;
   },
 
   /* Destaca o PRIMEIRO versículo de cada nota (a âncora), para se saber onde a
