@@ -237,6 +237,20 @@
   .sref-inserir { width: 100%; }
   .ref-cap-rot { font-size: 12.5px; font-weight: 700; color: var(--rubrica); margin: 6px 0 4px; }
 
+  /* Sinalzinho de referências cruzadas no fim do versículo: ícone pequeno + a
+     contagem menor ainda, num marrom mais claro que a fonte, bem discreto. */
+  .marca-ref {
+    display: inline-flex; align-items: center; gap: 1px;
+    margin-left: 4px; vertical-align: .06em; cursor: pointer;
+    color: var(--tinta-numero);          /* marrom claro, mais fraco que a tinta */
+    opacity: .8; user-select: none; -webkit-user-select: none;
+    transition: opacity .15s ease, color .15s ease;
+  }
+  .marca-ref:hover { opacity: 1; color: var(--rubrica); }
+  .marca-ref-i { width: .72em; height: .72em; stroke: currentColor; fill: none; stroke-width: 1.8; }
+  .marca-ref-n { font-size: .62em; font-weight: 700; line-height: 1; color: currentColor; }
+  [data-refs="nao"] .marca-ref { display: none; }
+
   /* Texto da nota um pouco maior (área de escrita e leitura), mantendo a data
      do rodapé (.quando-nota) no tamanho atual. */
   .editor-nota, .corpo-nota { font-size: 15px !important; line-height: 1.6; }
