@@ -27,6 +27,7 @@ const App = {
   /* ================================================================ inicio */
 
   async iniciar() {
+    this._configurarInstalacao();
     try {
       await Dados.iniciar();
     } catch (e) {
@@ -689,6 +690,48 @@ const App = {
     const anterior = this._volta;
     if (anterior) anterior();
     else this.fecharPaineis();
+  },
+
+  /* ===== Instalação PWA =====
+   * Captura o evento do navegador quando o app é instalável e mostra o botão
+   * "Instalar" no fim do menu. Some se já estiver instalado (rodando como PWA)
+   * ou após instalar. Funciona no Chrome/Edge/Samsung/Opera (Android e desktop);
+   * o Firefox/Safari não disparam o evento — nesses, o botão fica oculto. */
+  _configurarInstalacao() {
+    // já roda instalado? (display-mode standalone ou iOS standalone)
+    const instalado = window.matchMedia('(display-mode: standalone)').matches
+      || window.navigator.standalone === true;
+    this._appInstalado = instalado;
+
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();                 // impede o mini-banner automático
+      this._promptInstalar = e;           // guarda para disparar no clique
+      this._atualizarBotaoInstalar();
+    });
+    window.addEventListener('appinstalled', () => {
+      this._appInstalado = true;
+      this._promptInstalar = null;
+      this._atualizarBotaoInstalar();
+    });
+
+    // liga o clique do botão
+    const btn = document.getElementById('btn-instalar-app');
+    if (btn) btn.onclick = async () => {
+      const p = this._promptInstalar;
+      if (!p) return;
+      p.prompt();
+      try { await p.userChoice; } catch (e) {}
+      this._promptInstalar = null;        // o evento só serve uma vez
+      this._atualizarBotaoInstalar();
+    };
+    this._atualizarBotaoInstalar();
+  },
+
+  _atualizarBotaoInstalar() {
+    const btn = document.getElementById('btn-instalar-app');
+    if (!btn) return;
+    // mostra só se: não está instalado E o navegador ofereceu a instalação
+    btn.hidden = this._appInstalado || !this._promptInstalar;
   },
 
   /* Reabre o menu flutuante do canto (o "menu anterior" de quem foi aberto por
