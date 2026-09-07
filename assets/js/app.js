@@ -5980,9 +5980,12 @@ const App = {
     // interlinear: a voz nativa não pronuncia hebraico/grego, então lemos a
     // transliteração guardada em data-fala (também serve para copiar/compartilhar)
     if (el.dataset && el.dataset.fala) return el.dataset.fala;
-    const n = el.querySelector('.n');
-    const inteiro = el.textContent;
-    return n ? inteiro.slice(n.textContent.length) : inteiro;
+    // pega só o texto bíblico: sem o número do versículo (.n), sem o sinal de
+    // nota (.marca-nota) e sem o selo de referências (.marca-ref, que tem um
+    // número dentro e vazava na cópia).
+    const clone = el.cloneNode(true);
+    clone.querySelectorAll('.n, .marca-nota, .marca-ref').forEach(x => x.remove());
+    return clone.textContent;
   },
 
   /* Repinta as marcas dos versículos que estão na tela, a partir do estado
@@ -7189,9 +7192,21 @@ const App = {
     const r = document.createRange();
     r.selectNodeContents(el);
     try { r.setEnd(no, deslocamento); } catch { return 0; }
-    const n = el.querySelector('.n');
-    const desconto = n ? n.textContent.length : 0;
-    return Math.max(0, r.toString().length - desconto);
+    // o texto do range até o ponto ainda contém o número do versículo (.n) e
+    // pode conter o sinal de nota / selo de referências — que não fazem parte do
+    // texto bíblico. Desconta o comprimento de cada um que caia ANTES do ponto.
+    let bruto = r.toString();
+    const descontar = [];
+    const n = el.querySelector('.n'); if (n) descontar.push(n.textContent);
+    el.querySelectorAll('.marca-nota, .marca-ref').forEach(x => {
+      const t = x.textContent; if (t) descontar.push(t);
+    });
+    let comp = bruto.length;
+    for (const t of descontar) {
+      const idx = bruto.indexOf(t);
+      if (idx !== -1) { comp -= t.length; bruto = bruto.slice(0, idx) + bruto.slice(idx + t.length); }
+    }
+    return Math.max(0, comp);
   },
 
   lerSelecao() {
