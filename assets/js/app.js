@@ -7217,8 +7217,21 @@ const App = {
     const folha = document.getElementById('folha');
     if (!folha.contains(r.commonAncestorContainer)) return null;
 
-    const versiculos = [...folha.querySelectorAll('.v')]
-      .filter(el => r.intersectsNode(el));
+    // Quais versículos a seleção toca. O intersectsNode às vezes falha para os
+    // versículos do MEIO da seleção (dependendo de como o navegador monta o
+    // range no desktop), então confirmamos por comparação de fronteiras: um .v
+    // está na seleção se ele começa antes do fim do range E termina depois do
+    // início do range.
+    const todos = [...folha.querySelectorAll('.v')];
+    const versiculos = todos.filter(el => {
+      if (r.intersectsNode(el)) return true;
+      const rEl = document.createRange();
+      rEl.selectNodeContents(el);
+      // el.fim > range.início  E  el.início < range.fim  → há sobreposição
+      const elDepoisDoInicio = r.compareBoundaryPoints(Range.START_TO_END, rEl) > 0;
+      const elAntesDoFim = r.compareBoundaryPoints(Range.END_TO_START, rEl) < 0;
+      return elDepoisDoInicio && elAntesDoFim;
+    });
     if (!versiculos.length) return null;
 
     const pedacos = versiculos.map(el => {
@@ -8644,7 +8657,9 @@ const App = {
     const inicio = (comecarEm && lista.includes(comecarEm)) ? comecarEm : (lista[0] || 1);
     this._ultimoVersLido = null;   // nova sessão: não há "anterior" pra comparar salto
     this._filaEncerrada = false;   // nova sessão: ainda não terminou
-    this.lerVersiculo(inicio, { anunciarCap: true });
+    // anuncia o NOME DO LIVRO no começo da leitura (só aqui, não na virada de
+    // capítulo), independentemente de começar no versículo 1 ou no meio.
+    this.lerVersiculo(inicio, { anunciarCap: true, anunciarLivro: true });
   },
 
   /** Sai do modo ouvir e devolve o app ao normal. */
@@ -8695,7 +8710,21 @@ const App = {
   },
 
   /** Lê um versículo e, ao terminar, avança sozinho para o próximo. */
-  lerVersiculo(vers, { anunciarCap = false } = {}) {
+  /* Nome do livro para a leitura em voz. Troca o número inicial pelo ordinal por
+   * extenso ("1 Coríntios" → "Primeiro Coríntios") para soar natural na fala. */
+  _nomeLivroParaFala() {
+    return this._nomeLivroParaFalaCode(this.versao, this.code);
+  },
+  _nomeLivroParaFalaCode(versao, code) {
+    const info = Dados.infoLivro(versao, code) || {};
+    let nome = info.name || code;
+    const ord = { '1': 'Primeiro', '2': 'Segundo', '3': 'Terceiro' };
+    const m = nome.match(/^([1-3])\s+(.+)$/);
+    if (m) nome = `${ord[m[1]]} ${m[2]}`;
+    return nome;
+  },
+
+  lerVersiculo(vers, { anunciarCap = false, anunciarLivro = false } = {}) {
     const lista = this.versiculosNaTela();
     if (!lista.includes(vers)) return;
 
@@ -8728,9 +8757,11 @@ const App = {
 
     const el = this._escopoLeitura().querySelector(`.v[data-vers="${vers}"]`);
     const texto = el ? this.textoDoVersiculo(el).trim() : '';
+    // no começo da leitura, anuncia o nome do livro (ex.: "Primeiro Coríntios.")
+    const livroPrefixo = anunciarLivro ? `${this._nomeLivroParaFala()}. ` : '';
     const capPrefixo = anunciarCap ? `Capítulo ${this._capLeitura()}. ` : '';
     const versPrefixo = anunciarVers ? `Versículo ${vers}. ` : '';
-    const prefixo = capPrefixo + versPrefixo;
+    const prefixo = livroPrefixo + capPrefixo + versPrefixo;
 
     const gen = ++this.leituraGen;
     Locutor.parar();
@@ -9996,11 +10027,18 @@ const App = {
 
       // natural fica no mesmo livro → "Capítulo X."; combinação/playlist pode
       // pular de livro → "Nome, capítulo X.".
-      const capPrefixo = anunciarCabeca
-        ? (this._naNatural
-            ? `Capítulo ${faixa.cap}. `
-            : `${Dados.nomeCurto(faixa.versao, faixa.code)}, capítulo ${faixa.cap}. `)
-        : '';
+      // No COMEÇO da leitura natural (1ª faixa), anuncia o NOME DO LIVRO uma vez
+      // — independente de começar no v.1 ou no meio. Não repete na virada de cap.
+      const ehComeco = this._naUltVers == null;
+      let capPrefixo = '';
+      if (anunciarCabeca) {
+        if (this._naNatural) {
+          const nomeLivro = ehComeco ? `${this._nomeLivroParaFalaCode(faixa.versao, faixa.code)}, ` : '';
+          capPrefixo = `${nomeLivro}capítulo ${faixa.cap}. `;
+        } else {
+          capPrefixo = `${Dados.nomeCurto(faixa.versao, faixa.code)}, capítulo ${faixa.cap}. `;
+        }
+      }
       const versPrefixo = anunciarVers ? `Versículo ${faixa.vers}. ` : '';
       fala = capPrefixo + versPrefixo + faixa.texto;
 
