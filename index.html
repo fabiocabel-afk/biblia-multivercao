@@ -148,6 +148,13 @@
   }
   .dic-tag-he { background: #5a6e3a; }
   .dic-tag-gr { background: #4a5a78; }
+  .dic-tag-pt { background: var(--rubrica); }
+
+  /* Linha do Lema no card do português: o lema em destaque (vermelho) e a
+     definição dele em tom normal, para a pessoa ver a distinção. */
+  #pe-l .lema-base { color: var(--rubrica); font-weight: 700; }
+  #pe-l .lema-def { color: var(--tinta); }
+  #pe-l .lema-obs { color: var(--tinta-fraca); font-style: italic; }
   /* significado em português, na cor vermelha (rubrica) */
   .dic-pt { color: var(--rubrica); font-size: 14px; line-height: 1.45; margin-top: 2px; }
   .dic-strong-linha { margin-top: 2px; }
@@ -532,7 +539,7 @@
   <button data-menu="listas"><svg class="icone"><use href="#i-lista"/></svg><span>Listas de leitura</span></button>
   <button data-menu="caderno"><svg class="icone"><use href="#i-caderno"/></svg><span>Anotação</span></button>
   <button data-menu="referencias"><svg class="icone"><use href="#i-referencias"/></svg><span>Referências cruzadas</span></button>
-  <button data-menu="dicionario"><svg class="icone"><use href="#i-dicionario"/></svg><span>Léxico</span></button>
+  <button data-menu="dicionario"><svg class="icone"><use href="#i-dicionario"/></svg><span>Dicionários</span></button>
   <button data-menu="subtitulos"><svg class="icone"><use href="#i-subtitulos"/></svg><span>Subtítulos</span></button>
   <button data-menu="ouvir"><svg class="icone"><use href="#i-ouvir"/></svg><span>Ouvir</span></button>
   <button data-menu="perfil"><svg class="icone"><use href="#i-usuario"/></svg><span>Perfil</span></button>
@@ -973,7 +980,7 @@
 
 <aside class="painel" id="painel-dicionario" aria-hidden="true">
   <header>
-    <h2>Léxico</h2>
+    <h2>Dicionários</h2>
     <button data-fechar aria-label="Fechar"><svg class="icone"><use href="#i-fechar"/></svg></button>
   </header>
   <div class="dic-topo">
@@ -984,9 +991,10 @@
       <button id="dic-limpar" class="dic-limpar" aria-label="Limpar" hidden>
         <svg class="icone"><use href="#i-fechar"/></svg></button>
     </div>
-    <div class="dic-filtros" role="group" aria-label="Idiomas">
-      <button class="dic-chip ativo" data-lang="he" aria-pressed="true">Hebraico</button>
-      <button class="dic-chip ativo" data-lang="gr" aria-pressed="true">Grego</button>
+    <div class="dic-filtros" role="group" aria-label="Dicionário">
+      <button class="dic-chip ativo" data-lang="pt" aria-pressed="true">Português</button>
+      <button class="dic-chip" data-lang="he" aria-pressed="false">Hebraico</button>
+      <button class="dic-chip" data-lang="gr" aria-pressed="false">Grego</button>
     </div>
   </div>
   <div class="corpo dic-corpo" id="dic-corpo"></div>

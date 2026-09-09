@@ -641,24 +641,25 @@ const App = {
     const l = txt('.il-m-l');
     const rtl = !!palavraEl.closest('.il-rtl');
 
-    const linha = (idLinha, idVal, valor, comDir) => {
+    const linha = (idLinha, idVal, valor, comDir, rotulo) => {
       const box = q(idLinha);
       if (!box) return;
-      if (!valor) { box.hidden = true; return; }
-      box.hidden = false;
+      if (!valor) { box.hidden = true; box.style.display = 'none'; return; }
+      box.hidden = false; box.style.display = '';
       const val = q(idVal);
       val.textContent = valor;
       val.dir = comDir && rtl ? 'rtl' : '';
+      if (rotulo) { const r = box.querySelector('.pe-rot'); if (r) r.textContent = rotulo; }
     };
 
     const alvoO = q('pe-o');
     alvoO.textContent = o;
     alvoO.dir = rtl ? 'rtl' : '';
-    linha('pe-linha-t', 'pe-t', t, false);
-    linha('pe-linha-g', 'pe-g', g.trim(), false);
-    linha('pe-linha-m', 'pe-m', m, false);
-    linha('pe-linha-s', 'pe-s', s, false);
-    linha('pe-linha-l', 'pe-l', l, true);   // lema é letra original
+    linha('pe-linha-t', 'pe-t', t, false, 'Transliteração');
+    linha('pe-linha-g', 'pe-g', g.trim(), false, 'Português');
+    linha('pe-linha-m', 'pe-m', m, false, 'Morfologia');
+    linha('pe-linha-s', 'pe-s', s, false, 'Strong');
+    linha('pe-linha-l', 'pe-l', l, true, 'Lema');   // lema é letra original
 
     const veu = q('palavra-veu');
     veu.classList.add('aberto');
@@ -670,6 +671,68 @@ const App = {
     if (!veu) return;
     veu.classList.remove('aberto');
     veu.setAttribute('aria-hidden', 'true');
+  },
+
+  /* Descobre qual palavra do texto (português) o toque acertou, usando a posição
+   * do clique. Devolve a palavra limpa de pontuação, ou null. */
+  _palavraTocada(e, versEl) {
+    let no = null, off = 0;
+    const x = e.clientX, y = e.clientY;
+    if (document.caretPositionFromPoint) {
+      const p = document.caretPositionFromPoint(x, y);
+      if (p) { no = p.offsetNode; off = p.offset; }
+    } else if (document.caretRangeFromPoint) {
+      const r = document.caretRangeFromPoint(x, y);
+      if (r) { no = r.startContainer; off = r.startOffset; }
+    }
+    if (!no || no.nodeType !== 3) return null;           // precisa ser nó de texto
+    // não pega o número do versículo nem os selos
+    const pai = no.parentElement;
+    if (pai && pai.closest('.n, .marca-ref, .marca-nota')) return null;
+    const texto = no.nodeValue;
+    // acha os limites da palavra ao redor do offset
+    const ehLetra = c => /[0-9A-Za-zÀ-ÿ\u00C0-\u017F-]/.test(c);
+    let ini = off, fim = off;
+    while (ini > 0 && ehLetra(texto[ini - 1])) ini--;
+    while (fim < texto.length && ehLetra(texto[fim])) fim++;
+    let palavra = texto.slice(ini, fim).trim();
+    // tira hífens/pontuação nas bordas
+    palavra = palavra.replace(/^[-–—]+|[-–—]+$/g, '').trim();
+    return palavra || null;
+  },
+
+  /* Abre a definição de uma palavra do texto no dicionário português. Carrega o
+   * banco se preciso e procura a palavra exata (sem acento/maiúscula). */
+  async abrirPalavraPtDoTexto(palavra) {
+    try {
+      if (!this._dicPtDb) { await this._carregarDicPt(); }
+    } catch (e) { this.avisoRapido && this.avisoRapido('Dicionário indisponível'); return; }
+    if (!this._dicPtDb) return;
+    const norm = s => (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    const alvo = norm(palavra);
+    let controle = null;
+    // 1) tenta casar a grafia EXATA (com acento/maiúscula como no texto)
+    let stmt = this._dicPtDb.prepare(
+      'SELECT controle FROM dicionario WHERE palavra = ? COLLATE NOCASE LIMIT 1');
+    stmt.bind([palavra]);
+    if (stmt.step()) controle = stmt.getAsObject().controle;
+    stmt.free();
+    // 2) se não achou, cai para a forma sem acento/maiúscula
+    if (controle == null) {
+      stmt = this._dicPtDb.prepare('SELECT controle FROM dicionario WHERE busca = ? LIMIT 1');
+      stmt.bind([alvo]);
+      if (stmt.step()) controle = stmt.getAsObject().controle;
+      stmt.free();
+    }
+    if (controle == null) {
+      // não achou exata — abre a tela do Dicionário já com a palavra pré-buscada
+      this._dicLang = 'pt';
+      await this.abrirDicionario();
+      const campo = document.getElementById('dic-campo');
+      if (campo) { campo.value = palavra; campo.dispatchEvent(new Event('input')); }
+      return;
+    }
+    this._abrirPalavraPt(controle);
   },
 
   /* ============================================================== painéis */
@@ -8339,6 +8402,13 @@ const App = {
           this.abrirPalavraInterlinear(palavra);
           return;
         }
+        // texto comum (português): versículo já selecionado, toca uma palavra →
+        // abre a definição dela no dicionário português.
+        if (!palavra && this.pontoAtual === vers && !this.multiAtivo && !this.multiSelecao
+            && !Dados.ehOriginal(this.versao)) {
+          const alvo = this._palavraTocada(e, v);
+          if (alvo) { this.abrirPalavraPtDoTexto(alvo); return; }
+        }
         if (this.multiAtivo) {
           // modo ligado: acumula (ou tira) o versículo do grupo
           this.alternarVersiculoMulti(vers);
@@ -10969,42 +11039,75 @@ const App = {
 
   async abrirDicionario() {
     this.abrir('painel-dicionario');
-    if (!this._dicLangs) this._dicLangs = { he: true, gr: true };
+    // língua ativa (seleção única). Padrão: português.
+    if (!this._dicLang) this._dicLang = 'pt';
 
     const campo = document.getElementById('dic-campo');
     const limpar = document.getElementById('dic-limpar');
     const corpo = document.getElementById('dic-corpo');
 
-    // carrega os dois léxicos uma vez e monta um índice de busca leve
-    if (!this._dicIndice) {
-      corpo.innerHTML = `<p class="dic-vazio">Carregando dicionário…</p>`;
-      await this._montarIndiceDic();
-    }
-
     // liga os controles só uma vez
     if (!this._dicLigado) {
       this._dicLigado = true;
-      const redesenha = () => this._filtrarDicionario();
-      campo.oninput = () => {
-        limpar.hidden = !campo.value;
-        redesenha();
-      };
-      limpar.onclick = () => { campo.value = ''; limpar.hidden = true; redesenha(); campo.focus(); };
+      campo.oninput = () => { limpar.hidden = !campo.value; this._filtrarDicionario(); };
+      limpar.onclick = () => { campo.value = ''; limpar.hidden = true; this._filtrarDicionario(); campo.focus(); };
       document.querySelectorAll('#painel-dicionario .dic-chip').forEach(chip => {
-        chip.onclick = () => {
+        chip.onclick = async () => {
           const lang = chip.dataset.lang;
-          // não deixa desligar os dois ao mesmo tempo
-          const outro = lang === 'he' ? 'gr' : 'he';
-          if (this._dicLangs[lang] && !this._dicLangs[outro]) return;
-          this._dicLangs[lang] = !this._dicLangs[lang];
-          chip.classList.toggle('ativo', this._dicLangs[lang]);
-          chip.setAttribute('aria-pressed', this._dicLangs[lang] ? 'true' : 'false');
-          redesenha();
+          if (lang === this._dicLang) return;      // já é a ativa
+          this._dicLang = lang;
+          // seleção única: marca só a escolhida
+          document.querySelectorAll('#painel-dicionario .dic-chip').forEach(c => {
+            const on = c.dataset.lang === lang;
+            c.classList.toggle('ativo', on);
+            c.setAttribute('aria-pressed', on ? 'true' : 'false');
+          });
+          campo.placeholder = lang === 'pt'
+            ? 'Pesquisar palavra em português…'
+            : 'Pesquisar palavra em português…';
+          await this._prepararDicLang();
+          this._filtrarDicionario();
         };
       });
     }
+    await this._prepararDicLang();
     this._filtrarDicionario();
     setTimeout(() => campo.focus(), 60);
+  },
+
+  /* Carrega os dados da língua ativa sob demanda (uma vez cada). Português usa o
+   * banco SQLite; hebraico/grego usam o léxico Strong (JSON). */
+  async _prepararDicLang() {
+    const corpo = document.getElementById('dic-corpo');
+    if (this._dicLang === 'pt') {
+      if (!this._dicPtPronto) {
+        corpo.innerHTML = `<p class="dic-vazio">Carregando dicionário…</p>`;
+        try { await this._carregarDicPt(); this._dicPtPronto = true; }
+        catch (e) { corpo.innerHTML = `<p class="dic-vazio">Não foi possível carregar o dicionário.</p>`; }
+      }
+    } else {
+      if (!this._dicIndice) {
+        corpo.innerHTML = `<p class="dic-vazio">Carregando dicionário…</p>`;
+        await this._montarIndiceDic();
+      }
+    }
+  },
+
+  /* Carrega o banco SQLite do dicionário português (via sql.js), uma vez. Fica em
+   * memória durante a sessão; o arquivo .db é cacheado pelo service worker. */
+  async _carregarDicPt() {
+    if (this._dicPtDb) return;
+    // carrega a lib sql.js sob demanda
+    if (!window.initSqlJs) {
+      await new Promise((ok, err) => {
+        const s = document.createElement('script');
+        s.src = 'assets/js/sql-wasm.js'; s.onload = ok; s.onerror = err;
+        document.head.appendChild(s);
+      });
+    }
+    const SQL = await window.initSqlJs({ locateFile: f => `assets/js/${f}` });
+    const buf = await fetch('data/dicionario.db').then(r => r.arrayBuffer());
+    this._dicPtDb = new SQL.Database(new Uint8Array(buf));
   },
 
   async _montarIndiceDic() {
@@ -11077,22 +11180,21 @@ const App = {
   },
 
   _filtrarDicionario() {
+    if (this._dicLang === 'pt') return this._filtrarDicPt();
     const corpo = document.getElementById('dic-corpo');
     const termoBruto = (document.getElementById('dic-campo').value || '').trim();
     const norm = s => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
     const termo = norm(termoBruto);
-    const langs = this._dicLangs;
+    const lang = this._dicLang;
 
     if (!this._dicIndice || !this._dicIndice.length) {
-      corpo.innerHTML = `<p class="dic-vazio">O dicionário (léxico) não está disponível.</p>`;
+      corpo.innerHTML = `<p class="dic-vazio">O dicionário não está disponível.</p>`;
       return;
     }
 
-    let itens = this._dicIndice.filter(e => langs[e.lang]);
+    let itens = this._dicIndice.filter(e => e.lang === lang);
     if (termo) itens = itens.filter(e => e.busca.includes(termo));
 
-    // Sem termo: mostra TODAS as palavras (a pessoa rola e filtra ao digitar) —
-    // dá cara de dicionário de verdade, não de tela de busca vazia.
     if (termo && !itens.length) {
       corpo.innerHTML = `<p class="dic-vazio">Nada encontrado para “${Leitura.escapar(termoBruto)}”.</p>`;
       return;
@@ -11122,13 +11224,145 @@ const App = {
       : (!termo ? `<p class="dic-rodape">${total.toLocaleString('pt-BR')} palavras no dicionário.</p>` : '');
     corpo.innerHTML = lista + nota;
 
-    // clicar num item abre o MESMO layout de estudo da palavra da leitura
     corpo.querySelectorAll('[data-dic]').forEach(el => {
       el.onclick = () => {
         const [lang, strong] = el.dataset.dic.split(':');
         this._abrirPalavraDoDicionario(lang, strong);
       };
     });
+  },
+
+  /* Busca no dicionário português (SQLite). Filtra ao digitar; clicar abre a
+   * definição no mesmo overlay da leitura. */
+  _filtrarDicPt() {
+    const corpo = document.getElementById('dic-corpo');
+    const termoBruto = (document.getElementById('dic-campo').value || '').trim();
+    const norm = s => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    const termo = norm(termoBruto);
+
+    if (!this._dicPtDb) {
+      corpo.innerHTML = `<p class="dic-vazio">O dicionário não está disponível.</p>`;
+      return;
+    }
+    const MAX = 300;
+    let sql, params;
+    if (termo) {
+      // começa-com primeiro (melhor), depois contém
+      sql = `SELECT controle, palavra, classe_gramatical, definicao FROM dicionario
+             WHERE busca LIKE ? ORDER BY (busca LIKE ?) DESC, busca LIMIT ${MAX + 1}`;
+      params = [`%${termo}%`, `${termo}%`];
+    } else {
+      sql = `SELECT controle, palavra, classe_gramatical, definicao FROM dicionario
+             ORDER BY busca LIMIT ${MAX + 1}`;
+      params = [];
+    }
+    let linhas = [];
+    try {
+      const stmt = this._dicPtDb.prepare(sql);
+      stmt.bind(params);
+      while (stmt.step()) linhas.push(stmt.getAsObject());
+      stmt.free();
+    } catch (e) { corpo.innerHTML = `<p class="dic-vazio">Erro na busca.</p>`; return; }
+
+    if (termo && !linhas.length) {
+      corpo.innerHTML = `<p class="dic-vazio">Nada encontrado para “${Leitura.escapar(termoBruto)}”.</p>`;
+      return;
+    }
+    const excedeu = linhas.length > MAX;
+    if (excedeu) linhas = linhas.slice(0, MAX);
+
+    const lista = linhas.map(r => `
+      <button class="dic-item" data-pt="${r.controle}">
+        <div class="dic-item-orig-linha">
+          <span class="dic-cabeca">
+            <span class="dic-orig dic-orig-pt">${Leitura.escapar(r.palavra)}</span>
+          </span>
+          <span class="dic-tag dic-tag-pt">${Leitura.escapar((r.classe_gramatical || '').split('/')[0].trim())}</span>
+        </div>
+        <div class="dic-pt">${Leitura.escapar((r.definicao || '').slice(0, 120))}${(r.definicao || '').length > 120 ? '…' : ''}</div>
+      </button>`).join('');
+    const nota = excedeu
+      ? `<p class="dic-vazio">Mostrando ${MAX}. Refine a busca.</p>`
+      : (!termo ? `<p class="dic-rodape">Digite para pesquisar no dicionário.</p>` : '');
+    corpo.innerHTML = lista + nota;
+
+    corpo.querySelectorAll('[data-pt]').forEach(el => {
+      el.onclick = () => this._abrirPalavraPt(+el.dataset.pt);
+    });
+  },
+
+  /* Abre a definição de uma palavra do português no overlay da leitura. */
+  _abrirPalavraPt(controle) {
+    const stmt = this._dicPtDb.prepare('SELECT palavra, lema, classe_gramatical, definicao FROM dicionario WHERE controle = ?');
+    stmt.bind([controle]);
+    let e = null; if (stmt.step()) e = stmt.getAsObject(); stmt.free();
+    if (!e) return;
+    const q = id => document.getElementById(id);
+    const alvoO = q('pe-o');
+    alvoO.textContent = e.palavra; alvoO.dir = ''; alvoO.classList.remove('pe-o-fallback');
+
+    // linha com rótulo customizável; oculta quando o valor é vazio
+    const linha = (idLinha, idVal, valor, rotulo) => {
+      const box = q(idLinha); if (!box) return;
+      const val = q(idVal);
+      if (!valor) { box.hidden = true; box.style.display = 'none'; if (val) val.textContent = ''; return; }
+      box.hidden = false; box.style.display = ''; val.textContent = valor; val.dir = '';
+      if (rotulo) { const r = box.querySelector('.pe-rot'); if (r) r.textContent = rotulo; }
+    };
+    // No português: sem transliteração e sem Strong (não fazem sentido / não são
+    // conhecidos). Definição e classe gramatical com rótulos claros. Lema só
+    // aparece se existir e for diferente da palavra.
+    linha('pe-linha-t', 'pe-t', '');                                    // oculta (transliteração)
+    linha('pe-linha-g', 'pe-g', e.definicao, 'Definição');             // era "Português"
+    linha('pe-linha-m', 'pe-m', e.classe_gramatical, 'Classe');        // era "Morfologia"
+    linha('pe-linha-s', 'pe-s', '');                                    // oculta (Strong)
+    this._montarLemaPt(e);                                              // linha do Lema enriquecida
+    const veu = q('palavra-veu');
+    veu.classList.add('aberto');
+    veu.setAttribute('aria-hidden', 'false');
+  },
+
+  /* Monta a linha "Lema" do card português, enriquecida:
+   *  - lema vazio → não aparece;
+   *  - lema é fórmula de contração ("a + o") → mostra só a fórmula;
+   *  - lema = palavra → "forma básica" (não repete a definição);
+   *  - lema é outra palavra que existe → "lema: definição do lema" (com destaque);
+   *  - lema não existe como palavra → mostra só o lema. */
+  _montarLemaPt(e) {
+    const box = document.getElementById('pe-linha-l');
+    const val = document.getElementById('pe-l');
+    if (!box || !val) return;
+    const rot = box.querySelector('.pe-rot'); if (rot) rot.textContent = 'Lema';
+    const esconder = () => { box.hidden = true; box.style.display = 'none'; val.innerHTML = ''; };
+    const mostrar = html => { box.hidden = false; box.style.display = ''; val.dir = ''; val.innerHTML = html; };
+
+    const lema = (e.lema || '').trim();
+    if (!lema) return esconder();
+
+    // contração/combinação: o lema é uma fórmula ("a + o"), não uma palavra
+    if (lema.includes('+')) {
+      mostrar(`<span class="lema-base">${Leitura.escapar(lema)}</span>`);
+      return;
+    }
+    // lema = a própria palavra
+    if (lema.toLowerCase() === (e.palavra || '').toLowerCase()) {
+      mostrar(`<span class="lema-obs">Forma básica da palavra.</span>`);
+      return;
+    }
+    // busca a definição do lema como palavra
+    let defLema = '';
+    try {
+      const st = this._dicPtDb.prepare('SELECT definicao FROM dicionario WHERE palavra = ? COLLATE NOCASE LIMIT 1');
+      st.bind([lema]);
+      if (st.step()) defLema = (st.getAsObject().definicao || '').trim();
+      st.free();
+    } catch (err) {}
+
+    if (defLema) {
+      mostrar(`<span class="lema-base">${Leitura.escapar(lema)}:</span> <span class="lema-def">${Leitura.escapar(defLema)}</span>`);
+    } else {
+      mostrar(`<span class="lema-base">${Leitura.escapar(lema)}</span>`);
+    }
   },
 
   /* Reaproveita o overlay 'palavra-veu' da leitura (original grande no topo,
@@ -11145,19 +11379,20 @@ const App = {
     alvoO.dir = rtl && e.orig ? 'rtl' : '';
     alvoO.classList.toggle('pe-o-fallback', !e.orig);
 
-    const linha = (idLinha, idVal, valor, comDir) => {
+    const linha = (idLinha, idVal, valor, comDir, rotulo) => {
       const box = q(idLinha); if (!box) return;
       const val = q(idVal);
-      if (!valor) { box.hidden = true; if (val) val.textContent = ''; return; }
-      box.hidden = false;
+      if (!valor) { box.hidden = true; box.style.display = 'none'; if (val) val.textContent = ''; return; }
+      box.hidden = false; box.style.display = '';
       val.textContent = valor;
       val.dir = comDir && rtl ? 'rtl' : '';
+      if (rotulo) { const r = box.querySelector('.pe-rot'); if (r) r.textContent = rotulo; }
     };
-    linha('pe-linha-t', 'pe-t', e.translit, false);
-    linha('pe-linha-g', 'pe-g', e.pt, false);
-    linha('pe-linha-m', 'pe-m', lang === 'he' ? 'Hebraico' : 'Grego', false);
-    linha('pe-linha-s', 'pe-s', e.strong, false);
-    linha('pe-linha-l', 'pe-l', e.orig, true);
+    linha('pe-linha-t', 'pe-t', e.translit, false, 'Transliteração');
+    linha('pe-linha-g', 'pe-g', e.pt, false, 'Português');
+    linha('pe-linha-m', 'pe-m', lang === 'he' ? 'Hebraico' : 'Grego', false, 'Morfologia');
+    linha('pe-linha-s', 'pe-s', e.strong, false, 'Strong');
+    linha('pe-linha-l', 'pe-l', e.orig, true, 'Lema');
 
     const veu = q('palavra-veu');
     veu.classList.add('aberto');
