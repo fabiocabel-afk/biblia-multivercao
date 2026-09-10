@@ -744,7 +744,7 @@ const App = {
       stmt.free();
     } catch (err) {}
     // ordem das abas: comum primeiro, depois personagem, depois cidade, depois outros
-    const ordem = { comum: 0, personagem: 1, cidade: 2, proprio: 3 };
+    const ordem = { personagem: 0, cidade: 1, proprio: 2, comum: 3 };
     out.sort((a, b) => (ordem[a.tipo] ?? 4) - (ordem[b.tipo] ?? 4) || a.controle - b.controle);
     return out;
   },
@@ -11101,14 +11101,35 @@ const App = {
           campo.placeholder = lang === 'pt'
             ? 'Pesquisar palavra em português…'
             : 'Pesquisar palavra em português…';
+          this._atualizarFiltrosTipo();
           await this._prepararDicLang();
           this._filtrarDicionario();
         };
       });
+      // filtros de tipo (só português): seleção única, começa em "Tudo"
+      if (!this._dicTipo && this._dicTipo !== '') this._dicTipo = '';
+      document.querySelectorAll('#dic-tipos .dic-chip-tipo').forEach(chip => {
+        chip.onclick = () => {
+          this._dicTipo = chip.dataset.tipo;
+          document.querySelectorAll('#dic-tipos .dic-chip-tipo').forEach(c => {
+            const on = c.dataset.tipo === this._dicTipo;
+            c.classList.toggle('ativo', on);
+            c.setAttribute('aria-pressed', on ? 'true' : 'false');
+          });
+          this._filtrarDicionario();
+        };
+      });
     }
+    this._atualizarFiltrosTipo();
     await this._prepararDicLang();
     this._filtrarDicionario();
     setTimeout(() => campo.focus(), 60);
+  },
+
+  /* Mostra os filtros de tipo só quando a língua é português. */
+  _atualizarFiltrosTipo() {
+    const barra = document.getElementById('dic-tipos');
+    if (barra) barra.hidden = (this._dicLang !== 'pt');
   },
 
   /* Carrega os dados da língua ativa sob demanda (uma vez cada). Português usa o
@@ -11281,15 +11302,21 @@ const App = {
       return;
     }
     const MAX = 300;
+    // filtro de tipo (Tudo/Palavra/Personagem/Local)
+    const tipo = this._dicTipo || '';
+    let condTipo = '';
+    if (tipo === 'personagem') condTipo = ` AND definicao LIKE 'Personagem%'`;
+    else if (tipo === 'cidade') condTipo = ` AND definicao LIKE 'Localidade%'`;
+    else if (tipo === 'comum') condTipo = ` AND definicao NOT LIKE 'Personagem%' AND definicao NOT LIKE 'Localidade%'`;
     let sql, params;
     if (termo) {
       // começa-com primeiro (melhor), depois contém
       sql = `SELECT controle, palavra, classe_gramatical, definicao FROM dicionario
-             WHERE busca LIKE ? ORDER BY (busca LIKE ?) DESC, busca LIMIT ${MAX + 1}`;
+             WHERE busca LIKE ?${condTipo} ORDER BY (busca LIKE ?) DESC, busca LIMIT ${MAX + 1}`;
       params = [`%${termo}%`, `${termo}%`];
     } else {
       sql = `SELECT controle, palavra, classe_gramatical, definicao FROM dicionario
-             ORDER BY busca LIMIT ${MAX + 1}`;
+             WHERE 1=1${condTipo} ORDER BY busca LIMIT ${MAX + 1}`;
       params = [];
     }
     let linhas = [];
@@ -11359,7 +11386,10 @@ const App = {
     if (!barra) {
       barra = document.createElement('div');
       barra.id = 'pe-abas'; barra.className = 'pe-abas';
-      o.parentNode.insertBefore(barra, o);   // acima do título da palavra
+    }
+    // posiciona ABAIXO da palavra (pe-o) e acima da definição
+    if (barra.previousElementSibling !== o) {
+      o.parentNode.insertBefore(barra, o.nextSibling);
     }
     // se há mais de uma aba do MESMO tipo (ex.: duas acepções comuns "aia"/"aía"),
     // rotula pela grafia da palavra em vez do tipo genérico, para não repetir.
