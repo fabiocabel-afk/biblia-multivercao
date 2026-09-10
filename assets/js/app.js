@@ -11291,7 +11291,7 @@ const App = {
 
   /* Busca no dicionário português (SQLite). Filtra ao digitar; clicar abre a
    * definição no mesmo overlay da leitura. */
-  _filtrarDicPt() {
+  _filtrarDicPt(manterLimite) {
     const corpo = document.getElementById('dic-corpo');
     const termoBruto = (document.getElementById('dic-campo').value || '').trim();
     const norm = s => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
@@ -11301,22 +11301,25 @@ const App = {
       corpo.innerHTML = `<p class="dic-vazio">O dicionário não está disponível.</p>`;
       return;
     }
-    const MAX = 300;
-    // filtro de tipo (Tudo/Palavra/Personagem/Local)
+    const PAGINA = 300;
+    // reseta o limite quando a busca/filtro muda; mantém quando é "Mostrar mais"
+    if (!manterLimite) this._dicLimite = PAGINA;
+    const limite = this._dicLimite || PAGINA;
+
     const tipo = this._dicTipo || '';
     let condTipo = '';
     if (tipo === 'personagem') condTipo = ` AND definicao LIKE 'Personagem%'`;
     else if (tipo === 'cidade') condTipo = ` AND definicao LIKE 'Localidade%'`;
     else if (tipo === 'comum') condTipo = ` AND definicao NOT LIKE 'Personagem%' AND definicao NOT LIKE 'Localidade%'`;
     let sql, params;
+    // pede limite+1 para saber se há mais páginas
     if (termo) {
-      // começa-com primeiro (melhor), depois contém
       sql = `SELECT controle, palavra, classe_gramatical, definicao FROM dicionario
-             WHERE busca LIKE ?${condTipo} ORDER BY (busca LIKE ?) DESC, busca LIMIT ${MAX + 1}`;
+             WHERE busca LIKE ?${condTipo} ORDER BY (busca LIKE ?) DESC, busca LIMIT ${limite + 1}`;
       params = [`%${termo}%`, `${termo}%`];
     } else {
       sql = `SELECT controle, palavra, classe_gramatical, definicao FROM dicionario
-             WHERE 1=1${condTipo} ORDER BY busca LIMIT ${MAX + 1}`;
+             WHERE 1=1${condTipo} ORDER BY busca LIMIT ${limite + 1}`;
       params = [];
     }
     let linhas = [];
@@ -11331,8 +11334,8 @@ const App = {
       corpo.innerHTML = `<p class="dic-vazio">Nada encontrado para “${Leitura.escapar(termoBruto)}”.</p>`;
       return;
     }
-    const excedeu = linhas.length > MAX;
-    if (excedeu) linhas = linhas.slice(0, MAX);
+    const temMais = linhas.length > limite;
+    if (temMais) linhas = linhas.slice(0, limite);
 
     const lista = linhas.map(r => `
       <button class="dic-item" data-pt="${r.controle}">
@@ -11344,14 +11347,25 @@ const App = {
         </div>
         <div class="dic-pt">${Leitura.escapar((r.definicao || '').slice(0, 120))}${(r.definicao || '').length > 120 ? '…' : ''}</div>
       </button>`).join('');
-    const nota = excedeu
-      ? `<p class="dic-vazio">Mostrando ${MAX}. Refine a busca.</p>`
-      : (!termo ? `<p class="dic-rodape">Digite para pesquisar no dicionário.</p>` : '');
-    corpo.innerHTML = lista + nota;
+    // rodapé: botão "Mostrar mais" quando há mais, senão a dica
+    let rodape = '';
+    if (temMais) {
+      rodape = `<button class="dic-mais" id="dic-mais">Mostrar mais</button>`;
+    } else if (!termo && !tipo) {
+      rodape = `<p class="dic-rodape">Digite para pesquisar no dicionário.</p>`;
+    }
+    corpo.innerHTML = lista + rodape;
 
     corpo.querySelectorAll('[data-pt]').forEach(el => {
       el.onclick = () => this._abrirPalavraPt(+el.dataset.pt);
     });
+    const btnMais = document.getElementById('dic-mais');
+    if (btnMais) btnMais.onclick = () => {
+      const y = corpo.scrollTop;             // guarda a posição da rolagem
+      this._dicLimite = (this._dicLimite || PAGINA) + PAGINA;
+      this._filtrarDicPt(true);              // mantém o limite aumentado
+      corpo.scrollTop = y;                   // volta para onde estava
+    };
   },
 
   /* Abre a definição de uma palavra do português no overlay (por controle). */
