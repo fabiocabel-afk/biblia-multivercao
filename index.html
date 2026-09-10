@@ -116,6 +116,16 @@
     transition: background .14s ease, color .14s ease, border-color .14s ease;
   }
   .dic-chip.ativo { background: var(--rubrica); color: var(--papel); border-color: var(--rubrica); }
+  /* segunda linha: filtro de tipo (só no português) */
+  .dic-tipos { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+  .dic-tipos[hidden] { display: none; }
+  .dic-chip-tipo {
+    padding: 4px 11px; border-radius: 999px; cursor: pointer;
+    font-size: 12.5px; font-weight: 600;
+    border: 1px solid color-mix(in srgb, var(--tinta) 20%, transparent);
+    background: transparent; color: var(--tinta-fraca);
+  }
+  .dic-chip-tipo.ativo { background: var(--rubrica); color: var(--papel); border-color: var(--rubrica); }
   .dic-corpo { padding: 6px 12px 20px; overflow-y: auto; }
   .dic-vazio {
     text-align: center; color: var(--tinta-fraca); font-size: 14px;
@@ -158,18 +168,26 @@
 
   /* Menu de abas de sentido no topo do card (Palavra / Personagem / Local).
      Sempre visível; com 1 sentido, a aba única fica ativa como rótulo. */
-  .pe-abas { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+  /* Abas de sentido: centralizadas, mesma largura, e ao reorganizar (quebrar
+     linha) continuam centralizadas. Sem cores por tipo — a ativa usa a cor da
+     palavra; a inativa fica no cinza de desativado. */
+  .pe-abas {
+    display: flex; flex-wrap: wrap; justify-content: center;
+    gap: 6px; margin: 8px 0 12px;
+  }
   .pe-aba {
-    padding: 5px 12px; border-radius: 999px; cursor: pointer;
-    font-size: 12.5px; font-weight: 700; border: 1.5px solid transparent;
+    flex: 1 1 0; min-width: 88px; max-width: 160px;
+    padding: 5px 10px; border-radius: 999px; cursor: pointer;
+    font-size: 12.5px; font-weight: 700; text-align: center;
+    border: 1.5px solid transparent;
     background: color-mix(in srgb, var(--tinta) 8%, transparent);
     color: var(--tinta-fraca);
   }
-  .pe-aba.ativa { color: #fff; }
-  .pe-aba-comum.ativa   { background: #6b5236; border-color: #6b5236; }
-  .pe-aba-personagem.ativa { background: #4a5a78; border-color: #4a5a78; }
-  .pe-aba-cidade.ativa  { background: #5a6e3a; border-color: #5a6e3a; }
-  .pe-aba-proprio.ativa { background: var(--rubrica); border-color: var(--rubrica); }
+  .pe-aba.ativa {
+    color: #fff;
+    background: var(--rubrica);
+    border-color: var(--rubrica);
+  }
   .pe-aba:not(.ativa):hover { background: color-mix(in srgb, var(--tinta) 14%, transparent); }
   /* significado em português, na cor vermelha (rubrica) */
   .dic-pt { color: var(--rubrica); font-size: 14px; line-height: 1.45; margin-top: 2px; }
@@ -1011,6 +1029,12 @@
       <button class="dic-chip ativo" data-lang="pt" aria-pressed="true">Português</button>
       <button class="dic-chip" data-lang="he" aria-pressed="false">Hebraico</button>
       <button class="dic-chip" data-lang="gr" aria-pressed="false">Grego</button>
+    </div>
+    <div class="dic-tipos" id="dic-tipos" role="group" aria-label="Tipo">
+      <button class="dic-chip-tipo ativo" data-tipo="" aria-pressed="true">Tudo</button>
+      <button class="dic-chip-tipo" data-tipo="comum" aria-pressed="false">Palavra</button>
+      <button class="dic-chip-tipo" data-tipo="personagem" aria-pressed="false">Personagem</button>
+      <button class="dic-chip-tipo" data-tipo="cidade" aria-pressed="false">Local</button>
     </div>
   </div>
   <div class="corpo dic-corpo" id="dic-corpo"></div>
