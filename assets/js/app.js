@@ -627,6 +627,7 @@ const App = {
    * qual versão está em cada lado. */
   abrirPalavraInterlinear(palavraEl) {
     if (!palavraEl) return;
+    this._limparAbasPt();   // hebraico/grego não usa abas de sentido do português
     const q = id => document.getElementById(id);
     const txt = sel => { const e = palavraEl.querySelector(sel); return e ? e.textContent.trim() : ''; };
 
@@ -708,31 +709,66 @@ const App = {
       if (!this._dicPtDb) { await this._carregarDicPt(); }
     } catch (e) { this.avisoRapido && this.avisoRapido('Dicionário indisponível'); return; }
     if (!this._dicPtDb) return;
-    const norm = s => (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
-    const alvo = norm(palavra);
-    let controle = null;
-    // 1) tenta casar a grafia EXATA (com acento/maiúscula como no texto)
-    let stmt = this._dicPtDb.prepare(
-      'SELECT controle FROM dicionario WHERE palavra = ? COLLATE NOCASE LIMIT 1');
-    stmt.bind([palavra]);
-    if (stmt.step()) controle = stmt.getAsObject().controle;
-    stmt.free();
-    // 2) se não achou, cai para a forma sem acento/maiúscula
-    if (controle == null) {
-      stmt = this._dicPtDb.prepare('SELECT controle FROM dicionario WHERE busca = ? LIMIT 1');
-      stmt.bind([alvo]);
-      if (stmt.step()) controle = stmt.getAsObject().controle;
-      stmt.free();
-    }
-    if (controle == null) {
-      // não achou exata — abre a tela do Dicionário já com a palavra pré-buscada
+    const sentidos = this._sentidosDaPalavra(palavra);
+    if (!sentidos.length) {
+      // não achou — abre a tela do Dicionário já com a palavra pré-buscada
       this._dicLang = 'pt';
       await this.abrirDicionario();
       const campo = document.getElementById('dic-campo');
       if (campo) { campo.value = palavra; campo.dispatchEvent(new Event('input')); }
       return;
     }
-    this._abrirPalavraPt(controle);
+    // escolhe qual sentido abrir primeiro: prioriza a grafia EXATA do texto
+    let ini = sentidos.findIndex(s => s.palavra === palavra);
+    if (ini < 0) ini = sentidos.findIndex(s => s.palavra.toLowerCase() === (palavra || '').toLowerCase());
+    if (ini < 0) ini = 0;
+    this._abrirPalavraPtComSentidos(sentidos, ini);
+  },
+
+  /* Reúne todos os "sentidos" de uma palavra (a mesma forma escrita pode ter a
+   * acepção comum, um ou mais personagens, uma ou mais cidades — cada um é uma
+   * entrada própria no dicionário). Classifica cada um por tipo para as abas. */
+  _sentidosDaPalavra(palavra) {
+    const norm = s => (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    const alvo = norm(palavra);
+    const out = [];
+    try {
+      const stmt = this._dicPtDb.prepare(
+        'SELECT controle, palavra, lema, classe_gramatical, definicao FROM dicionario WHERE busca = ? ORDER BY controle');
+      stmt.bind([alvo]);
+      while (stmt.step()) {
+        const e = stmt.getAsObject();
+        e.tipo = this._tipoDoSentido(e);
+        out.push(e);
+      }
+      stmt.free();
+    } catch (err) {}
+    // ordem das abas: comum primeiro, depois personagem, depois cidade, depois outros
+    const ordem = { comum: 0, personagem: 1, cidade: 2, proprio: 3 };
+    out.sort((a, b) => (ordem[a.tipo] ?? 4) - (ordem[b.tipo] ?? 4) || a.controle - b.controle);
+    return out;
+  },
+
+  _tipoDoSentido(e) {
+    const d = (e.definicao || '');
+    if (/^\s*Personagem b[íi]blic/i.test(d)) return 'personagem';
+    if (/^\s*Localidade b[íi]blic/i.test(d)) return 'cidade';
+    if ((e.classe_gramatical || '').toLowerCase().includes('próprio')) return 'proprio';
+    return 'comum';
+  },
+
+  _rotuloTipo(tipo) {
+    return tipo === 'personagem' ? 'Personagem'
+      : tipo === 'cidade' ? 'Local'
+      : tipo === 'proprio' ? 'Nome próprio'
+      : 'Palavra';
+  },
+
+  /* Remove o menu de abas (quando o card é de hebraico/grego, que não usa abas). */
+  _limparAbasPt() {
+    const b = document.getElementById('pe-abas');
+    if (b) b.remove();
+    this._sentidosAtuais = null;
   },
 
   /* ============================================================== painéis */
@@ -11291,17 +11327,64 @@ const App = {
     });
   },
 
-  /* Abre a definição de uma palavra do português no overlay da leitura. */
+  /* Abre a definição de uma palavra do português no overlay (por controle). */
   _abrirPalavraPt(controle) {
-    const stmt = this._dicPtDb.prepare('SELECT palavra, lema, classe_gramatical, definicao FROM dicionario WHERE controle = ?');
+    const stmt = this._dicPtDb.prepare('SELECT controle, palavra, lema, classe_gramatical, definicao FROM dicionario WHERE controle = ?');
     stmt.bind([controle]);
     let e = null; if (stmt.step()) e = stmt.getAsObject(); stmt.free();
+    if (!e) return;
+    e.tipo = this._tipoDoSentido(e);
+    // ao abrir da LISTA do dicionário, mostra também os outros sentidos dessa forma
+    const sentidos = this._sentidosDaPalavra(e.palavra);
+    const idx = Math.max(0, sentidos.findIndex(s => s.controle === e.controle));
+    this._abrirPalavraPtComSentidos(sentidos.length ? sentidos : [e], idx < 0 ? 0 : idx);
+  },
+
+  /* Abre o card mostrando um sentido, com o menu de abas fixo no topo (uma aba
+   * por sentido). A aba ativa funciona como rótulo do que está sendo exibido. */
+  _abrirPalavraPtComSentidos(sentidos, ativo) {
+    this._sentidosAtuais = sentidos;
+    this._renderCardPt(sentidos[ativo] || sentidos[0]);
+    this._renderAbasPt(sentidos, ativo);
+    const veu = document.getElementById('palavra-veu');
+    veu.classList.add('aberto');
+    veu.setAttribute('aria-hidden', 'false');
+  },
+
+  /* Desenha o menu de abas (sempre fixo — com 1 sentido, mostra a aba única já
+   * ativa, servindo de rótulo). */
+  _renderAbasPt(sentidos, ativo) {
+    let barra = document.getElementById('pe-abas');
+    const o = document.getElementById('pe-o');
+    if (!barra) {
+      barra = document.createElement('div');
+      barra.id = 'pe-abas'; barra.className = 'pe-abas';
+      o.parentNode.insertBefore(barra, o);   // acima do título da palavra
+    }
+    // se há mais de uma aba do MESMO tipo (ex.: duas acepções comuns "aia"/"aía"),
+    // rotula pela grafia da palavra em vez do tipo genérico, para não repetir.
+    const contaTipo = {};
+    sentidos.forEach(s => { contaTipo[s.tipo] = (contaTipo[s.tipo] || 0) + 1; });
+    const rotulo = s => (contaTipo[s.tipo] > 1) ? s.palavra : this._rotuloTipo(s.tipo);
+    barra.innerHTML = sentidos.map((s, i) => `
+      <button class="pe-aba pe-aba-${s.tipo} ${i === ativo ? 'ativa' : ''}" data-i="${i}">
+        ${Leitura.escapar(rotulo(s))}
+      </button>`).join('');
+    barra.querySelectorAll('.pe-aba').forEach(btn => {
+      btn.onclick = () => {
+        const i = +btn.dataset.i;
+        this._renderCardPt(this._sentidosAtuais[i]);
+        barra.querySelectorAll('.pe-aba').forEach((b, j) => b.classList.toggle('ativa', j === i));
+      };
+    });
+  },
+
+  /* Preenche o corpo do card com um sentido. */
+  _renderCardPt(e) {
     if (!e) return;
     const q = id => document.getElementById(id);
     const alvoO = q('pe-o');
     alvoO.textContent = e.palavra; alvoO.dir = ''; alvoO.classList.remove('pe-o-fallback');
-
-    // linha com rótulo customizável; oculta quando o valor é vazio
     const linha = (idLinha, idVal, valor, rotulo) => {
       const box = q(idLinha); if (!box) return;
       const val = q(idVal);
@@ -11309,17 +11392,11 @@ const App = {
       box.hidden = false; box.style.display = ''; val.textContent = valor; val.dir = '';
       if (rotulo) { const r = box.querySelector('.pe-rot'); if (r) r.textContent = rotulo; }
     };
-    // No português: sem transliteração e sem Strong (não fazem sentido / não são
-    // conhecidos). Definição e classe gramatical com rótulos claros. Lema só
-    // aparece se existir e for diferente da palavra.
-    linha('pe-linha-t', 'pe-t', '');                                    // oculta (transliteração)
-    linha('pe-linha-g', 'pe-g', e.definicao, 'Definição');             // era "Português"
-    linha('pe-linha-m', 'pe-m', e.classe_gramatical, 'Classe');        // era "Morfologia"
-    linha('pe-linha-s', 'pe-s', '');                                    // oculta (Strong)
-    this._montarLemaPt(e);                                              // linha do Lema enriquecida
-    const veu = q('palavra-veu');
-    veu.classList.add('aberto');
-    veu.setAttribute('aria-hidden', 'false');
+    linha('pe-linha-t', 'pe-t', '');
+    linha('pe-linha-g', 'pe-g', e.definicao, 'Definição');
+    linha('pe-linha-m', 'pe-m', e.classe_gramatical, 'Classe');
+    linha('pe-linha-s', 'pe-s', '');
+    this._montarLemaPt(e);
   },
 
   /* Monta a linha "Lema" do card português, enriquecida:
@@ -11371,6 +11448,7 @@ const App = {
   _abrirPalavraDoDicionario(lang, strong) {
     const e = (this._dicIndice || []).find(x => x.lang === lang && x.strong === strong);
     if (!e) return;
+    this._limparAbasPt();   // hebraico/grego não usa abas de sentido
     const q = id => document.getElementById(id);
     const rtl = lang === 'he';
 
