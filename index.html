@@ -167,8 +167,9 @@
   .dic-tag-gr { background: #4a5a78; }
   .dic-tag-pt { background: #c2621a; }
 
-  /* Botões do menu de seleção com ícone + texto */
-  .sel-acoes .botao { display: inline-flex; align-items: center; gap: 6px; }
+  /* Botões do menu de seleção: ícone + texto centralizados DENTRO do botão
+     (mantém a estrutura/largura original dos botões). */
+  .sel-acoes .botao { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
   .sel-acoes .botao .icone { width: 16px; height: 16px; flex: 0 0 auto; }
 
   /* Linha do Lema no card do português: o lema em destaque (vermelho) e a
