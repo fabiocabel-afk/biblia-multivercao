@@ -7441,12 +7441,32 @@ const App = {
     barra.classList.add('aberta');
     barra.setAttribute('aria-hidden', 'false');
     document.body.classList.add('selecionando');
+    // posiciona o botão "+" logo ACIMA da barra, mantendo a mesma folga que ele
+    // tem quando fechado — a barra pode ter altura variável, então medimos.
+    this._reposicionarMaisSelecao();
+  },
+
+  /* Coloca o FAB "+" acima da barra de seleção, na mesma distância que ele mantém
+   * do fim quando a barra está fechada. Acompanha a altura real da barra. */
+  _reposicionarMaisSelecao() {
+    const fab = document.getElementById('mais-selecao');
+    const barra = document.getElementById('barra-selecao');
+    if (!fab || !barra) return;
+    if (!document.body.classList.contains('selecionando')) { fab.style.bottom = ''; return; }
+    // altura da barra (inclui o menu de cores se aberto) + a folga original (84px do fim)
+    requestAnimationFrame(() => {
+      const alturaBarra = barra.offsetHeight;
+      const folga = 16;   // respiro entre o botão e o topo da barra
+      fab.style.bottom = `${alturaBarra + folga}px`;
+    });
   },
 
   fecharSelecao() {
     window.getSelection()?.removeAllRanges();
     this.resetarMulti();          // o X cancela também a seleção de vários
     this.selecao = null;
+    const fab = document.getElementById('mais-selecao');
+    if (fab) fab.style.bottom = '';   // volta à posição normal
     this.renderBarraSelecao();
   },
 
@@ -7706,6 +7726,7 @@ const App = {
     const caixa = document.getElementById('sel-cores');
     if (!caixa.classList.contains('fechada')) {
       caixa.classList.add('fechada');
+      this._reposicionarMaisSelecao();   // barra encolheu → reposiciona o "+"
       return;
     }
 
@@ -7733,6 +7754,7 @@ const App = {
           <span class="bolha bolha-mais">+</span><span class="opcao-marcador-nome">Novo marcador</span></button>`;
 
     caixa.classList.remove('fechada');
+    this._reposicionarMaisSelecao();   // barra cresceu → sobe o "+"
 
     caixa.querySelectorAll('[data-sm]').forEach(el => {
       el.onclick = () => {
