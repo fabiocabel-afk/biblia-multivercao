@@ -167,6 +167,10 @@
   .dic-tag-gr { background: #4a5a78; }
   .dic-tag-pt { background: #c2621a; }
 
+  /* Botões do menu de seleção com ícone + texto */
+  .sel-acoes .botao { display: inline-flex; align-items: center; gap: 6px; }
+  .sel-acoes .botao .icone { width: 16px; height: 16px; flex: 0 0 auto; }
+
   /* Linha do Lema no card do português: o lema em destaque (vermelho) e a
      definição dele em tom normal, para a pessoa ver a distinção. */
   #pe-l .lema-base { color: var(--rubrica); font-weight: 700; }
@@ -508,6 +512,7 @@
   <symbol id="i-sair" viewBox="0 0 24 24"><path d="M12 3v9" stroke-linecap="round"/><path d="M6.4 7a8 8 0 1 0 11.2 0" stroke-linecap="round"/></symbol>
   <symbol id="i-referencias" viewBox="0 0 24 24"><circle cx="6" cy="5" r="2.2"/><circle cx="6" cy="19" r="2.2"/><circle cx="18" cy="12" r="2.2"/><path d="M6 7.2v9.6M8.1 5H12a4 4 0 0 1 4 4v.8M8.1 19H12a4 4 0 0 0 4-4v-.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="i-compartilhar" viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4" stroke-linecap="round"/></symbol>
+  <symbol id="i-copiar" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h8" stroke-linecap="round" stroke-linejoin="round" fill="none"/></symbol>
   <symbol id="i-backup" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke-linecap="round" stroke-linejoin="round"/><path d="M7 10l5 5 5-5" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 15V3" stroke-linecap="round"/></symbol>
   <symbol id="i-fixar" viewBox="0 0 24 24"><path d="M9 3h6l-1 7 3 3v2H7v-2l3-3z" stroke-linejoin="round"/><path d="M12 15v6" stroke-linecap="round"/></symbol>
   <symbol id="i-lixeira" viewBox="0 0 24 24"><path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13M10 11v6M14 11v6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
@@ -637,13 +642,13 @@
       <svg class="icone"><use href="#i-fechar"/></svg></button>
   </div>
   <div class="sel-acoes">
-    <button class="botao secundario" id="sel-tocar">Tocar</button>
-    <button class="botao secundario" id="sel-copiar">Copiar</button>
-    <button class="botao secundario" id="sel-compartilhar">Compartilhar</button>
-    <button class="botao secundario" id="sel-estudo">Salvar estudo</button>
-    <button class="botao secundario" id="sel-lista">Adicionar à lista</button>
-    <button class="botao secundario" id="sel-anotar">Anotar</button>
-    <button class="botao" id="sel-marcar">Marcar</button>
+    <button class="botao secundario" id="sel-tocar"><svg class="icone"><use href="#i-ouvir"/></svg><span>Tocar</span></button>
+    <button class="botao secundario" id="sel-copiar"><svg class="icone"><use href="#i-copiar"/></svg><span>Copiar</span></button>
+    <button class="botao secundario" id="sel-compartilhar"><svg class="icone"><use href="#i-compartilhar"/></svg><span>Compartilhar</span></button>
+    <button class="botao secundario" id="sel-estudo"><svg class="icone"><use href="#i-estudo"/></svg><span>Salvar estudo</span></button>
+    <button class="botao secundario" id="sel-lista"><svg class="icone"><use href="#i-lista"/></svg><span>Adicionar à lista</span></button>
+    <button class="botao secundario" id="sel-anotar"><svg class="icone"><use href="#i-nota"/></svg><span>Anotar</span></button>
+    <button class="botao" id="sel-marcar"><svg class="icone"><use href="#i-marcador"/></svg><span>Marcar</span></button>
   </div>
   <div class="sel-cores fechada" id="sel-cores"></div>
 </div>
