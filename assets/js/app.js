@@ -7422,11 +7422,16 @@ const App = {
       barra.classList.remove('aberta');
       barra.setAttribute('aria-hidden', 'true');
       document.body.classList.remove('selecionando');
-      document.getElementById('sel-cores').classList.add('fechada');
+      { const _c=document.getElementById('sel-cores'); if(_c){_c.classList.add('fechada'); _c.style.display='none';} }
+      const fab = document.getElementById('mais-selecao');
+      if (fab) fab.style.bottom = '';   // o "+" desce, feche por onde for
       return;
     }
 
     const n = sel.pedacos.length;
+    // o menu Marcar (cores) sempre começa FECHADO numa nova seleção — só abre
+    // quando a pessoa toca em "Marcar".
+    { const _c=document.getElementById('sel-cores'); if(_c){_c.classList.add('fechada'); _c.style.display='none';} }
     const conta = sel.faixa ? 'seção' : `${n} versículo${n > 1 ? 's' : ''}`;
     document.getElementById('sel-ref').innerHTML =
       `${this.referenciaDaSelecao(sel.pedacos)}
@@ -7607,7 +7612,7 @@ const App = {
    *  grupo e o modo ligados (só recolhe a paleta de cores). */
   encerrarAcao() {
     if (this.multiAtivo || this.multiSelecao) {
-      document.getElementById('sel-cores').classList.add('fechada');
+      { const _c=document.getElementById('sel-cores'); if(_c){_c.classList.add('fechada'); _c.style.display='none';} }
       return;
     }
     this.fecharSelecao();
@@ -7722,11 +7727,19 @@ const App = {
     this.avisoRapido('Copiado — cole onde quiser');
   },
 
+  _fecharCores() {
+    const caixa = document.getElementById('sel-cores');
+    if (!caixa) return;
+    caixa.classList.add('fechada');
+    caixa.style.display = 'none';   // força, independente do CSS
+    this._reposicionarMaisSelecao();
+  },
+
   abrirCoresDaSelecao() {
     const caixa = document.getElementById('sel-cores');
-    if (!caixa.classList.contains('fechada')) {
-      caixa.classList.add('fechada');
-      this._reposicionarMaisSelecao();   // barra encolheu → reposiciona o "+"
+    // se está VISÍVEL (não importa a classe), fecha e sai (toggle)
+    if (caixa.style.display !== 'none' && !caixa.classList.contains('fechada')) {
+      this._fecharCores();
       return;
     }
 
@@ -7741,7 +7754,8 @@ const App = {
     }
     const atual = postos.size === 1 ? [...postos][0] : null;
 
-    caixa.innerHTML = Marcadores.lista().map(m => `<button data-sm="${m.id}"
+    caixa.innerHTML = `<span class="sel-cores-x" id="sel-cores-x" role="button" aria-label="Fechar">✕</span>`
+      + Marcadores.lista().map(m => `<button data-sm="${m.id}"
         class="opcao-marcador ${m.id === atual ? 'ativa' : ''}">
         <span class="bolha ${m.id === atual ? 'com-x' : ''}"
           style="background:${m.cor}"></span>
@@ -7754,7 +7768,11 @@ const App = {
           <span class="bolha bolha-mais">+</span><span class="opcao-marcador-nome">Novo marcador</span></button>`;
 
     caixa.classList.remove('fechada');
+    caixa.style.display = '';   // volta a aparecer (limpa o none forçado)
     this._reposicionarMaisSelecao();   // barra cresceu → sobe o "+"
+
+    { const x = document.getElementById('sel-cores-x');
+      if (x) x.onclick = (e) => { e.preventDefault(); e.stopPropagation(); this._fecharCores(); }; }
 
     caixa.querySelectorAll('[data-sm]').forEach(el => {
       el.onclick = () => {
