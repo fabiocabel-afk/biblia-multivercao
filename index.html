@@ -172,6 +172,17 @@
   .sel-acoes .botao { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
   .sel-acoes .botao .icone { width: 16px; height: 16px; flex: 0 0 auto; }
 
+  /* X para fechar o menu de marcadores (span, foge do estilo .sel-cores button) */
+  #sel-cores.fechada { display: none !important; }   /* vence o .sel-cores{display:grid} */
+  #sel-cores { position: relative; }
+  .sel-cores-x {
+    position: absolute; top: 4px; right: 8px; z-index: 5;
+    width: 26px; height: 26px; display: inline-flex; align-items: center;
+    justify-content: center; border-radius: 50%; cursor: pointer;
+    font-size: 15px; color: var(--tinta-fraca);
+    background: color-mix(in srgb, var(--tinta) 12%, transparent);
+  }
+
   /* Linha do Lema no card do português: o lema em destaque (vermelho) e a
      definição dele em tom normal, para a pessoa ver a distinção. */
   #pe-l .lema-base { color: var(--rubrica); font-weight: 700; }
@@ -651,7 +662,7 @@
     <button class="botao secundario" id="sel-anotar"><svg class="icone"><use href="#i-nota"/></svg><span>Anotar</span></button>
     <button class="botao" id="sel-marcar"><svg class="icone"><use href="#i-marcador"/></svg><span>Marcar</span></button>
   </div>
-  <div class="sel-cores fechada" id="sel-cores"></div>
+  <div class="sel-cores fechada" id="sel-cores" style="display:none"></div>
 </div>
 
 <!-- barra do player de leitura em voz (modo ouvir). Aparece quando o modo
