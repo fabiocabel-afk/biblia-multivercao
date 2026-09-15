@@ -38,6 +38,8 @@
 <meta name="twitter:description" content="Um espaço para promover a fé e o estudo da Palavra.">
 <meta name="twitter:image" content="https://fabiocabel-afk.github.io/biblia-multivercao/assets/icons/icone-512.png">
 <link rel="stylesheet" href="assets/css/estilo.css">
+<link rel="stylesheet" href="assets/css/leaflet.css">
+<link rel="stylesheet" href="assets/css/mapa.css">
 <style>
   /* Destaque do PRIMEIRO versículo de cada nota: esfera avermelhada preenchida,
      com o ícone claro dentro (cores invertidas em relação ao sinal comum). Serve
@@ -531,6 +533,7 @@
   <symbol id="i-fechar" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" stroke-linecap="round"/></symbol>
   <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="i-dicionario" viewBox="0 0 24 24"><path d="M5 4h9a3 3 0 0 1 3 3v13a2 2 0 0 0-2-2H5z" stroke-linejoin="round"/><path d="M8 8.5h5M8 11.5h5" stroke-linecap="round"/></symbol>
+  <symbol id="i-mapa" viewBox="0 0 24 24"><path d="M9 4L3 6.5v13.5L9 17.5l6 2.5 6-2.5V4l-6 2.5z" stroke-linejoin="round"/><path d="M9 4v13.5M15 6.5V20" stroke-linecap="round"/></symbol>
   <symbol id="i-subtitulos" viewBox="0 0 24 24"><path d="M4 6h11M4 18h11" stroke-linecap="round"/><path d="M4 12h16" stroke-linecap="round" stroke-width="2.4"/></symbol>
   <symbol id="i-antes" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="i-desfazer" viewBox="0 0 24 24"><path d="M9 7L4 12l5 5" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 12h9a6 6 0 0 1 6 6v1" stroke-linecap="round" stroke-linejoin="round"/></symbol>
@@ -598,6 +601,7 @@
   <button data-menu="caderno"><svg class="icone"><use href="#i-caderno"/></svg><span>Anotação</span></button>
   <button data-menu="referencias"><svg class="icone"><use href="#i-referencias"/></svg><span>Referências cruzadas</span></button>
   <button data-menu="dicionario"><svg class="icone"><use href="#i-dicionario"/></svg><span>Dicionários</span></button>
+  <button data-menu="mapa"><svg class="icone"><use href="#i-mapa"/></svg><span>Mapa</span></button>
   <button data-menu="subtitulos"><svg class="icone"><use href="#i-subtitulos"/></svg><span>Subtítulos</span></button>
   <button data-menu="ouvir"><svg class="icone"><use href="#i-ouvir"/></svg><span>Ouvir</span></button>
   <button data-menu="perfil"><svg class="icone"><use href="#i-usuario"/></svg><span>Perfil</span></button>
@@ -1088,6 +1092,83 @@
   </footer>
 </aside>
 
+<!-- Mapa / Atlas bíblico: três seções empilhadas que competem pela tela -->
+<aside class="painel" id="painel-mapa" aria-hidden="true">
+  <header>
+    <h2>Mapa</h2>
+    <button data-fechar aria-label="Fechar"><svg class="icone"><use href="#i-fechar"/></svg></button>
+  </header>
+  <div class="corpo">
+    <div class="mapa-barra">
+      <div class="mapa-barra-linha">
+        <div class="mapa-modo" role="group" aria-label="Buscar por">
+          <button type="button" class="mapa-modo-bt ativo" data-modo="cidade">Cidade</button>
+          <button type="button" class="mapa-modo-bt" data-modo="vers">Versículo</button>
+        </div>
+        <div class="mapa-busca">
+          <svg class="icone mapa-lupa"><use href="#i-busca"/></svg>
+          <input type="text" id="mapa-busca-campo" placeholder="Buscar cidade…"
+            autocomplete="off" autocapitalize="off" spellcheck="false">
+          <button id="mapa-busca-limpar" class="mapa-limpar" aria-label="Limpar" hidden>
+            <svg class="icone"><use href="#i-fechar"/></svg></button>
+        </div>
+      </div>
+      <div class="mapa-barra-linha">
+        <select id="mapa-livro" class="mapa-sel mapa-sel-livro" aria-label="Filtrar por livro">
+          <option value="">Todos os livros</option>
+        </select>
+        <select id="mapa-raio" class="mapa-sel mapa-sel-raio" aria-label="Raio de aproximação">
+          <option value="50">50 km</option>
+          <option value="100">100 km</option>
+          <option value="200" selected>200 km</option>
+          <option value="300">300 km</option>
+          <option value="500">500 km</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="mapa-pilha">
+      <section class="mapa-secao" id="mapa-sec-mapa">
+        <div class="mapa-cab" data-secao="mapa" role="button" tabindex="0" aria-expanded="true">
+          <span class="mapa-cab-titulo">Mapa</span>
+          <label class="mapa-multi" title="Permitir selecionar várias cidades">
+            <input type="checkbox" id="mapa-multi-chk">
+            <span class="mapa-multi-cx" aria-hidden="true"></span>
+            <span class="mapa-multi-tx">Múltipla</span>
+          </label>
+          <svg class="mapa-seta" viewBox="0 0 24 24"><path d="M6 15l6-6 6 6"/></svg>
+        </div>
+        <div class="mapa-conteudo" style="position:relative">
+          <div id="mapa-canvas"></div>
+          <div class="mapa-capsulas" id="mapa-capsulas"></div>
+          <div class="mapa-aviso-net" id="mapa-aviso-net" hidden>Sem internet: o fundo do mapa não carrega, mas os pontos continuam aparecendo.</div>
+        </div>
+      </section>
+
+      <section class="mapa-secao" id="mapa-sec-cidades">
+        <div class="mapa-cab" data-secao="cidades" role="button" tabindex="0" aria-expanded="true">
+          <span class="mapa-cab-titulo">Cidades</span>
+          <span class="mapa-cab-conta" id="mapa-conta-cidades" hidden>0</span>
+          <svg class="mapa-seta" viewBox="0 0 24 24"><path d="M6 15l6-6 6 6"/></svg>
+        </div>
+        <div class="mapa-conteudo">
+          <ul class="mapa-lista" id="mapa-lista-cidades"><div class="mapa-carregando">Carregando localidades…</div></ul>
+        </div>
+      </section>
+
+      <section class="mapa-secao" id="mapa-sec-vers">
+        <div class="mapa-cab" data-secao="vers" role="button" tabindex="0" aria-expanded="true">
+          <span class="mapa-cab-titulo">Versículos</span>
+          <svg class="mapa-seta" viewBox="0 0 24 24"><path d="M6 15l6-6 6 6"/></svg>
+        </div>
+        <div class="mapa-conteudo">
+          <div id="mapa-vers-corpo"><div class="mapa-vazio">Escolha uma localidade para ver os versículos.</div></div>
+        </div>
+      </section>
+    </div>
+  </div>
+</aside>
+
 <div class="refs-troca-veu" id="refs-troca-veu" aria-hidden="true">
   <div class="refs-troca" role="dialog" aria-modal="true" aria-label="Trocar referência">
     <h3>Trocar referência</h3>
@@ -1139,6 +1220,8 @@
 <script src="assets/js/perfil-foto.js"></script>
 <script src="assets/js/exportacao.js"></script>
 <script src="assets/js/importacao.js"></script>
+<script src="assets/js/leaflet.js"></script>
 <script src="assets/js/app.js"></script>
+<script src="assets/js/mapa.js"></script>
 </body>
 </html>

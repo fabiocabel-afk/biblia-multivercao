@@ -19,7 +19,7 @@
 /* A casca sobe de versao a cada mudanca no app, para o navegador nao servir a
  * versao antiga. Os textos biblicos ficam numa versao propria e estavel: eles
  * nunca mudam, e nao ha por que rebaixar tudo por causa de um ajuste de tela. */
-const CASCA = 'casca-biblia-v194-remove-nenhum-denominacao';
+const CASCA = 'casca-biblia-v197-mapa-selecao';
 const TEXTOS = 'textos-biblia-v1';
 
 const ESSENCIAIS = [
@@ -27,6 +27,8 @@ const ESSENCIAIS = [
   './index.html',
   './manifest.json',
   './assets/css/estilo.css',
+  './assets/css/leaflet.css',
+  './assets/css/mapa.css',
   './assets/img/qrcode.svg',
   './assets/fonts/eb-garamond-latin-400-normal.woff2',
   './assets/fonts/eb-garamond-latin-400-italic.woff2',
@@ -45,10 +47,13 @@ const ESSENCIAIS = [
   './assets/js/perfil-foto.js',
   './assets/js/exportacao.js',
   './assets/js/importacao.js',
+  './assets/js/leaflet.js',
   './assets/js/app.js',
+  './assets/js/mapa.js',
   './data/meta/versoes.json',
   './data/meta/estrutura.json',
   './data/meta/numeracao.json',
+  './data/meta/localidades.json',
 ];
 
 self.addEventListener('install', evento => {

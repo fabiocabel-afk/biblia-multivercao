@@ -8145,6 +8145,7 @@ const App = {
       referencias: () => this.abrirReferenciasCruzadas(),
       ouvir: () => this.iniciarOuvir(),
       dicionario: () => { this.abrirDicionario(); },
+      mapa: () => { Mapa.abrir(); },
       subtitulos: () => { this.abrirSubtitulos(); },
       perfil: () => { this._modoPerfil = 'view'; this.desenharPerfil(); this.abrir('painel-perfil'); },
       ajustes: () => { this.dobraA = null; this.desenharAjustes(); this.abrir('painel-ajustes'); },
