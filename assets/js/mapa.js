@@ -232,20 +232,22 @@ const Mapa = {
       busca.value = ''; limpar.hidden = true; this._termo = ''; this._cidadeAtual = null; this._render(); busca.focus();
     });
 
-    // alternador Cidade / Versículo
-    document.querySelectorAll('#painel-mapa .mapa-modo-bt').forEach(bt => {
-      bt.addEventListener('click', () => {
-        if (this._modo === bt.dataset.modo) return;
-        this._modo = bt.dataset.modo;
-        document.querySelectorAll('#painel-mapa .mapa-modo-bt').forEach(x =>
-          x.classList.toggle('ativo', x.dataset.modo === this._modo));
+    // modo de busca: combo Cidade/Versículo (o Seletor desenha no tema do app)
+    const selModo = document.getElementById('mapa-modo');
+    if (selModo) {
+      selModo.addEventListener('change', () => {
+        this._modo = selModo.value;
         busca.placeholder = this._modo === 'vers'
           ? 'Buscar por livro/versículo, ex.: Jonas 1'
           : 'Buscar cidade…';
         this._cidadeAtual = null;
         this._render();
       });
-    });
+    }
+
+    // X: limpa todos os filtros de uma vez
+    const btnLimparTudo = document.getElementById('mapa-limpar-tudo');
+    if (btnLimparTudo) btnLimparTudo.addEventListener('click', () => this._limparTudo());
 
     // filtro de livros: Todos + separadores por testamento + livros presentes
     const presentes = new Set();
@@ -269,6 +271,8 @@ const Mapa = {
     selLivro.addEventListener('change', () => {
       if (selLivro.value === '__') { selLivro.value = this._livro; if (selLivro._sincronizarTema) selLivro._sincronizarTema(); return; }
       this._livro = selLivro.value;
+      this._versFiltro = null;   // trocar de livro solta a trava de versículo…
+      this._selecao = [];        // …e a seleção de cidades, para carregar o livro todo
       this._cidadeAtual = null;
       this._render();
     });
@@ -296,6 +300,22 @@ const Mapa = {
         }
       });
     }
+  },
+
+  /* Limpa todos os filtros: busca, livro, versículo e seleção de cidades. */
+  _limparTudo() {
+    this._termo = '';
+    this._livro = '';
+    this._versFiltro = null;
+    this._selecao = [];
+    this._cidadeAtual = null;
+    const busca = document.getElementById('mapa-busca-campo');
+    const limpar = document.getElementById('mapa-busca-limpar');
+    if (busca) busca.value = '';
+    if (limpar) limpar.hidden = true;
+    const selLivro = document.getElementById('mapa-livro');
+    if (selLivro) { selLivro.value = ''; if (selLivro._sincronizarTema) selLivro._sincronizarTema(); }
+    this._render();
   },
 
   /* --------------------------------------------------------- seções retráteis */

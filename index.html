@@ -1101,10 +1101,10 @@
   <div class="corpo">
     <div class="mapa-barra">
       <div class="mapa-barra-linha">
-        <div class="mapa-modo" role="group" aria-label="Buscar por">
-          <button type="button" class="mapa-modo-bt ativo" data-modo="cidade">Cidade</button>
-          <button type="button" class="mapa-modo-bt" data-modo="vers">Versículo</button>
-        </div>
+        <select id="mapa-modo" class="mapa-sel mapa-sel-modo" aria-label="Buscar por">
+          <option value="cidade">Cidade</option>
+          <option value="vers">Versículo</option>
+        </select>
         <div class="mapa-busca">
           <svg class="icone mapa-lupa"><use href="#i-busca"/></svg>
           <input type="text" id="mapa-busca-campo" placeholder="Buscar cidade…"
@@ -1112,6 +1112,9 @@
           <button id="mapa-busca-limpar" class="mapa-limpar" aria-label="Limpar" hidden>
             <svg class="icone"><use href="#i-fechar"/></svg></button>
         </div>
+        <button id="mapa-limpar-tudo" class="mapa-xtudo" aria-label="Limpar todos os filtros" title="Limpar todos os filtros">
+          <svg class="icone"><use href="#i-fechar"/></svg>
+        </button>
       </div>
       <div class="mapa-barra-linha">
         <select id="mapa-livro" class="mapa-sel mapa-sel-livro" aria-label="Filtrar por livro">
