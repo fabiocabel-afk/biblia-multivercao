@@ -389,3 +389,8 @@
   border-color: var(--rubrica);
   color: var(--rubrica);
 }
+.mapa-vers-chip.ativo {
+  background: var(--rubrica);
+  border-color: var(--rubrica);
+  color: #fff;
+}

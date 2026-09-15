@@ -28,6 +28,8 @@ const Mapa = {
   _modo: 'cidade',            // busca: 'cidade' | 'vers'
   _multi: false,             // seleção múltipla de cidades
   _selecao: [],              // ids selecionados, na ordem do clique
+  _versFiltro: null,         // {code,cap,vers} quando um versículo filtra as cidades
+  _versKey: null,            // chave do índice de versículos atual (evita redesenho)
   _bookByCode: null,
 
   /* Canone padrão: ordem de leitura, nome e abreviação de reserva + testamento.
@@ -272,7 +274,10 @@ const Mapa = {
     });
 
     selRaio.addEventListener('change', () => {
-      if (this._cidadeAtual) this._centralizar(this._cidadeAtual);
+      if (this._selecao.length === 1) {
+        const c = this._locais.find(x => x.id === this._selecao[0]);
+        if (c) this._centralizar(c);
+      }
     });
 
     // seleção múltipla (checkbox na barra do mapa, à esquerda da seta)
@@ -364,6 +369,10 @@ const Mapa = {
   _cidadesFiltradas() {
     let out = this._locais;
     if (this._livro) out = out.filter(l => l._livros.has(this._livro));
+    if (this._versFiltro) {
+      const f = this._versFiltro;
+      out = out.filter(l => l._refs.some(r => r.code === f.code && r.cap === f.cap && r.vers === f.vers));
+    }
     const termo = this._norm(this._termo);
     if (termo) {
       if (this._modo === 'vers') out = out.filter(l => l._refs.some(r => r._t.includes(termo)));
@@ -378,7 +387,7 @@ const Mapa = {
     this._desenharMarcadores(lista);
     this._desenharLista(lista);
     this._ajustarVista(lista);
-    this._renderVersiculos(lista);
+    this._renderVersiculos();
     // conta no cabeçalho
     const conta = document.getElementById('mapa-conta-cidades');
     if (conta) { conta.textContent = lista.length; conta.hidden = false; }
@@ -438,12 +447,28 @@ const Mapa = {
   },
 
   /* Enquadra a vista: uma cidade única usa o raio; várias usam fitBounds. */
+  /* Vista natural do conjunto filtrado (sem seleção): enquadra todas as cidades. */
   _ajustarVista(lista) {
     if (!this._map || !lista.length) return;
-    if (this._cidadeAtual) return;   // seleção cuida da vista
-    if (lista.length === 1) { this._centralizar(lista[0]); return; }
-    const pts = lista.map(l => [l.lat, l.lon]).filter(p => isFinite(p[0]) && isFinite(p[1]));
+    if (this._selecao.length) return;   // com seleção, a vista segue o foco
+    if (lista.length === 1) { this._map.setView([Number(lista[0].lat), Number(lista[0].lon)], 9); return; }
+    const pts = lista.map(l => [Number(l.lat), Number(l.lon)]).filter(p => isFinite(p[0]) && isFinite(p[1]));
     if (pts.length) this._map.fitBounds(L.latLngBounds(pts).pad(0.15));
+  },
+
+  /* Vista conforme a seleção: 1 cidade -> raio escolhido; várias -> enquadra as
+   * selecionadas; nenhuma -> volta ao natural do filtro externo (nunca congela). */
+  _ajustarVistaSelecao() {
+    if (!this._map) return;
+    if (this._selecao.length === 0) { this._ajustarVista(this._cidadesFiltradas()); return; }
+    if (this._selecao.length === 1) {
+      const c = this._locais.find(x => x.id === this._selecao[0]);
+      if (c) this._centralizar(c);
+      return;
+    }
+    const pts = this._selecao.map(id => this._locais.find(x => x.id === id)).filter(Boolean)
+      .map(l => [Number(l.lat), Number(l.lon)]).filter(p => isFinite(p[0]) && isFinite(p[1]));
+    if (pts.length) this._map.fitBounds(L.latLngBounds(pts).pad(0.2));
   },
 
   /* ------------------------------------------------ seleção (toggle) de cidade */
@@ -452,7 +477,7 @@ const Mapa = {
   _clicarCidade(loc) {
     const i = this._selecao.indexOf(loc.id);
     if (i >= 0) {
-      // desmarcar (sem recentralizar)
+      // desmarcar
       this._selecao.splice(i, 1);
       if (this._cidadeAtual && this._cidadeAtual.id === loc.id) {
         const ult = this._selecao[this._selecao.length - 1];
@@ -462,8 +487,8 @@ const Mapa = {
       if (!this._multi) this._selecao = [];   // seleção única substitui
       this._selecao.push(loc.id);
       this._cidadeAtual = loc;
-      this._centralizar(loc);
     }
+    this._ajustarVistaSelecao();
     this._desenharMarcadores(this._cidadesFiltradas());
     this._renderVersiculos();
     this._marcarListaAtiva();
@@ -523,36 +548,69 @@ const Mapa = {
   },
 
   /* ------------------------------------------------------ versículos (painel) */
-  /* Independente das cidades: cidade em foco -> versículos dela; senão, busca
-   * por versículo ou livro selecionado -> as passagens correspondentes; senão,
-   * uma dica. Assim dá para navegar por versículo mesmo sem abrir as cidades. */
-  _renderVersiculos(lista) {
-    lista = lista || this._cidadesFiltradas();
+  /* Sempre visível — os versículos também são filtro. Cidade em foco -> os dela
+   * (e clicar abre a leitura); sem cidade -> índice (livro, busca ou TODOS) e
+   * clicar num versículo filtra as cidades acima. Cacheia a chave do índice
+   * porque redesenhar milhares de chips a cada tecla travaria. */
+  _renderVersiculos() {
+    let key, montar;
     if (this._cidadeAtual) {
       const c = this._cidadeAtual;
-      const outros = (c.v || []).filter(n => n !== c.n).join('; ');
-      this._pintarVersiculos(c.n, outros, c._refs);
-      return;
+      key = 'c:' + c.id;
+      montar = () => this._pintarVersiculos(c.n, (c.v || []).filter(n => n !== c.n).join('; '), c._refs);
+    } else {
+      const termo = this._norm(this._termo);
+      if (this._modo === 'vers' && termo) {
+        key = 's:' + termo;
+        montar = () => this._pintarVersiculos('Resultados', 'toque num versículo para filtrar as cidades',
+          this._reunirRefs(l => l._refs.filter(r => r._t.includes(termo))));
+      } else if (this._livro) {
+        key = 'b:' + this._livro;
+        montar = () => this._pintarVersiculos(this._nomeLivro(this._livro), 'toque num versículo para filtrar as cidades',
+          this._reunirRefs(l => (l._livros.has(this._livro) ? l._refs.filter(r => r.code === this._livro) : [])));
+      } else {
+        key = 'all';
+        montar = () => this._pintarVersiculos('Todos os versículos', 'toque num versículo para filtrar as cidades',
+          this._reunirRefs(l => l._refs));
+      }
     }
-    const termo = this._norm(this._termo);
+    if (key !== this._versKey) { this._versKey = key; montar(); }
+    this._marcarVersAtivo();
+  },
+
+  /* Reúne referências (sem repetição) de todas as localidades por um seletor. */
+  _reunirRefs(sel) {
     const vistos = new Set();
-    const refs = [];
-    const push = r => {
-      const k = r.code + ' ' + r.cap + ':' + r.vers;
-      if (vistos.has(k)) return; vistos.add(k); refs.push(r);
-    };
-    if (this._modo === 'vers' && termo) {
-      for (const c of lista) for (const r of c._refs) if (r._t.includes(termo)) push(r);
-      this._pintarVersiculos('Resultados', 'busca por versículo: “' + this._termo + '”', refs);
-      return;
+    const out = [];
+    for (const l of this._locais) {
+      for (const r of sel(l)) {
+        const k = r.code + ' ' + r.cap + ':' + r.vers;
+        if (vistos.has(k)) continue;
+        vistos.add(k); out.push(r);
+      }
     }
-    if (this._livro) {
-      for (const c of lista) for (const r of c._refs) if (r.code === this._livro) push(r);
-      this._pintarVersiculos(this._nomeLivro(this._livro), 'todas as passagens', refs);
-      return;
-    }
+    return out;
+  },
+
+  /* Marca o versículo que está filtrando as cidades (sem redesenhar o índice). */
+  _marcarVersAtivo() {
     const box = document.getElementById('mapa-vers-corpo');
-    if (box) box.innerHTML = '<div class="mapa-vazio">Escolha uma cidade, selecione um livro ou use a busca por versículo.</div>';
+    if (!box) return;
+    const f = this._versFiltro;
+    box.querySelectorAll('.mapa-vers-chip').forEach(ch => {
+      const on = f && ch.dataset.code === f.code && +ch.dataset.cap === f.cap && +ch.dataset.vers === f.vers;
+      ch.classList.toggle('ativo', !!on);
+    });
+  },
+
+  /* Liga/desliga o filtro por um versículo (mostra as cidades daquela passagem). */
+  _togglarFiltroVersiculo(code, cap, vers) {
+    const f = this._versFiltro;
+    if (f && f.code === code && f.cap === cap && f.vers === vers) this._versFiltro = null;
+    else this._versFiltro = { code, cap, vers };
+    this._selecao = [];        // o filtro por versículo age no estado sem cidade
+    this._cidadeAtual = null;
+    this._render();
   },
 
   /* Desenha um título + os versículos agrupados por livro (ordem canônica). */
@@ -566,9 +624,8 @@ const Mapa = {
       box.innerHTML = html;
       return;
     }
-    const LIMITE = 800;
-    const cortado = refs.length > LIMITE;
-    const usar = cortado ? refs.slice(0, LIMITE) : refs;
+    const LIMITE = 8000;
+    const usar = refs.length > LIMITE ? refs.slice(0, LIMITE) : refs;
     const porLivro = new Map();
     for (const r of usar) {
       if (!porLivro.has(r.code)) porLivro.set(r.code, []);
@@ -585,7 +642,6 @@ const Mapa = {
         <div class="mapa-vers-chips">${chips}</div>
       </div>`;
     }
-    if (cortado) html += `<div class="mapa-vazio">Mostrando as primeiras ${LIMITE} passagens — refine a busca ou o livro.</div>`;
     box.innerHTML = html;
 
     if (!box._ligado) {
@@ -593,7 +649,9 @@ const Mapa = {
       box.addEventListener('click', (e) => {
         const chip = e.target.closest('.mapa-vers-chip');
         if (!chip) return;
-        this._irParaVersiculo(chip.dataset.code, parseInt(chip.dataset.cap, 10), parseInt(chip.dataset.vers, 10));
+        const code = chip.dataset.code, cap = parseInt(chip.dataset.cap, 10), vers = parseInt(chip.dataset.vers, 10);
+        if (this._cidadeAtual) this._irParaVersiculo(code, cap, vers);   // lendo cidade -> abre a leitura
+        else this._togglarFiltroVersiculo(code, cap, vers);             // índice -> filtra as cidades
       });
     }
   },
