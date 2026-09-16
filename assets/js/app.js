@@ -225,6 +225,7 @@ const App = {
 
     this.atualizarBarra();
     this._montarBotaoOuvirFolha();
+    this._montarBotaoMapaFolha();
     Pergaminho.folha(code, cap);   // cada capítulo tem a sua folha no estilo Histórico
     this._aplicarDeslize(folha, desliza);   // transição lateral ao trocar de capítulo
     window.scrollTo(0, 0);
@@ -8756,6 +8757,33 @@ const App = {
       + '<circle cx="16" cy="16" r="14"/><path d="M13 10 L23 16 L13 22 Z"/></svg>';
     b.addEventListener('click', (e) => { e.preventDefault(); this.iniciarOuvir(); });
     folha.insertBefore(b, folha.firstChild);
+  },
+
+  /* Ícone do mapa no canto superior ESQUERDO da folha (espelha o "ouvir" da
+   * direita). Só no modo "um capítulo por página" e só quando ESTE capítulo tem
+   * localidades. Clicar abre a janela do mapa do capítulo. */
+  _montarBotaoMapaFolha() {
+    const folha = document.getElementById('folha');
+    if (!folha) return;
+    if (Prefs.get('paginaModo') === 'continuo') return;   // no contínuo não entra
+    const velho = folha.querySelector('.btn-mapa-folha');
+    if (velho) velho.remove();
+    const code = this.code, cap = this.cap;
+    const criar = () => {
+      if (this.code !== code || this.cap !== cap) return;   // já trocou de capítulo
+      if (!Mapa.temCapitulo(code, cap)) return;             // sem mapa neste capítulo
+      if (folha.querySelector('.btn-mapa-folha')) return;
+      const b = document.createElement('button');
+      b.className = 'btn-mapa-folha';
+      b.type = 'button';
+      b.title = 'Mapa deste capítulo';
+      b.setAttribute('aria-label', 'Mapa deste capítulo');
+      b.innerHTML = '<svg class="icone" aria-hidden="true"><use href="#i-mapa"/></svg>';
+      b.addEventListener('click', (e) => { e.preventDefault(); Mapa.abrirCapitulo(code, cap); });
+      folha.insertBefore(b, folha.firstChild);
+    };
+    if (Mapa.temCapitulo(code, cap)) { criar(); return; }
+    if (Mapa.garantirDados) Mapa.garantirDados().then(() => criar());
   },
 
   iniciarOuvir({ comecarEm = null } = {}) {

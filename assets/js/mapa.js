@@ -31,6 +31,10 @@ const Mapa = {
   _versFiltro: null,         // {code,cap,vers} quando um versículo filtra as cidades
   _versKey: null,            // chave do índice de versículos atual (evita redesenho)
   _bookByCode: null,
+  _locaisProntos: false,     // dados carregados (compartilhado painel/leitura)
+  _carregandoDados: null,
+  _capIndex: null,           // Set "CODE|CAP" com localidades (para a leitura)
+  _capMap: null, _capGrupo: null, _capMarcadores: null, _capSel: null, _capCtx: null, _capPop: null, _capPts: null,
 
   /* Canone padrão: ordem de leitura, nome e abreviação de reserva + testamento.
    * O nome exibido é sempre o da VERSÃO ATUAL quando o app souber (Dados);
@@ -176,28 +180,11 @@ const Mapa = {
   },
 
   async _garantir() {
-    if (this._pronto) {
-      // painel reaberto: o Leaflet precisa remedir o container que voltou a existir
-      this._remedir();
-      return;
-    }
+    if (this._pronto) { this._remedir(); return; }   // painel reaberto: remede o container
     if (this._carregando) return;
     this._carregando = true;
     try {
-      const resp = await fetch('data/meta/localidades.json', { cache: 'force-cache' });
-      if (!resp.ok) throw new Error('HTTP ' + resp.status);
-      const dados = await resp.json();
-      this._locais = (dados.locais || []).map(l => {
-        const refs = (l.r || []).map(r => this._prepRef(r)).filter(Boolean);
-        return {
-          ...l,
-          lat: Number(l.lat),
-          lon: Number(l.lon),
-          _busca: this._norm([l.n, ...(l.v || [])].join(' ')),
-          _refs: refs,
-          _livros: new Set(refs.map(r => r.code)),
-        };
-      });
+      await this._carregarLocais();
       this._montarControles();
       this._iniciarMapa();
       this._render();
@@ -208,6 +195,42 @@ const Mapa = {
     } finally {
       this._carregando = false;
     }
+  },
+
+  /* Carrega as localidades uma única vez — compartilhado pelo painel, pelo índice
+   * de capítulos (leitura) e pelo mapa por capítulo. Monta o índice CODE|CAP. */
+  _carregarLocais() {
+    if (this._locaisProntos) return Promise.resolve(true);
+    if (this._carregandoDados) return this._carregandoDados;
+    this._carregandoDados = fetch('data/meta/localidades.json', { cache: 'force-cache' })
+      .then(resp => { if (!resp.ok) throw new Error('HTTP ' + resp.status); return resp.json(); })
+      .then(dados => {
+        this._locais = (dados.locais || []).map(l => {
+          const refs = (l.r || []).map(r => this._prepRef(r)).filter(Boolean);
+          return {
+            ...l,
+            lat: Number(l.lat),
+            lon: Number(l.lon),
+            _busca: this._norm([l.n, ...(l.v || [])].join(' ')),
+            _refs: refs,
+            _livros: new Set(refs.map(r => r.code)),
+          };
+        });
+        this._capIndex = new Set();
+        for (const l of this._locais) for (const r of l._refs) this._capIndex.add(r.code + '|' + r.cap);
+        this._locaisProntos = true;
+        return true;
+      })
+      .catch(e => { this._carregandoDados = null; throw e; });
+    return this._carregandoDados;
+  },
+
+  /* Pré-carrega os dados sem abrir o painel (a leitura usa para saber se há mapa). */
+  garantirDados() { return this._carregarLocais().catch(() => false); },
+
+  /* Existe alguma localidade apontando para este capítulo? */
+  temCapitulo(code, cap) {
+    return !!(this._capIndex && this._capIndex.has(code + '|' + Number(cap)));
   },
 
   /* ------------------------------------------------------- controles da barra */
@@ -761,6 +784,162 @@ const Mapa = {
   _fecharPopupVersiculo() {
     if (this._pop) this._pop.hidden = true;
   },
+
+  /* --------------------------------------- mapa de um capítulo (dentro da leitura) */
+  /* Janela flutuante, SÓ exibição: o mundo é este capítulo. Em cima, o mapa das
+   * cidades citadas nele; embaixo, "Cidade: v1, v3" (cidade em negrito vermelho).
+   * Clicar numa cidade destaca a bolinha (marrom -> vermelho, maior) e centraliza
+   * o nome na tela. Sem seleção múltipla, sem filtro — apenas exibição. */
+  async abrirCapitulo(code, cap) {
+    cap = Number(cap);
+    const ok = await this.garantirDados();
+    if (ok === false) return;
+    const pop = this._garantirCapPopup();
+    const cidades = this._locais
+      .filter(l => l._refs.some(r => r.code === code && r.cap === cap))
+      .map(l => {
+        const vs = [...new Set(l._refs.filter(r => r.code === code && r.cap === cap).map(r => r.vers))].sort((a, b) => a - b);
+        return { loc: l, vs };
+      })
+      .sort((a, b) => (a.vs[0] || 0) - (b.vs[0] || 0) || a.loc.n.localeCompare(b.loc.n, 'pt'));
+    this._capCtx = { code, cap };
+    this._capSel = null;
+    pop.querySelector('.mapacap-titulo').textContent = `${this._nomeLivro(code)} ${cap}`;
+    pop.hidden = false;
+    this._iniciarCapMap();
+    this._renderCapLista(cidades);
+    // o container precisa existir e ter medida antes de desenhar/enquadrar
+    setTimeout(() => {
+      if (this._capMap) this._capMap.invalidateSize();
+      this._desenharCapMarcadores(cidades.map(c => c.loc));
+    }, 40);
+  },
+
+  _garantirCapPopup() {
+    if (this._capPop) return this._capPop;
+    const pop = document.createElement('div');
+    pop.id = 'mapa-cap';
+    pop.className = 'mapacap';
+    pop.hidden = true;
+    pop.innerHTML =
+      '<div class="mapacap-fundo" data-fechar-cap></div>' +
+      '<div class="mapacap-caixa" role="dialog" aria-modal="true">' +
+        '<div class="mapacap-cab">' +
+          '<span class="mapacap-titulo"></span>' +
+          '<button type="button" class="mapacap-x" data-fechar-cap aria-label="Fechar">' +
+            '<svg class="icone"><use href="#i-fechar"/></svg></button>' +
+        '</div>' +
+        '<div class="mapacap-mapa" id="mapacap-mapa"></div>' +
+        '<div class="mapacap-lista" id="mapacap-lista"></div>' +
+      '</div>';
+    document.body.appendChild(pop);
+    pop.querySelectorAll('[data-fechar-cap]').forEach(el =>
+      el.addEventListener('click', () => this._fecharCapPopup()));
+    pop.querySelector('#mapacap-lista').addEventListener('click', (e) => {
+      const b = e.target.closest('.mapacap-item');
+      if (!b) return;
+      const loc = this._locais.find(x => String(x.id) === b.dataset.id);
+      if (loc) this._clicarCapCidade(loc);
+    });
+    this._capPop = pop;
+    return pop;
+  },
+
+  _iniciarCapMap() {
+    const el = document.getElementById('mapacap-mapa');
+    if (!el || this._capMap) return;
+    this._capMap = L.map(el, { center: [31.5, 35.2], zoom: 6, zoomControl: true, attributionControl: true });
+    L.tileLayer(
+      'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
+      { maxZoom: 18, attribution: 'Tiles © Esri' }
+    ).addTo(this._capMap);
+    L.control.scale({ imperial: false, metric: true, position: 'bottomleft' }).addTo(this._capMap);
+    this._capGrupo = L.layerGroup().addTo(this._capMap);
+    this._capMarcadores = new Map();
+  },
+
+  _desenharCapMarcadores(cidades) {
+    if (!this._capGrupo) return;
+    this._capGrupo.clearLayers();
+    this._capMarcadores.clear();
+    const pts = [];
+    for (const loc of cidades) {
+      const lat = Number(loc.lat), lon = Number(loc.lon);
+      if (!isFinite(lat) || !isFinite(lon)) continue;
+      const m = L.circleMarker([lat, lon], {
+        radius: 6, color: '#ffffff', weight: 1.4, fillColor: '#8c2f39', fillOpacity: .9,
+      });
+      m.bindTooltip(loc.n, { direction: 'top', offset: [0, -6], className: 'mapa-rotulo' });
+      m.on('click', () => this._clicarCapCidade(loc));
+      this._capGrupo.addLayer(m);
+      this._capMarcadores.set(loc.id, m);
+      pts.push([lat, lon]);
+    }
+    if (pts.length === 1) this._capMap.setView(pts[0], 8);
+    else if (pts.length) this._capMap.fitBounds(L.latLngBounds(pts).pad(0.25));
+    this._capPts = pts;
+  },
+
+  _renderCapLista(cidades) {
+    const lista = document.getElementById('mapacap-lista');
+    if (!lista) return;
+    if (!cidades.length) { lista.innerHTML = '<div class="mapa-vazio">Sem localidades neste capítulo.</div>'; return; }
+    lista.innerHTML = cidades.map(({ loc, vs }) => {
+      const paren = vs.length > 1 ? `versículos: ${vs.join(', ')}` : (vs.length ? `versículo ${vs[0]}` : '');
+      return `<button type="button" class="mapacap-item" data-id="${loc.id}">` +
+        `<span class="mapacap-nome">${this._esc(loc.n)}</span>` +
+        (paren ? ` <span class="mapacap-vs">(${paren})</span>` : '') +
+      `</button>`;
+    }).join('');
+  },
+
+  _clicarCapCidade(loc) {
+    // seleção única: clicar na cidade já selecionada limpa tudo e volta a ver todas
+    if (this._capSel === loc.id) { this._limparSelCap(); return; }
+    this._capSel = loc.id;
+    if (this._capMarcadores) {
+      for (const [id, m] of this._capMarcadores) {
+        const sel = id === loc.id;
+        m.setStyle({
+          radius: sel ? 9 : 6,
+          fillColor: sel ? '#c2621a' : '#8c2f39',
+          fillOpacity: sel ? 1 : .9,
+          weight: sel ? 2.2 : 1.4,
+        });
+        if (!sel && m.closeTooltip) m.closeTooltip();
+      }
+    }
+    const m = this._capMarcadores && this._capMarcadores.get(loc.id);
+    if (m) {
+      if (m.bringToFront) m.bringToFront();
+      const lat = Number(loc.lat), lon = Number(loc.lon);
+      if (this._capMap && isFinite(lat) && isFinite(lon)) this._capMap.panTo([lat, lon]);
+      if (m.openTooltip) m.openTooltip();
+    }
+    const lista = document.getElementById('mapacap-lista');
+    if (lista) lista.querySelectorAll('.mapacap-item').forEach(b =>
+      b.classList.toggle('ativo', String(loc.id) === b.dataset.id));
+  },
+
+  /* Limpa a seleção do mapa por capítulo: todas voltam ao normal e a vista
+   * reenquadra o capítulo inteiro. */
+  _limparSelCap() {
+    this._capSel = null;
+    if (this._capMarcadores) {
+      for (const [, m] of this._capMarcadores) {
+        m.setStyle({ radius: 6, fillColor: '#8c2f39', fillOpacity: .9, weight: 1.4 });
+        if (m.closeTooltip) m.closeTooltip();
+      }
+    }
+    const lista = document.getElementById('mapacap-lista');
+    if (lista) lista.querySelectorAll('.mapacap-item.ativo').forEach(b => b.classList.remove('ativo'));
+    if (this._capMap && this._capPts && this._capPts.length) {
+      if (this._capPts.length === 1) this._capMap.setView(this._capPts[0], 8);
+      else this._capMap.fitBounds(L.latLngBounds(this._capPts).pad(0.25));
+    }
+  },
+
+  _fecharCapPopup() { if (this._capPop) this._capPop.hidden = true; },
 };
 
 if (typeof module !== 'undefined' && module.exports) module.exports = { Mapa };
