@@ -19,7 +19,7 @@
 /* A casca sobe de versao a cada mudanca no app, para o navegador nao servir a
  * versao antiga. Os textos biblicos ficam numa versao propria e estavel: eles
  * nunca mudam, e nao ha por que rebaixar tudo por causa de um ajuste de tela. */
-const CASCA = 'casca-biblia-v202-mapa-foco-popup';
+const CASCA = 'casca-biblia-v203-mapa-voltar-mapa';
 const TEXTOS = 'textos-biblia-v1';
 
 const ESSENCIAIS = [

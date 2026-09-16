@@ -171,6 +171,7 @@ const Mapa = {
   /* =============================================================== abertura */
   abrir() {
     App.abrir('painel-mapa');
+    if (typeof App.esconderVoltarMapa === 'function') App.esconderVoltarMapa();
     this._garantir();
   },
 
@@ -701,7 +702,8 @@ const Mapa = {
   _irParaVersiculo(code, cap, vers) {
     if (!code || !cap) return;
     App.fecharPaineis();
-    App.pularParaReferencia(code, cap, vers);
+    if (typeof App.pularDoMapa === 'function') App.pularDoMapa(code, cap, vers);
+    else App.pularParaReferencia(code, cap, vers);
   },
 
   /* ------------------------------------------------------- pop-up de versículo */

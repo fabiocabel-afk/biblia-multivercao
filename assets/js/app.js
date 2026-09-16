@@ -1910,8 +1910,10 @@ const App = {
    * navega para qualquer outro lugar por conta própria. */
   origemDaReferencia: null,
   _pulandoDeReferencia: false,
+  origemMapa: false,
 
   pularParaReferencia(code, cap, vers) {
+    this.origemMapa = false;   // este é pulo de referência cruzada, não do mapa
     this.origemDaReferencia = {
       versao: this.versao, code: this.code, cap: this.cap, vers: this.destaque || null,
     };
@@ -1941,6 +1943,26 @@ const App = {
     this.esconderVoltarOrigem();   // limpa antes, para o ir() não guardar de novo
     if (o.versao !== this.versao) { this.versao = o.versao; Prefs.set('versao', o.versao); }
     this.ir(o.code, o.cap, o.vers);
+  },
+
+  /* Volta rápida quando a pessoa pulou para uma referência A PARTIR DO MAPA: o
+   * botão diz apenas "Voltar" e reabre o Mapa no estado em que estava. Persiste
+   * enquanto ela continua navegando; some quando ela usa. */
+  pularDoMapa(code, cap, vers) {
+    this.esconderVoltarOrigem();   // não é volta de referência cruzada
+    this.origemMapa = true;
+    if (this.versao) this.ir(code, cap, vers);
+    this.mostrarVoltarMapa();
+  },
+
+  mostrarVoltarMapa() {
+    document.getElementById('voltar-origem-texto').textContent = 'Voltar';
+    document.getElementById('voltar-origem').hidden = false;
+  },
+
+  esconderVoltarMapa() {
+    this.origemMapa = false;
+    document.getElementById('voltar-origem').hidden = true;
   },
 
   desenharHistorico() {
@@ -8166,7 +8188,10 @@ const App = {
     };
 
     q('btn-atalho-fixado').onclick = (ev) => { ev.stopPropagation(); this.alternarListaFixados(); };
-    q('voltar-origem').onclick = () => this.voltarParaOrigem();
+    q('voltar-origem').onclick = () => {
+      if (this.origemMapa) { this.esconderVoltarMapa(); Mapa.abrir(); }
+      else this.voltarParaOrigem();
+    };
 
     menu.querySelectorAll('[data-menu]').forEach(el => {
       el.onclick = () => {
