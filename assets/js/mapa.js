@@ -278,10 +278,8 @@ const Mapa = {
     });
 
     selRaio.addEventListener('change', () => {
-      if (this._selecao.length === 1) {
-        const c = this._locais.find(x => x.id === this._selecao[0]);
-        if (c) this._centralizar(c);
-      }
+      if (this._selecao.length) this._ajustarVistaSelecao();
+      else this._ajustarVista(this._cidadesFiltradas());
     });
 
     // seleção múltipla (checkbox na barra do mapa, à esquerda da seta)
@@ -417,19 +415,24 @@ const Mapa = {
   _desenharMarcadores(lista) {
     if (!this._grupo) return;
     this._grupo.clearLayers();
+    const temSel = this._selecao.length > 0;
+    const acima = [];
     for (const loc of lista) {
       const m = this._marcadorDe(loc);
       const sel = this._selecao.includes(loc.id);
       const foco = this._cidadeAtual && this._cidadeAtual.id === loc.id;
       m.setStyle({
-        radius: foco ? 9 : (sel ? 8 : 5),
+        radius: sel ? (foco ? 9 : 8) : 5,
         fillColor: sel ? '#c2621a' : '#8c2f39',
-        fillOpacity: sel ? 1 : .85,
-        weight: sel ? 2 : 1.4,
+        fillOpacity: sel ? 1 : (temSel ? 0.28 : 0.85),   // as não-selecionadas ficam visíveis, porém apagadas
+        color: '#ffffff',
+        opacity: sel ? 1 : (temSel ? 0.45 : 1),
+        weight: sel ? 2.2 : 1.4,
       });
       this._grupo.addLayer(m);
-      if (sel) m.bringToFront();
+      if (sel) acima.push(m);
     }
+    for (const m of acima) if (m.bringToFront) m.bringToFront();   // selecionadas por cima de tudo
   },
 
   _desenharLista(lista) {
@@ -471,7 +474,7 @@ const Mapa = {
   _ajustarVista(lista) {
     if (!this._map || !lista.length) return;
     if (this._selecao.length) return;   // com seleção, a vista segue o foco
-    if (lista.length === 1) { this._map.setView([Number(lista[0].lat), Number(lista[0].lon)], 9); return; }
+    if (lista.length === 1) { this._centralizar(lista[0]); return; }   // uma só cidade -> raio escolhido
     const pts = lista.map(l => [Number(l.lat), Number(l.lon)]).filter(p => isFinite(p[0]) && isFinite(p[1]));
     if (pts.length) this._map.fitBounds(L.latLngBounds(pts).pad(0.15));
   },
@@ -688,8 +691,8 @@ const Mapa = {
         const chip = e.target.closest('.mapa-vers-chip');
         if (!chip) return;
         const code = chip.dataset.code, cap = parseInt(chip.dataset.cap, 10), vers = parseInt(chip.dataset.vers, 10);
-        if (this._cidadeAtual) this._irParaVersiculo(code, cap, vers);   // lendo cidade -> abre a leitura
-        else this._togglarFiltroVersiculo(code, cap, vers);             // índice -> filtra as cidades
+        if (this._selecao.length) this._abrirPopupVersiculo(code, cap, vers);  // foco -> pop-up
+        else this._togglarFiltroVersiculo(code, cap, vers);                    // índice -> filtra cidades
       });
     }
   },
@@ -699,6 +702,62 @@ const Mapa = {
     if (!code || !cap) return;
     App.fecharPaineis();
     App.pularParaReferencia(code, cap, vers);
+  },
+
+  /* ------------------------------------------------------- pop-up de versículo */
+  /* Com uma cidade em foco, tocar num versículo abre este pop-up (não vai direto):
+   * mostra a passagem e oferece "Fechar" ou "Ir para" (aí sim navega). */
+  _garantirPopup() {
+    if (this._pop) return this._pop;
+    const pop = document.createElement('div');
+    pop.id = 'mapa-pop';
+    pop.className = 'mapa-pop';
+    pop.hidden = true;
+    pop.innerHTML =
+      '<div class="mapa-pop-fundo" data-fechar-pop></div>' +
+      '<div class="mapa-pop-caixa" role="dialog" aria-modal="true" aria-label="Versículo">' +
+        '<div class="mapa-pop-ref"></div>' +
+        '<div class="mapa-pop-texto"></div>' +
+        '<div class="mapa-pop-acoes">' +
+          '<button type="button" class="mapa-pop-bt" data-fechar-pop>Fechar</button>' +
+          '<button type="button" class="mapa-pop-bt mapa-pop-ir">Ir para</button>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(pop);
+    pop._ref = pop.querySelector('.mapa-pop-ref');
+    pop._texto = pop.querySelector('.mapa-pop-texto');
+    pop.querySelectorAll('[data-fechar-pop]').forEach(el =>
+      el.addEventListener('click', () => this._fecharPopupVersiculo()));
+    pop.querySelector('.mapa-pop-ir').addEventListener('click', () => {
+      const a = pop._alvo;
+      this._fecharPopupVersiculo();
+      if (a) this._irParaVersiculo(a.code, a.cap, a.vers);
+    });
+    this._pop = pop;
+    return pop;
+  },
+
+  _abrirPopupVersiculo(code, cap, vers) {
+    const pop = this._garantirPopup();
+    pop._alvo = { code, cap, vers };
+    pop._ref.textContent = `${this._nomeLivro(code)} ${cap}:${vers}`;
+    pop._texto.textContent = 'Carregando…';
+    pop.hidden = false;
+    const versao = (typeof App !== 'undefined' && App.versao) ? App.versao : null;
+    const semTexto = 'Toque em “Ir para” para abrir a passagem.';
+    if (versao && typeof Dados !== 'undefined' && Dados.capitulo) {
+      Dados.capitulo(versao, code, cap).then(res => {
+        if (pop.hidden || !res || !res.capitulo) { if (!pop.hidden) pop._texto.textContent = semTexto; return; }
+        const v = (res.capitulo.verses || []).find(x => x.number === vers);
+        pop._texto.textContent = (v && v.text) ? v.text : semTexto;
+      }).catch(() => { if (!pop.hidden) pop._texto.textContent = semTexto; });
+    } else {
+      pop._texto.textContent = semTexto;
+    }
+  },
+
+  _fecharPopupVersiculo() {
+    if (this._pop) this._pop.hidden = true;
   },
 };
 

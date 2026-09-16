@@ -391,3 +391,46 @@
   border-color: var(--rubrica);
   color: #fff;
 }
+
+/* ---------------------------------------------- pop-up de versículo (Fechar / Ir para) */
+.mapa-pop {
+  position: fixed;
+  inset: 0;
+  z-index: 4000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.mapa-pop[hidden] { display: none; }
+.mapa-pop-fundo { position: absolute; inset: 0; background: rgba(0, 0, 0, .45); }
+.mapa-pop-caixa {
+  position: relative;
+  z-index: 1;
+  width: min(440px, 100%);
+  background: var(--papel);
+  color: var(--tinta);
+  border: 1px solid color-mix(in srgb, var(--tinta) 16%, transparent);
+  border-radius: calc(var(--raio) + 4px);
+  box-shadow: 0 14px 40px rgba(0, 0, 0, .35);
+  padding: 18px 18px 14px;
+  font-family: var(--fonte-ui);
+}
+.mapa-pop-ref { font-weight: 700; color: var(--rubrica); font-size: 15px; margin-bottom: 8px; }
+.mapa-pop-texto { font-size: 15px; line-height: 1.55; max-height: 46vh; overflow-y: auto; color: var(--tinta); }
+.mapa-pop-acoes { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+.mapa-pop-bt {
+  height: 38px;
+  padding: 0 16px;
+  border-radius: var(--raio);
+  border: 1px solid color-mix(in srgb, var(--tinta) 20%, transparent);
+  background: var(--papel);
+  color: var(--tinta-fraca);
+  font-family: var(--fonte-ui);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.mapa-pop-bt:hover { border-color: var(--rubrica); color: var(--rubrica); }
+.mapa-pop-ir { background: var(--rubrica); border-color: var(--rubrica); color: #fff; }
+.mapa-pop-ir:hover { filter: brightness(1.06); color: #fff; }
