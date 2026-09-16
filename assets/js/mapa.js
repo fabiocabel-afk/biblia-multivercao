@@ -574,10 +574,28 @@ const Mapa = {
    * porque redesenhar milhares de chips a cada tecla travaria. */
   _renderVersiculos() {
     let key, montar;
-    if (this._cidadeAtual) {
-      const c = this._cidadeAtual;
-      key = 'c:' + c.id;
-      montar = () => this._pintarVersiculos(c.n, (c.v || []).filter(n => n !== c.n).join('; '), c._refs);
+    if (this._selecao.length) {
+      // foco: união dos versículos de TODAS as cidades selecionadas,
+      // agrupados só por livro (sem separar por cidade, para não confundir).
+      const ids = this._selecao.slice();
+      key = 'sel:' + ids.slice().sort((a, b) => a - b).join(',');
+      montar = () => {
+        const vistos = new Set();
+        const refs = [];
+        for (const id of ids) {
+          const c = this._locais.find(x => x.id === id);
+          if (!c) continue;
+          for (const r of c._refs) {
+            const k = r.code + ' ' + r.cap + ':' + r.vers;
+            if (vistos.has(k)) continue;
+            vistos.add(k); refs.push(r);
+          }
+        }
+        const titulo = ids.length > 1
+          ? (ids.length + ' cidades selecionadas')
+          : (this._cidadeAtual ? this._cidadeAtual.n : 'Cidade');
+        this._pintarVersiculos(titulo, 'toque num versículo para abrir a leitura', refs);
+      };
     } else {
       const termo = this._norm(this._termo);
       if (this._modo === 'vers' && termo) {
