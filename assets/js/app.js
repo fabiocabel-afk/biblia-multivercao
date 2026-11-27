@@ -6274,9 +6274,9 @@ const App = {
     this.destaque = versiculos[0].vers;   // a aba Referências usa o primeiro
     this.abaTirinha = 'versoes';
 
-    // tira a tela do modo de seleção, mas mantém a seleção para o usuário voltar
-    document.getElementById('barra-selecao').classList.remove('aberta');
-    { const _c = document.getElementById('sel-cores'); if (_c) { _c.classList.add('fechada'); _c.style.display = 'none'; } }
+    // a barra de seleção (Marcar/Copiar/Anotar…) CONTINUA aberta por baixo: a
+    // tirinha (z-index maior) a cobre enquanto está aberta e, ao fechá-la, ela
+    // reaparece com a seleção intacta, para a pessoa fazer outra ação ou limpar.
 
     this.mostrarAbaTirinha('versoes');
     this.sincronizarBotaoFixarTirinha();
