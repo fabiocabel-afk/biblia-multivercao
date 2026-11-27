@@ -358,28 +358,12 @@ const Leitura = {
 
     // a versão principal ativa vem SEMPRE primeiro; as demais em seguida, em
     // ordem, sem repetir a principal
-    const habilitadas = Prefs.get('versoesTirinha').filter(c => c !== versaoAtual);
-    const lista = [versaoAtual, ...[...new Set(habilitadas)].filter(c => Dados.versao(c)).sort()];
+    const lista = this.listaTirinha(versaoAtual);
 
     alvo.innerHTML = '<div class="estado">Reunindo as versões…</div>';
 
     // primeiro busca todos os textos, depois compara cada um com o principal
-    const dados = await Promise.all(lista.map(async code => {
-      if (!Dados.temLivro(code, bookCode)) {
-        return { code, texto: null, erro: `${Dados.nomeCurto(versaoAtual, bookCode)} não existe nesta versão.` };
-      }
-      const conv = Dados.referenciaEm(bookCode, capitulo, versaoAtual, code);
-      try {
-        const r = await Dados.capitulo(code, bookCode, conv.capitulo);
-        if (!r) return { code, texto: null, erro: 'Capítulo não encontrado.', conv };
-        const v = r.capitulo.verses.find(x => x.number === versiculo);
-        const refLocal = Dados.referencia(code, bookCode, conv.capitulo, versiculo);
-        if (!v) return { code, texto: null, erro: 'Versículo não encontrado.', conv, ref: refLocal };
-        return { code, texto: v.text || '', conv, ref: refLocal };
-      } catch {
-        return { code, texto: null, erro: 'Não foi possível abrir.' };
-      }
-    }));
+    const dados = await this.coletarVersoes(bookCode, capitulo, versiculo, lista, versaoAtual);
 
     const principal = dados[0].texto || '';
     const chave = s => normalizar((s || '').replace(/\s+/g, ' ').trim());
@@ -441,6 +425,216 @@ const Leitura = {
       ${corpo}
       ${nota}
     </div>`;
+  },
+
+  /* Ordem das versões empilhadas: a ativa SEMPRE primeiro; as demais em
+   * seguida, na ordem de preferência (a ordem curada de versoes.json), sem
+   * repetir a principal e só as que existem. É a mesma lista para a tirinha de
+   * um versículo e para a comparação de vários. */
+  listaTirinha(versaoAtual) {
+    const ordem = c => { const i = Dados.versoes.findIndex(v => v.code === c); return i < 0 ? 999 : i; };
+    const habilitadas = [...new Set(Prefs.get('versoesTirinha'))]
+      .filter(c => c !== versaoAtual && Dados.versao(c))
+      .sort((a, b) => ordem(a) - ordem(b));
+    return [versaoAtual, ...habilitadas];
+  },
+
+  /* Busca o texto de UM versículo em cada versão da lista, já resolvendo a
+   * numeração de cada tradução. Devolve um array alinhado à lista (a principal
+   * em [0]). Reaproveitado pela tirinha de um versículo e pela de vários. */
+  async coletarVersoes(bookCode, capitulo, versiculo, lista, versaoAtual) {
+    return Promise.all(lista.map(async code => {
+      if (!Dados.temLivro(code, bookCode)) {
+        return { code, texto: null, erro: `${Dados.nomeCurto(versaoAtual, bookCode)} não existe nesta versão.` };
+      }
+      const conv = Dados.referenciaEm(bookCode, capitulo, versaoAtual, code);
+      try {
+        const r = await Dados.capitulo(code, bookCode, conv.capitulo);
+        if (!r) return { code, texto: null, erro: 'Capítulo não encontrado.', conv };
+        const v = r.capitulo.verses.find(x => x.number === versiculo);
+        const refLocal = Dados.referencia(code, bookCode, conv.capitulo, versiculo);
+        if (!v) return { code, texto: null, erro: 'Versículo não encontrado.', conv, ref: refLocal };
+        return { code, texto: v.text || '', conv, ref: refLocal };
+      } catch {
+        return { code, texto: null, erro: 'Não foi possível abrir.' };
+      }
+    }));
+  },
+
+  /* ------------------------------------------- comparação de vários versículos
+   * A mesma tirinha, agora com uma SEQUÊNCIA de versículos (pode pular). Cada
+   * versículo vira um bloco próprio (todas as versões empilhadas), separado do
+   * seguinte por um divisor com a referência. No topo, três modos de leitura:
+   *   • "uma"         — cada versão na sua linha (comportamento de sempre)
+   *   • "fidedigno"   — agrupa versões de texto idêntico ao caractere (vírgula,
+   *                     ponto e acento contam)
+   *   • "inteligente" — agrupa ignorando pontuação, espaços, maiúsculas e acentos
+   * A versão ATIVA (a que está sendo lida) ganha destaque visual forte em cada
+   * bloco, inclusive quando cai dentro de um grupo. */
+  _multi: null,   // { bookCode, versiculos:[{cap,vers}], versaoAtual, modo }
+
+  async tirinhaMulti(bookCode, versiculos, versaoAtual, modo) {
+    modo = modo || 'uma';
+    this._multi = { bookCode, versiculos, versaoAtual, modo };
+
+    const alvo = document.getElementById('tirinha-corpo');
+    const cab = document.getElementById('tirinha-ref');
+
+    // título: referência do primeiro ao último, com a contagem
+    const primeiro = versiculos[0], ultimo = versiculos[versiculos.length - 1];
+    const refIni = Dados.referencia(versaoAtual, bookCode, primeiro.cap, primeiro.vers);
+    let titulo = refIni;
+    if (versiculos.length > 1) {
+      const refFim = Dados.referencia(versaoAtual, bookCode, ultimo.cap, ultimo.vers);
+      // mostra "João 3.16–18"; se mudar de capítulo, mostra a referência cheia
+      const fim = primeiro.cap === ultimo.cap ? String(ultimo.vers) : refFim;
+      titulo = `${refIni}–${fim} · ${versiculos.length} versículos`;
+    }
+    cab.textContent = titulo;
+
+    alvo.innerHTML = '<div class="estado">Reunindo as versões…</div>';
+
+    const lista = this.listaTirinha(versaoAtual);
+    const blocos = await Promise.all(versiculos.map(async ({ cap, vers }) => ({
+      cap, vers,
+      dados: await this.coletarVersoes(bookCode, cap, vers, lista, versaoAtual),
+    })));
+
+    const barra = `<div class="tirinha-modos" role="group" aria-label="Modo de comparação">
+        <button class="tmodo${modo === 'uma' ? ' ativo' : ''}" data-modo="uma">Uma a uma</button>
+        <button class="tmodo${modo === 'fidedigno' ? ' ativo' : ''}" data-modo="fidedigno">Agrupar · fiel</button>
+        <button class="tmodo${modo === 'inteligente' ? ' ativo' : ''}" data-modo="inteligente">Agrupar · flexível</button>
+      </div>`;
+
+    const corpo = blocos.map(b => this._blocoVerso(b, versaoAtual, modo, bookCode)).join('');
+    alvo.innerHTML = barra + `<div class="tirinha-multi">${corpo}</div>`;
+
+    this.ligarSiglasTirinha(alvo);
+    alvo.querySelectorAll('.tmodo').forEach(btn => {
+      btn.onclick = () => {
+        if (btn.dataset.modo === this._multi.modo) return;
+        // guarda a escolha para sobreviver à troca de abas (Versões/Referências)
+        if (typeof App !== 'undefined') App.tirinhaMultiModo = btn.dataset.modo;
+        const topo = alvo.scrollTop;
+        this.tirinhaMulti(bookCode, versiculos, versaoAtual, btn.dataset.modo)
+          .then(() => { alvo.scrollTop = topo; });
+      };
+    });
+  },
+
+  /* Um bloco = o divisor com a referência + as versões daquele versículo. */
+  _blocoVerso(bloco, versaoAtual, modo, bookCode) {
+    const ref = Dados.referencia(versaoAtual, bookCode, bloco.cap, bloco.vers);
+    const divisor = `<div class="divisor-verso"><span>${this.escapar(ref)}</span></div>`;
+
+    let corpo;
+    if (modo === 'uma') {
+      const principal = bloco.dados[0].texto || '';
+      const chave = s => normalizar((s || '').replace(/\s+/g, ' ').trim());
+      const chaveP = chave(principal);
+      corpo = bloco.dados.map((d, i) => {
+        const ehPrincipal = i === 0;
+        const igual = !ehPrincipal && d.texto != null && chave(d.texto) === chaveP;
+        return this.fita(d, ehPrincipal, igual);
+      }).join('');
+    } else {
+      corpo = this._agrupar(bloco.dados, modo)
+        .map(g => this._fitaGrupo(g, versaoAtual)).join('');
+    }
+    return divisor + `<div class="bloco-verso">${corpo}</div>`;
+  },
+
+  /* Agrupa as versões de um versículo por texto. `fidedigno` casa caractere a
+   * caractere (só colapsa espaços repetidos); `inteligente` ignora pontuação,
+   * espaços, maiúsculas e acentos. A versão ativa, quando presente num grupo,
+   * fixa o grupo em primeiro e empresta o próprio texto como representante. */
+  _agrupar(dados, modo) {
+    const ordem = c => { const i = Dados.versoes.findIndex(v => v.code === c); return i < 0 ? 999 : i; };
+    const chave = modo === 'fidedigno'
+      ? s => (s || '').replace(/\s+/g, ' ').trim()
+      : s => normalizar(s || '').replace(/[^\p{L}\p{N}]+/gu, '');
+
+    const grupos = [];
+    const mapa = new Map();
+    dados.forEach((d, i) => {
+      const ehAtiva = i === 0;
+      if (d.texto == null) {                         // erro: nunca agrupa
+        grupos.push({ membros: [d], erro: true, temAtiva: ehAtiva, repIdx: ordem(d.code) });
+        return;
+      }
+      const k = '\u0001' + chave(d.texto);
+      if (mapa.has(k)) {
+        const g = mapa.get(k);
+        g.membros.push(d);
+        if (ehAtiva) g.temAtiva = true;
+        if (ordem(d.code) < g.repIdx) g.repIdx = ordem(d.code);
+      } else {
+        const g = { membros: [d], erro: false, temAtiva: ehAtiva, repIdx: ordem(d.code) };
+        mapa.set(k, g); grupos.push(g);
+      }
+    });
+
+    // representante: se a ativa está no grupo, é ela; senão, a de maior
+    // preferência (menor índice). É de quem vem o texto mostrado.
+    const codAtiva = dados[0] && dados[0].code;
+    grupos.forEach(g => {
+      if (g.erro) { g.rep = g.membros[0]; return; }
+      g.rep = g.temAtiva
+        ? g.membros.find(m => m.code === codAtiva)
+        : g.membros.reduce((a, b) => (ordem(a.code) <= ordem(b.code) ? a : b));
+    });
+
+    // ordem: o grupo da ativa primeiro; depois por preferência; erros ao fim
+    grupos.sort((a, b) => {
+      if (a.temAtiva !== b.temAtiva) return a.temAtiva ? -1 : 1;
+      if (a.erro !== b.erro) return a.erro ? 1 : -1;
+      return a.repIdx - b.repIdx;
+    });
+    return grupos;
+  },
+
+  /* Uma linha da comparação agrupada: todas as siglas do grupo juntas e o texto
+   * uma única vez. O grupo que contém a versão ativa é a régua (classe
+   * principal); os demais diferem dela por definição (não casariam, senão
+   * estariam no mesmo grupo), então marcam ≠. */
+  _fitaGrupo(grupo, versaoAtual) {
+    const { membros, rep, erro, temAtiva } = grupo;
+
+    const siglas = membros.map(m =>
+      this._siglaBtn(m.code, m.code === versaoAtual)).join('');
+
+    let selo = '';
+    if (temAtiva) selo = '<span class="selo-cmp principal">principal</span>';
+    else if (!erro) selo = '<span class="selo-cmp difere">≠</span>';
+
+    const classe = temAtiva ? 'fita grupo principal'
+      : erro ? 'fita grupo' : 'fita grupo difere';
+
+    const corpo = erro
+      ? `<p class="fita-erro">${this.escapar(rep.erro || '')}</p>`
+      : `<p>${this.escapar(rep.texto)}</p>`;
+
+    const nota = rep.conv && !rep.conv.exato
+      ? `<div class="nota-numeracao">Numeração diferente: ${this.escapar(rep.ref || '')}. ${this.escapar(rep.conv.nota || '')}</div>`
+      : '';
+
+    return `<div class="${classe}">
+      <div class="cabeca cabeca-grupo">
+        <span class="siglas-grupo">${siglas}</span>
+        ${selo}
+      </div>
+      ${corpo}
+      ${nota}
+    </div>`;
+  },
+
+  /* Botão de sigla no mesmo padrão da fita (expande para o nome completo ao
+   * tocar). `ativa` marca a versão que está sendo lida, para o destaque. */
+  _siglaBtn(code, ativa) {
+    const vinfo = Dados.versao(code);
+    const nome = vinfo && vinfo.name ? vinfo.name : '';
+    return `<button class="sigla${nome ? ' sigla-toque' : ''}${ativa ? ' sigla-ativa' : ''}" data-sigla="${code}"
+      ${nome ? `data-abrir-nome="${code}" data-nome="${this.escapar(nome)}" aria-expanded="false" title="Ver o nome da versão"` : ''}>${code}</button>`;
   },
 
   /* Toque na sigla da tirinha: a caixinha se expande e a abreviação vira o nome

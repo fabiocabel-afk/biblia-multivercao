@@ -923,6 +923,7 @@ const App = {
   },
 
   fecharTirinha() {
+    this.tirinhaMultiAtiva = false;
     const t = document.getElementById('tirinha');
     t.classList.remove('aberta', 'alta');
     t.setAttribute('aria-hidden', 'true');
@@ -6245,6 +6246,45 @@ const App = {
     this.editarAnotacao(vers, null, ref, versiculos);
   },
 
+  /* Comparar: abre a tirinha com TODOS os versículos selecionados (uma sequência
+   * contínua ou com saltos), um bloco por versículo, nas versões empilhadas.
+   * Substitui o duplo-toque (que o dicionário passou a interceptar) e agora vale
+   * também para vários versículos de uma vez. */
+  compararSelecao() {
+    if (!this.selecao || !this.selecao.pedacos || !this.selecao.pedacos.length) return;
+
+    // {cap, vers} únicos, em ordem; respeita saltos (não preenche o meio)
+    const vistos = new Set();
+    const versiculos = [];
+    this.selecao.pedacos
+      .slice()
+      .sort((a, b) => ((a.cap ?? this.cap) - (b.cap ?? this.cap)) || (a.vers - b.vers))
+      .forEach(p => {
+        const cap = p.cap ?? this.cap;
+        const chave = cap + ':' + p.vers;
+        if (vistos.has(chave)) return;
+        vistos.add(chave);
+        versiculos.push({ cap, vers: p.vers });
+      });
+    if (!versiculos.length) return;
+
+    this.tirinhaMultiAtiva = true;
+    this.tirinhaMultiVersiculos = versiculos;
+    this.tirinhaMultiModo = this.tirinhaMultiModo || 'uma';
+    this.destaque = versiculos[0].vers;   // a aba Referências usa o primeiro
+    this.abaTirinha = 'versoes';
+
+    // tira a tela do modo de seleção, mas mantém a seleção para o usuário voltar
+    document.getElementById('barra-selecao').classList.remove('aberta');
+    { const _c = document.getElementById('sel-cores'); if (_c) { _c.classList.add('fechada'); _c.style.display = 'none'; } }
+
+    this.mostrarAbaTirinha('versoes');
+    this.sincronizarBotaoFixarTirinha();
+    const t = document.getElementById('tirinha');
+    t.classList.add('aberta', 'alta');
+    t.setAttribute('aria-hidden', 'false');
+  },
+
   /** Leitura da anotação numa folha flutuante limpa — sem painel e sem barra.
    *  É o que abre ao tocar no sinal do versículo. A folha rola por dentro; o X
    *  (canto superior direito) e o lápis (canto inferior direito) ficam fixos. O
@@ -8225,6 +8265,7 @@ const App = {
     q('sel-estudo').onclick = () => this.abrirSalvarEstudo();
     q('sel-lista').onclick = () => this.abrirAddLista();
     q('sel-anotar').onclick = () => this.anotarSelecao();
+    q('sel-comparar').onclick = () => this.compararSelecao();
     q('sel-limpar').onclick = () => this.fecharSelecao();
     q('mais-selecao').onclick = () => this.alternarMulti();
 
@@ -10742,6 +10783,7 @@ const App = {
   },
 
   abrirTirinha(vers) {
+    this.tirinhaMultiAtiva = false;   // duplo-toque: um versículo só
     this.destaque = vers;
     this.abaTirinha = 'versoes';
     document.querySelectorAll('.v.foco').forEach(x => x.classList.remove('foco'));
@@ -10788,10 +10830,16 @@ const App = {
     if (aba === 'refs') this.sincronizarBotaoFixarTirinha();
     if (aba === 'versoes') {
       const t = document.getElementById('tirinha');
-      t.classList.remove('alta');
       const cab = document.getElementById('tirinha-ref');
       if (cab.dataset.base) { cab.textContent = cab.dataset.base; delete cab.dataset.base; }
-      Leitura.tirinha(this.code, this.cap, this.destaque, this.versao);
+      if (this.tirinhaMultiAtiva && this.tirinhaMultiVersiculos && this.tirinhaMultiVersiculos.length) {
+        // comparação de vários versículos: tirinha ampliada
+        t.classList.add('alta');
+        Leitura.tirinhaMulti(this.code, this.tirinhaMultiVersiculos, this.versao, this.tirinhaMultiModo);
+      } else {
+        t.classList.remove('alta');
+        Leitura.tirinha(this.code, this.cap, this.destaque, this.versao);
+      }
     } else {
       this.desenharReferencias();
     }

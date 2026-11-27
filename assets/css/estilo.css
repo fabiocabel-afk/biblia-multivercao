@@ -1638,6 +1638,108 @@ html, body { overflow-x: hidden; }
   color: var(--rubrica);
 }
 
+/* ============================ comparação de vários versículos (Comparar) ===
+   A tirinha ganha, no topo, três modos de leitura; e cada versículo vira um
+   bloco com um divisor (a referência) acima. */
+
+.tirinha-modos {
+  display: flex;
+  gap: 4px;
+  padding: 2px 4px 10px;
+  border-bottom: 1px solid color-mix(in srgb, var(--tinta) 10%, transparent);
+  margin-bottom: 4px;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--papel);
+  background-image: var(--perg-img, none);
+}
+
+.tmodo {
+  flex: 1;
+  padding: 8px 6px;
+  border-radius: var(--raio);
+  font-family: var(--fonte-ui);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--tinta-fraca);
+  border: 1px solid color-mix(in srgb, var(--tinta) 14%, transparent);
+  background: transparent;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.tmodo:hover { background: color-mix(in srgb, var(--tinta) 6%, transparent); }
+.tmodo.ativo {
+  color: var(--rubrica);
+  border-color: color-mix(in srgb, var(--rubrica) 45%, transparent);
+  background: color-mix(in srgb, var(--rubrica) 10%, transparent);
+}
+
+/* divisor entre versículos: uma linha com a referência centralizada, para o
+   olho saber de relance que começou outro versículo (não marca saltos). */
+.divisor-verso {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 18px 0 8px;
+  font-family: var(--fonte-sigla);
+  font-size: 12px;
+  letter-spacing: .04em;
+  color: var(--rubrica);
+}
+.divisor-verso::before,
+.divisor-verso::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: color-mix(in srgb, var(--rubrica) 28%, transparent);
+}
+.tirinha-multi > .bloco-verso:first-of-type { }
+.tirinha-multi .divisor-verso:first-child { margin-top: 2px; }
+
+.bloco-verso { }
+
+/* destaque FORTE da versão que está sendo lida, para a pessoa nunca se perder
+   sobre qual versão é a sua régua. Barra lateral rubrica + fundo + sigla. */
+.fita.principal {
+  position: relative;
+  background: color-mix(in srgb, var(--rubrica) 7%, transparent);
+  border-radius: var(--raio);
+  padding-left: 14px;
+  padding-right: 12px;
+}
+.fita.principal::before {
+  content: "";
+  position: absolute;
+  left: 0; top: 7px; bottom: 7px;
+  width: 4px;
+  border-radius: 4px;
+  background: var(--rubrica);
+}
+.fita.principal .cabeca .sigla,
+.sigla.sigla-ativa {
+  color: var(--rubrica);
+  border-color: color-mix(in srgb, var(--rubrica) 55%, transparent);
+  background: color-mix(in srgb, var(--rubrica) 12%, transparent);
+  font-weight: 700;
+}
+
+/* grupo (modos agrupados): várias siglas lado a lado, texto uma vez só */
+.cabeca-grupo { flex-wrap: wrap; }
+.siglas-grupo {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}
+.fita.grupo.difere {
+  background: color-mix(in srgb, var(--rubrica) 5%, transparent);
+  border-radius: var(--raio);
+  padding-left: 10px;
+  padding-right: 10px;
+}
+.fita.grupo.difere p { color: var(--tinta); font-weight: 600; }
+
 /* ================================================= comparacao lado a lado */
 
 body.comparando .folha { display: none; }
