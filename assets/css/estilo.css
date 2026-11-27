@@ -1643,16 +1643,22 @@ html, body { overflow-x: hidden; }
    bloco com um divisor (a referência) acima. */
 
 .tirinha-modos {
+  flex: 0 0 auto;          /* barra fixa no topo; quem rola é a lista abaixo */
   display: flex;
   gap: 4px;
   padding: 2px 4px 10px;
   border-bottom: 1px solid color-mix(in srgb, var(--tinta) 10%, transparent);
   margin-bottom: 4px;
-  position: sticky;
-  top: 0;
-  z-index: 2;
-  background: var(--papel);
-  background-image: var(--perg-img, none);
+}
+
+/* a lista de versículos é o container que rola, dentro da coluna flex do
+   corpo da tirinha alta (o corpo tem overflow:hidden; a rolagem vive aqui). */
+.tirinha-multi {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
 .tmodo {
