@@ -10853,7 +10853,69 @@ const App = {
     const cabecalho = document.getElementById('tirinha-ref');
     corpo.innerHTML = '<div class="estado">Buscando referências…</div>';
 
-    // a tirinha volta à altura normal quando mostra a lista
+    // mesma construção de linha para um ou vários versículos
+    const linha = r => {
+      const ate = r.vFim !== r.vIni ? `-${r.vFim}` : '';
+      const nome = Dados.nomeCurto(this.versao, r.code);
+      const contestada = r.votos < 0 ? ' contestada' : '';
+      return `<button class="ref-linha${contestada}"
+          data-ref="${r.code}|${r.cap}|${r.vIni}|${r.vFim}">
+        <span class="ref-cabeca">
+          <span class="ref-alvo">${nome} ${r.cap}:${r.vIni}${ate}</span>
+          <span class="ref-votos">${r.votos}</span>
+        </span>
+        <span class="ref-trecho" data-trecho="${r.code}|${r.cap}|${r.vIni}">…</span>
+      </button>`;
+    };
+    const ligar = () => {
+      corpo.querySelectorAll('[data-ref]').forEach(el => {
+        el.onclick = () => {
+          const [code, cap, vIni, vFim] = el.dataset.ref.split('|');
+          this.abrirTextoDaReferencia(code, +cap, +vIni, +vFim);
+        };
+      });
+      this.preencherTrechosRefs(corpo);   // preenche os trechos aos poucos
+    };
+
+    const multi = this.tirinhaMultiAtiva
+      && Array.isArray(this.tirinhaMultiVersiculos)
+      && this.tirinhaMultiVersiculos.length > 1;
+
+    // ----------------------------------- vários versículos: um bloco por verso
+    if (multi) {
+      document.getElementById('tirinha').classList.add('alta');   // alto e rolável
+      const blocos = await Promise.all(this.tirinhaMultiVersiculos.map(async ({ cap, vers }) => ({
+        cap, vers,
+        refs: await Dados.referenciasDe(this.versao, this.code, cap, vers),
+      })));
+
+      const total = blocos.reduce((s, b) => s + b.refs.length, 0);
+      const refOriginal = cabecalho.dataset.base || cabecalho.textContent;
+      cabecalho.dataset.base = refOriginal;
+      cabecalho.innerHTML = `${refOriginal} <span class="conta-refs">${total} referência${total !== 1 ? 's' : ''}</span>`;
+
+      if (!total) {
+        corpo.innerHTML = `<div class="tirinha-multi"><div class="estado">Nenhuma
+          referência cruzada para os versículos selecionados.<br><span class="sub">Elas
+          vêm do Treasury of Scripture Knowledge; nem todo versículo tem.</span></div></div>`;
+        return;
+      }
+
+      const html = blocos.map(b => {
+        const ref = Dados.referencia(this.versao, this.code, b.cap, b.vers);
+        const divisor = `<div class="divisor-verso"><span>${Leitura.escapar(ref)}</span></div>`;
+        const conteudo = b.refs.length
+          ? `<div class="lista-refs-linhas">${b.refs.map(linha).join('')}</div>`
+          : `<div class="estado sem-refs">Sem referências cruzadas para este versículo.</div>`;
+        return divisor + conteudo;
+      }).join('');
+
+      corpo.innerHTML = `<div class="tirinha-multi">${html}</div>`;
+      ligar();
+      return;
+    }
+
+    // ------------------------------------------------- um único versículo
     document.getElementById('tirinha').classList.remove('alta');
 
     const todas = await Dados.referenciasDe(this.versao, this.code, this.cap, this.destaque);
@@ -10870,31 +10932,8 @@ const App = {
     cabecalho.dataset.base = refOriginal;
     cabecalho.innerHTML = `${refOriginal} <span class="conta-refs">${todas.length} referência${todas.length > 1 ? 's' : ''}</span>`;
 
-    const linha = r => {
-      const ate = r.vFim !== r.vIni ? `-${r.vFim}` : '';
-      const nome = Dados.nomeCurto(this.versao, r.code);
-      const contestada = r.votos < 0 ? ' contestada' : '';
-      return `<button class="ref-linha${contestada}"
-          data-ref="${r.code}|${r.cap}|${r.vIni}|${r.vFim}">
-        <span class="ref-cabeca">
-          <span class="ref-alvo">${nome} ${r.cap}:${r.vIni}${ate}</span>
-          <span class="ref-votos">${r.votos}</span>
-        </span>
-        <span class="ref-trecho" data-trecho="${r.code}|${r.cap}|${r.vIni}">…</span>
-      </button>`;
-    };
-
     corpo.innerHTML = `<div class="lista-refs-linhas">${todas.map(linha).join('')}</div>`;
-
-    corpo.querySelectorAll('[data-ref]').forEach(el => {
-      el.onclick = () => {
-        const [code, cap, vIni, vFim] = el.dataset.ref.split('|');
-        this.abrirTextoDaReferencia(code, +cap, +vIni, +vFim);
-      };
-    });
-
-    // preenche os trechos aos poucos, sem travar a lista
-    this.preencherTrechosRefs(corpo);
+    ligar();
   },
 
   /* Busca o começo do texto de cada referência e preenche a linha. Em paralelo,

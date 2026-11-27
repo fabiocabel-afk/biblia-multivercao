@@ -1746,6 +1746,15 @@ html, body { overflow-x: hidden; }
 }
 .fita.grupo.difere p { color: var(--tinta); font-weight: 600; }
 
+/* aba Referências em modo vários versículos: nota por versículo sem refs */
+.tirinha-multi .sem-refs {
+  padding: 8px 2px 2px;
+  font-size: 13px;
+  color: var(--tinta-fraca);
+  text-align: left;
+}
+.tirinha-multi .lista-refs-linhas { margin-top: 2px; }
+
 /* ================================================= comparacao lado a lado */
 
 body.comparando .folha { display: none; }
